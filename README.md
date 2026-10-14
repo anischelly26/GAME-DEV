@@ -1,8 +1,10 @@
 # It Takes One (working title)
 
 A single-player, story-driven 3D adventure. Mara Venn, a tide-engine mechanic, escapes Breakwater,
-an island prison that runs on the sea. The current build is the **first playable section** of
-Chapter 1, *The Quiet Cell*: about 3–6 minutes of play, not a whole chapter.
+an island prison that runs on the sea. The current build covers the start of Chapter 1: *The
+Quiet Cell* (pressure-hatch puzzle and the maintenance shaft), then a parkour practice route
+through the turbine hall and *The Breathing Engine*. Expect about 8–12 minutes. It is not the
+whole chapter.
 
 - Creative direction and chapter plan: [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md)
 - What works, what doesn't, what's temporary: [docs/STATUS.md](docs/STATUS.md)
@@ -56,7 +58,7 @@ In `npm run dev`, or with `?dev=1` on any build:
 | `` ` `` or F3 | Debug overlay (position, state, camera zone, puzzle state, flags) |
 | T | Physics collider overlay |
 | R | Respawn at the current checkpoint |
-| 1 / 2 / 3 | Jump to checkpoint: cell, maintenance landing, lookout (world state is made consistent) |
+| 1 – 9 | Jump to checkpoint: cell, landing, lookout, tier one, collapse, engine gantry, upper gantry, breach, exit (world state is made consistent) |
 | 0 | Restart the section |
 
 URL parameters: `?start=landing` (start at a checkpoint), `?autoplay=1` (watch the scripted

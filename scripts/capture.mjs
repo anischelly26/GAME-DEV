@@ -43,6 +43,16 @@ const shots = [
   { name: '05-gap', cp: 'landing', pre: () => G(() => window.__GAME.setPlayer(0.6, 4.6, 23.6, Math.PI)), steps: 60, cam: [0.1, 0.42] },
   { name: '06-lookout', cp: 'lookout', steps: 90 },
   { name: '07-lookout-wide', cp: 'lookout', pre: () => G(() => window.__GAME.setPlayer(0.3, 4.6, 14.2, Math.PI)), steps: 60, cam: [0.35, 0.05] },
+  // Increment 2: practice route and the Breathing Engine (checkpoint framings).
+  { name: '09-route-start', cp: 'route', steps: 60 },
+  { name: '10-vault-rail', cp: 'route', pre: () => G(() => window.__GAME.game.level.engine.debugFrame('vault')), steps: 30 },
+  { name: '11-ledge-gantry', cp: 'route', pre: () => G(() => window.__GAME.game.level.engine.debugFrame('ledge')), steps: 30 },
+  { name: '12-shuttle', cp: 'shuttle', steps: 60 },
+  { name: '13-engine-gantry', cp: 'engine', steps: 60 },
+  { name: '14-upper-gantry', cp: 'engine-top', steps: 60 },
+  { name: '15-steam-curtain', cp: 'engine-top', pre: () => G(() => window.__GAME.game.level.engine.debugFrame('steam')), steps: 40 },
+  { name: '16-breach-piston', cp: 'breach', steps: 60 },
+  { name: '17-exit-gantry', cp: 'exit', steps: 60 },
 ];
 
 for (const s of shots) {
