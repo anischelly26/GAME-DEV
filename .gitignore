@@ -18,3 +18,6 @@ coverage/
 Thumbs.db
 .idea/
 *.log
+
+# Local screenshots and probe output
+artifacts/
