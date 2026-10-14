@@ -1,0 +1,63 @@
+#!/usr/bin/env node
+/**
+ * Capture review screenshots of the slice at fixed viewpoints.
+ *
+ *   npm run dev            (in another terminal)
+ *   node scripts/capture.mjs [--url http://localhost:5173] [--channel msedge|chrome] [--size 1600x900] [--out test-results/shots]
+ *
+ * Uses the dev/test API (window.__GAME) to step the simulation deterministically, so every run
+ * frames the same views. Console errors are printed and make the script exit non-zero.
+ */
+import { chromium } from 'playwright';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+const args = Object.fromEntries(
+  process.argv.slice(2).reduce((acc, a, i, all) => (a.startsWith('--') ? [...acc, [a.slice(2), all[i + 1] ?? '']] : acc), []),
+);
+const url = args.url || 'http://localhost:5173';
+const [w, h] = (args.size || '1600x900').split('x').map(Number);
+const out = args.out || 'test-results/shots';
+const only = args.only ? args.only.split(',') : null;
+mkdirSync(out, { recursive: true });
+
+const browser = await chromium.launch({ channel: args.channel || undefined, args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const page = await browser.newPage({ viewport: { width: w, height: h } });
+const errors = [];
+page.on('console', (m) => {
+  if (m.type() === 'error' || m.type() === 'warning') console.log(`[${m.type()}] ${m.text()}`);
+  if (m.type() === 'error') errors.push(m.text());
+});
+page.on('pageerror', (e) => errors.push(String(e)));
+
+await page.goto(`${url}/?test=1&dev=1`);
+await page.waitForFunction(() => window.__GAME?.ready, null, { timeout: 120000 });
+const G = (fn, arg) => page.evaluate(fn, arg);
+
+const shots = [
+  // name, checkpoint, setup steps (fixed steps), camera yaw/pitch
+  { name: '01-cell-start', cp: 'cell', steps: 90 },
+  { name: '02-cell-wall', cp: 'cell', pre: () => G(() => window.__GAME.setPlayer(0.4, 4.6, 29.2, Math.PI)), steps: 60, cam: [0.15, 0.18] },
+  { name: '03-cell-from-door', cp: 'cell', pre: () => G(() => window.__GAME.setPlayer(-0.3, 4.6, 28.4, 0)), steps: 60, cam: [Math.PI + 0.3, 0.25] },
+  { name: '04-landing', cp: 'landing', steps: 90 },
+  { name: '05-gap', cp: 'landing', pre: () => G(() => window.__GAME.setPlayer(0.6, 4.6, 23.6, Math.PI)), steps: 60, cam: [0.1, 0.42] },
+  { name: '06-lookout', cp: 'lookout', steps: 90 },
+  { name: '07-lookout-wide', cp: 'lookout', pre: () => G(() => window.__GAME.setPlayer(0.3, 4.6, 14.2, Math.PI)), steps: 60, cam: [0.35, 0.05] },
+];
+
+for (const s of shots) {
+  if (only && !only.some((o) => s.name.includes(o))) continue;
+  await G((id) => window.__GAME.teleport(id), s.cp);
+  if (s.pre) await s.pre();
+  if (s.cam) await G(([y, p]) => window.__GAME.setCamera(y, p), s.cam);
+  await G((n) => window.__GAME.step(n), s.steps);
+  await page.screenshot({ path: join(out, `${s.name}.png`) });
+  console.log('captured', s.name, JSON.stringify(await G(() => window.__GAME.state().feet)));
+}
+
+console.log('fps (headless, not representative):', await G(() => window.__GAME.fps()));
+await browser.close();
+if (errors.length) {
+  console.error(`\n${errors.length} console error(s)`);
+  process.exit(1);
+}
