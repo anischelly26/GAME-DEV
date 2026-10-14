@@ -5,5 +5,6 @@ export default defineConfig({
   base: './',
   server: { port: 5173, strictPort: true },
   preview: { port: 4173, strictPort: true },
-  build: { target: 'es2022', chunkSizeWarningLimit: 4000 },
+  // Rapier ships its WASM inlined in JS (~3 MB), so the main chunk is large by design for now.
+  build: { target: 'es2022', chunkSizeWarningLimit: 5500 },
 });

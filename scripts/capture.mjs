@@ -3,7 +3,7 @@
  * Capture review screenshots of the slice at fixed viewpoints.
  *
  *   npm run dev            (in another terminal)
- *   node scripts/capture.mjs [--url http://localhost:5173] [--channel msedge|chrome] [--size 1600x900] [--out test-results/shots]
+ *   node scripts/capture.mjs [--url http://localhost:5173] [--channel msedge|chrome] [--size 1600x900] [--out artifacts/shots]
  *
  * Uses the dev/test API (window.__GAME) to step the simulation deterministically, so every run
  * frames the same views. Console errors are printed and make the script exit non-zero.
@@ -17,7 +17,7 @@ const args = Object.fromEntries(
 );
 const url = args.url || 'http://localhost:5173';
 const [w, h] = (args.size || '1600x900').split('x').map(Number);
-const out = args.out || 'test-results/shots';
+const out = args.out || 'artifacts/shots';
 const only = args.only ? args.only.split(',') : null;
 mkdirSync(out, { recursive: true });
 
@@ -30,7 +30,7 @@ page.on('console', (m) => {
 });
 page.on('pageerror', (e) => errors.push(String(e)));
 
-await page.goto(`${url}/?test=1&dev=1`);
+await page.goto(`${url}/?test=1&dev=1&quality=${args.quality || 'high'}`);
 await page.waitForFunction(() => window.__GAME?.ready, null, { timeout: 120000 });
 const G = (fn, arg) => page.evaluate(fn, arg);
 

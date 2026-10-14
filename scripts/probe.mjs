@@ -3,7 +3,7 @@
  * Developer probe: loads the game in test mode, runs a JS expression against window.__GAME and
  * prints the result, optionally saving a screenshot.
  *
- *   node scripts/probe.mjs --eval "__GAME.state()" [--steps 60] [--shot test-results/probe.png] [--channel msedge]
+ *   node scripts/probe.mjs --eval "__GAME.state()" [--steps 60] [--shot artifacts/probe.png] [--channel msedge]
  */
 import { chromium } from 'playwright';
 
