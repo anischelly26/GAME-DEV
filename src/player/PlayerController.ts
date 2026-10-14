@@ -2,33 +2,14 @@ import * as THREE from 'three';
 import { RAPIER, Physics, PLAYER_GROUPS, GROUND_QUERY_GROUPS } from '../physics/Physics';
 import type { InputFrame } from '../core/Input';
 import type { EventBus, GameEvents } from '../core/Events';
-import { dampAngle } from '../core/math';
+import { dampAngle, smoothstep } from '../core/math';
+import { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
+import { findLedge, findVault, TRAVERSAL, type Ledge, type TraversalSurfaces, type Vault } from './Traversal';
 
-/** All movement feel parameters in one place so they can be tuned (and reviewed) without hunting. */
-export const MOVEMENT = {
-  maxSpeed: 6.0,
-  carrySpeedFactor: 0.85,
-  groundAccel: 58,
-  groundDecel: 46,
-  /** Acceleration when the stick points against the current velocity (snappy reversals). */
-  turnAccel: 95,
-  airAccel: 24,
-  gravity: 26,
-  fallGravityMul: 1.35,
-  /** Extra gravity while rising with the jump button released (variable jump height). */
-  jumpCutGravityMul: 2.6,
-  jumpHeight: 1.45,
-  maxFallSpeed: 26,
-  coyoteTime: 0.12,
-  jumpBuffer: 0.14,
-  turnRate: 16,
-  capsuleRadius: 0.3,
-  capsuleHalfHeight: 0.45,
-  /** Max height (above the feet) of a ledge the player is boosted onto when a jump falls just short. */
-  ledgeAssist: 0.42,
-};
+/** Traversal state: normal movement, hanging from a ledge, pulling up, or vaulting. */
+export type MoveMode = 'move' | 'hang' | 'climb' | 'vault';
 
-export const PLAYER_CENTER_OFFSET = MOVEMENT.capsuleHalfHeight + MOVEMENT.capsuleRadius;
+export { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
 
 /** Anything that moves and can carry the player. */
 export interface MovingPlatform {
@@ -72,6 +53,20 @@ export class PlayerController {
 
   readonly platforms = new Map<number, MovingPlatform>();
 
+  mode: MoveMode = 'move';
+  /** Seconds (hang) or 0..1 progress (climb, vault) in the current traversal mode. */
+  modeT = 0;
+  /** Surfaces registered by the level as climbable / vaultable. Null disables both moves. */
+  traversal: TraversalSurfaces | null = null;
+  private ledge: Ledge | null = null;
+  private vault: Vault | null = null;
+  private readonly climbFrom = new THREE.Vector3();
+  private readonly climbMid = new THREE.Vector3();
+  private readonly climbTo = new THREE.Vector3();
+  private vaultSpeed = 0;
+  private regrabTimer = 0;
+  private regrabCollider = -1;
+
   constructor(
     private readonly physics: Physics,
     private readonly events: EventBus<GameEvents>,
@@ -113,7 +108,17 @@ export class PlayerController {
     if (faceToward) this.faceTarget = Math.atan2(faceToward.x - this.feet.x, faceToward.z - this.feet.z);
   }
 
+  /** Push the player (steam, impacts). Never damage; briefly removes control. */
+  knockback(v: THREE.Vector3, lockSeconds: number): void {
+    if (this.mode !== 'move') return;
+    this.velocity.copy(v);
+    this.lockTimer = Math.max(this.lockTimer, lockSeconds);
+  }
+
   teleport(feet: THREE.Vector3, facing: number): void {
+    this.mode = 'move';
+    this.ledge = null;
+    this.vault = null;
     const c = { x: feet.x, y: feet.y + PLAYER_CENTER_OFFSET + 0.02, z: feet.z };
     this.body.setTranslation(c, true);
     this.body.setNextKinematicTranslation(c);
@@ -135,6 +140,11 @@ export class PlayerController {
   fixedUpdate(dt: number, input: InputFrame, cameraYaw: number): void {
     this.time += dt;
     this.prevFeet.copy(this.feet);
+    this.regrabTimer = Math.max(0, this.regrabTimer - dt);
+    if (this.mode !== 'move') {
+      this.updateTraversal(dt, input, cameraYaw);
+      return;
+    }
     const pos = this.body.translation();
 
     // --- ground probe (world state is consistent here: it is right after the previous step)
@@ -180,6 +190,17 @@ export class PlayerController {
       this.velocity.z += (dvz / dvLen) * maxDv;
     }
 
+    // --- vault: jump pressed while running at a low, registered obstacle
+    if (this.jumpBufferTimer > 0 && onGround && !this.isLocked && this.traversal && this.speed > 2.2) {
+      const dir = new THREE.Vector3(this.velocity.x, 0, this.velocity.z);
+      const v = findVault(this.physics, this.traversal, this.feet, dir, this.collider);
+      if (v) {
+        this.jumpBufferTimer = 0;
+        this.startVault(v);
+        return;
+      }
+    }
+
     // --- jumping
     if (this.jumpBufferTimer > 0 && this.timeSinceGrounded <= MOVEMENT.coyoteTime && !this.isLocked) {
       const height = MOVEMENT.jumpHeight * (this.carrying ? 0.85 : 1);
@@ -201,7 +222,11 @@ export class PlayerController {
     if (this.velocity.y < 0) g *= MOVEMENT.fallGravityMul;
     else if (this.jumping && !input.jumpHeld) g *= MOVEMENT.jumpCutGravityMul;
     if (onGround && this.velocity.y <= 0) {
-      this.velocity.y = carried ? 0 : -2;
+      // Press gently into the ground so the controller slides along it (with zero vertical intent
+      // it treats a floor inside its skin as blocking). On a platform that is moving vertically,
+      // ride its motion exactly instead: pressing would snap the feet into the rising deck.
+      const verticalPlatform = carried && platform && Math.abs(platform.stepDelta.y) > 1e-4;
+      this.velocity.y = verticalPlatform ? 0 : -2;
       this.jumping = false;
     } else {
       this.velocity.y = Math.max(this.velocity.y - g * dt, -MOVEMENT.maxFallSpeed);
@@ -211,15 +236,11 @@ export class PlayerController {
 
     // --- move
     const desired = new THREE.Vector3(this.velocity.x * dt, this.velocity.y * dt, this.velocity.z * dt);
+    // Ride along with the platform's motion for this step. The platform is not excluded from the
+    // sweep: rising platforms move away from the feet, and a descending one lags by at most one
+    // step. (Excluding it caused the controller to stall at deck/gantry edges.)
     if (isCarried && platform) desired.add(platform.stepDelta);
-    const excluded = isCarried ? this.groundCollider : null;
-    this.kcc.computeColliderMovement(
-      this.collider,
-      desired,
-      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-      PLAYER_GROUPS,
-      excluded ? (c) => c.handle !== excluded.handle : undefined,
-    );
+    this.kcc.computeColliderMovement(this.collider, desired, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, PLAYER_GROUPS);
     const moved = this.kcc.computedMovement();
     this.grounded = this.kcc.computedGrounded() || isCarried;
 
@@ -254,6 +275,17 @@ export class PlayerController {
     this.body.setNextKinematicTranslation(next);
     this.feet.set(next.x, next.y - PLAYER_CENTER_OFFSET, next.z);
 
+    // Ledge catch: only with intent toward a registered ledge, near or past the apex.
+    if (!this.grounded && this.traversal && this.velocity.y < 2.5 && wishLen > 0.3 && !this.isLocked) {
+      const ledge = findLedge(this.physics, this.traversal, this.feet, this.wish, this.collider);
+      if (ledge && (this.regrabTimer <= 0 || ledge.collider !== this.regrabCollider)) {
+        const rel = ledge.topY - this.feet.y;
+        if (rel < 1.25) this.startClimb(ledge, this.feet);
+        else this.startHang(ledge);
+        return;
+      }
+    }
+
     if (!wasGrounded && this.grounded) {
       this.jumping = false;
       this.events.emit('land', { impact: this.lastFallSpeed });
@@ -270,6 +302,109 @@ export class PlayerController {
         this.facing = dampAngle(this.facing, target, MOVEMENT.turnRate * (this.grounded ? 1 : 0.6), dt);
       }
     }
+  }
+
+  private setFeet(f: THREE.Vector3): void {
+    this.feet.copy(f);
+    this.body.setNextKinematicTranslation({ x: f.x, y: f.y + PLAYER_CENTER_OFFSET, z: f.z });
+  }
+
+  private startHang(ledge: Ledge): void {
+    this.mode = 'hang';
+    this.modeT = 0;
+    this.ledge = ledge;
+    this.velocity.set(0, 0, 0);
+    this.jumping = false;
+    this.grounded = false;
+    this.facing = Math.atan2(-ledge.normal.x, -ledge.normal.z);
+    this.setFeet(ledge.hangFeet);
+    this.events.emit('sfx', { name: 'grab', x: ledge.hangFeet.x, y: ledge.topY, z: ledge.hangFeet.z });
+  }
+
+  private startClimb(ledge: Ledge, from: THREE.Vector3): void {
+    this.mode = 'climb';
+    this.modeT = 0;
+    this.ledge = ledge;
+    this.velocity.set(0, 0, 0);
+    this.grounded = false;
+    this.facing = Math.atan2(-ledge.normal.x, -ledge.normal.z);
+    this.climbFrom.copy(from);
+    this.climbMid.set(from.x, ledge.topY + 0.12, from.z);
+    this.climbTo.copy(ledge.standFeet);
+    this.events.emit('sfx', { name: 'climb', x: from.x, y: ledge.topY, z: from.z });
+  }
+
+  private startVault(v: Vault): void {
+    this.mode = 'vault';
+    this.modeT = 0;
+    this.vault = v;
+    this.vaultSpeed = Math.max(4.5, this.speed);
+    this.grounded = false;
+    this.facing = Math.atan2(v.to.x - v.from.x, v.to.z - v.from.z);
+    this.events.emit('sfx', { name: 'vault', x: v.apex.x, y: v.apex.y, z: v.apex.z });
+  }
+
+  /** Scripted traversal moves. Endpoints were validated as free when the move started. */
+  private updateTraversal(dt: number, input: InputFrame, cameraYaw: number): void {
+    if (this.mode === 'hang' && this.ledge) {
+      this.modeT += dt;
+      const fx = -Math.sin(cameraYaw);
+      const fz = -Math.cos(cameraYaw);
+      const rx = Math.cos(cameraYaw);
+      const rz = -Math.sin(cameraYaw);
+      const wx = fx * input.moveY + rx * input.moveX;
+      const wz = fz * input.moveY + rz * input.moveX;
+      const toward = -(wx * this.ledge.normal.x + wz * this.ledge.normal.z);
+      if (input.jumpPressed || (toward > 0.5 && this.modeT > 0.2)) {
+        this.startClimb(this.ledge, this.feet.clone());
+      } else if (toward < -0.5 && this.modeT > 0.15) {
+        // Let go: drop away from the wall and don't re-catch the same ledge straight away.
+        this.mode = 'move';
+        this.regrabTimer = TRAVERSAL.regrabDelay;
+        this.regrabCollider = this.ledge.collider;
+        this.velocity.set(this.ledge.normal.x * 2, -1, this.ledge.normal.z * 2);
+        this.ledge = null;
+      } else {
+        this.setFeet(this.ledge.hangFeet);
+      }
+      return;
+    }
+    if (this.mode === 'climb') {
+      this.modeT = Math.min(1, this.modeT + dt / TRAVERSAL.pullUpTime);
+      const t = this.modeT;
+      const p = new THREE.Vector3();
+      if (t < 0.6) p.lerpVectors(this.climbFrom, this.climbMid, smoothstep(0, 1, t / 0.6));
+      else p.lerpVectors(this.climbMid, this.climbTo, smoothstep(0, 1, (t - 0.6) / 0.4));
+      this.setFeet(p);
+      if (t >= 1) {
+        this.mode = 'move';
+        this.ledge = null;
+        this.grounded = true;
+        this.velocity.set(0, -2, 0);
+        this.events.emit('land', { impact: 2 });
+      }
+      return;
+    }
+    if (this.mode === 'vault' && this.vault) {
+      this.modeT = Math.min(1, this.modeT + dt / TRAVERSAL.vaultTime);
+      const t = this.modeT;
+      const v = this.vault;
+      const a = (1 - t) * (1 - t);
+      const b = 2 * (1 - t) * t;
+      const c = t * t;
+      this.setFeet(new THREE.Vector3(v.from.x * a + v.apex.x * b + v.to.x * c, v.from.y * a + v.apex.y * b + v.to.y * c, v.from.z * a + v.apex.z * b + v.to.z * c));
+      if (t >= 1) {
+        // Leave the vault with forward momentum so the run continues.
+        const dir = new THREE.Vector3(v.to.x - v.from.x, 0, v.to.z - v.from.z).normalize();
+        this.velocity.set(dir.x * this.vaultSpeed, -2, dir.z * this.vaultSpeed);
+        this.mode = 'move';
+        this.vault = null;
+        this.grounded = true;
+        this.events.emit('land', { impact: 3 });
+      }
+      return;
+    }
+    this.mode = 'move';
   }
 
   /** Called after `physics.step()` so feet match the simulated body. */
