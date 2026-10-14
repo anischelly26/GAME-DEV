@@ -1,0 +1,20 @@
+# Dependencies and build output
+node_modules/
+dist/
+.vite/
+
+# Test output
+test-results/
+playwright-report/
+coverage/
+
+# Local environment and secrets
+.env
+.env.*
+*.local
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+*.log
