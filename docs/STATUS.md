@@ -51,7 +51,7 @@ Microsoft Edge (GPU) and Playwright's bundled Chromium 1243 (software rendering)
   - the collar's brake, ride up and ride down in both directions;
   - a fall from the upper route recovering at the upper gantry with the collar still latched;
   - all eight slice checks.
-- Bundled Chromium: BUNDLED_RESULT
+- Bundled Chromium (software rendering, test mode on Low quality): **12/12** (17.5 min).
 - Collar ride measured: the rider stays 2.0 cm above the deck rising and up to 7.5 cm descending.
   Boarding, walking off at both stops, and walking back on all succeed.
 - Screenshots of every new area were inspected (`node scripts/capture.mjs`, shots 09–17).
