@@ -17,6 +17,7 @@ import { AudioSystem } from '../audio/Audio';
 import type { Level, LevelContext } from '../levels/Level';
 import { QuietCellLevel } from '../levels/breakwater/QuietCellLevel';
 import { Autopilot } from '../dev/Autopilot';
+import { TraversalSurfaces } from '../player/Traversal';
 import { smoothstep } from './math';
 
 export const FIXED_DT = 1 / 60;
@@ -52,6 +53,7 @@ export class Game {
   readonly triggers = new Triggers();
   readonly interactions = new InteractionSystem();
   readonly dialogue: Dialogue;
+  readonly traversal = new TraversalSurfaces();
   physics!: Physics;
   pipeline!: RenderPipeline;
   player!: PlayerController;
@@ -109,6 +111,7 @@ export class Game {
 
     const spawn = new THREE.Vector3(0, 0, 0);
     this.player = new PlayerController(this.physics, this.events, spawn, 0);
+    this.player.traversal = this.traversal;
     this.avatar = new PlayerAvatar(this.scene, this.textures);
     this.camera = new ThirdPersonCamera(this.physics, this.player.collider);
     this.pipeline = new RenderPipeline(this.container, this.scene, this.camera.camera);
@@ -132,8 +135,9 @@ export class Game {
       camera: this.camera,
       hud: this.hud,
       moonDir: this.moonDir,
+      traversal: this.traversal,
       respawn: (reason) => this.respawn(reason),
-      complete: () => this.complete(),
+      complete: (card) => this.complete(card),
       setControl: (enabled) => this.setControl(enabled),
     };
     this.level = new QuietCellLevel(ctx);
@@ -344,13 +348,13 @@ export class Game {
     if (!this.options.test) this.input.requestPointerLock();
   }
 
-  private complete(): void {
+  private complete(card?: { title: string; body: string }): void {
     this.progression.complete = true;
     this.state = 'complete';
     this.input.exitPointerLock();
     this.events.emit('complete', { timeSeconds: this.progression.elapsed, falls: this.progression.falls });
     this.hud.showComplete(
-      { time: this.progression.elapsed, falls: this.progression.falls },
+      { time: this.progression.elapsed, falls: this.progression.falls, ...card },
       () => this.restartSection(),
       () => {
         this.hud.hideScreen();
@@ -374,7 +378,7 @@ export class Game {
     this.triggers.resetPresence();
   }
 
-  startAutopilot(): Autopilot {
+  startAutopilot(part?: string): Autopilot {
     this.autopilot = new Autopilot(
       {
         input: this.input,
@@ -384,7 +388,7 @@ export class Game {
         conditions: this.level.conditions,
         cameraYaw: () => this.camera.yaw,
       },
-      this.level.route,
+      (part && this.level.routeParts?.[part]) || this.level.route,
     );
     return this.autopilot;
   }
@@ -423,6 +427,7 @@ export class Game {
     }
     this.level.fixedUpdate(dt, this.time);
     this.player.fixedUpdate(dt, frame, this.camera.yaw);
+    this.level.afterPlayer?.(dt);
     this.interactions.update(this.player.feet, this.player.facing);
     if (frame.interactPressed && !this.player.isLocked) {
       const id = this.interactions.interact();
@@ -454,6 +459,8 @@ export class Game {
       carrying: false,
       reach: this.player.isLocked && !this.player.frozen ? 0.5 : this.reachPulse,
       lookAt: focus ? focus.position : null,
+      mode: this.player.mode,
+      modeT: this.player.modeT,
     });
     const look = this.state === 'playing' ? this.input.consumeLook() : (this.input.consumeLook(), { dx: 0, dy: 0 });
     this.camera.update(dt, look, 1, feet, this.player.grounded, this.player.speed);
@@ -513,6 +520,7 @@ export class Game {
         feet: game.player.feet.toArray().map((n) => Number(n.toFixed(3))),
         velocity: game.player.velocity.toArray().map((n) => Number(n.toFixed(3))),
         grounded: game.player.grounded,
+        mode: game.player.mode,
         facing: game.player.facing,
         flags: game.progression.list(),
         objective: game.progression.objective,
@@ -554,7 +562,8 @@ export class Game {
         if (pitch !== undefined) game.camera.pitch = pitch;
       },
       setPlayer: (x: number, y: number, z: number, facing = 0) => game.player.teleport(new THREE.Vector3(x, y, z), facing),
-      autopilot: () => game.startAutopilot().status,
+      /** Run the scripted route (all of it, or a named part such as 'engine'). */
+      autopilot: (part?: string) => game.startAutopilot(part).status,
       pause: () => game.pause(),
       resume: () => game.resume(),
       fps: () => Math.round(game.fps),

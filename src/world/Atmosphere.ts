@@ -323,7 +323,7 @@ export class SteamEmitter {
   constructor(
     private readonly origin: THREE.Vector3,
     private readonly direction: THREE.Vector3,
-    private readonly rate: number,
+    public rate: number,
     private readonly color = new THREE.Color('#9fb3b8'),
   ) {
     SteamEmitter.texture ??= radialTexture('rgba(255,255,255,0.9)', 'rgba(255,255,255,0)', 64);

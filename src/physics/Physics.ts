@@ -90,6 +90,11 @@ export class Physics {
     return this.finish(desc, opts, body);
   }
 
+  /** Body-less (fixed) collider from a description; moving platforms reposition these each step. */
+  fixed(desc: RAPIER.ColliderDesc, opts?: ColliderOptions): RAPIER.Collider {
+    return this.finish(desc, opts);
+  }
+
   remove(collider: RAPIER.Collider): void {
     this.world.removeCollider(collider, false);
   }

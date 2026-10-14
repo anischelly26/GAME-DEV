@@ -167,7 +167,7 @@ export class HUD {
     });
   }
 
-  showComplete(stats: { time: number; falls: number }, onRestart: () => void, onContinue: () => void): void {
+  showComplete(stats: { time: number; falls: number; title?: string; body?: string }, onRestart: () => void, onContinue: () => void): void {
     this.screen.classList.remove('hidden');
     const mins = Math.floor(stats.time / 60);
     const secs = Math.floor(stats.time % 60)
@@ -175,9 +175,11 @@ export class HUD {
       .padStart(2, '0');
     this.card.innerHTML = `
       <div class="eyebrow">Section complete</div>
-      <h2>Out of the Quiet Cell</h2>
-      <p>The service lights lead down into the turbine hall, where the Breathing Engine heaves with the tide.
-      That is the next destination. It is not built yet: this is the end of the first playable section.</p>
+      <h2>${stats.title ?? 'Out of the Quiet Cell'}</h2>
+      <p>${
+        stats.body ??
+        'The service lights lead down into the turbine hall, where the Breathing Engine heaves with the tide. That is the next destination. It is not built yet: this is the end of the first playable section.'
+      }</p>
       <div class="stats"><div><b>${mins}:${secs}</b>time</div><div><b>${stats.falls}</b>falls</div></div>
       <div class="buttons">
         <button class="primary" data-a="restart">Restart section</button>

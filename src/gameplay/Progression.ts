@@ -57,6 +57,8 @@ export interface Checkpoint {
   impliesFlags: string[];
   /** Camera yaw on respawn; defaults to directly behind `facing`. Used to avoid framing into a wall. */
   cameraYaw?: number;
+  /** Falling below this height recovers to this checkpoint. Undefined: only the global failsafe. */
+  recoverBelowY?: number;
 }
 
 export class Checkpoints {

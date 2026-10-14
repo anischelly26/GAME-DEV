@@ -140,6 +140,65 @@ export class Autopilot {
         }
         break;
       }
+      case 'vault': {
+        // Run at the obstacle, press jump at the mark, expect the controller to vault (not jump).
+        const toFrom = flat(v(step.from));
+        const toLanding = flat(v(step.to));
+        if (this.phase === 0) {
+          this.steer(toFrom.length() > 0.5 ? toFrom : toLanding, 1);
+          if (toFrom.length() < 0.45) {
+            this.host.input.press('jump');
+            this.phase = 1;
+            this.stepT = 0;
+          }
+          if (this.stepT > 10) this.fail('never reached the vault mark');
+        } else {
+          this.steer(toLanding, 1);
+          if (this.host.player.mode === 'vault') this.phase = 2;
+          if (this.phase === 1 && this.stepT > 0.5) this.fail('jump at a vaultable rail did not vault');
+          if (this.phase === 2 && this.host.player.mode === 'move' && toLanding.length() < 1.2) {
+            this.idle();
+            this.next('vault');
+          }
+          if (this.stepT > 5) this.fail('vault did not complete');
+        }
+        break;
+      }
+      case 'climb': {
+        // Run at the wall, jump toward it, pull up from the hang (or mantle directly).
+        const toFrom = flat(v(step.from));
+        const toTop = flat(v(step.to));
+        if (this.phase === 0) {
+          this.steer(toFrom.length() > 0.4 ? toFrom : toTop, toFrom.length() > 0.4 ? 1 : 0.6);
+          if (toFrom.length() < 0.4) {
+            this.host.input.press('jump');
+            this.jumpHold = 0.4;
+            this.phase = 1;
+            this.stepT = 0;
+          }
+          if (this.stepT > 10) this.fail('never reached the climb mark');
+        } else {
+          this.jumpHold -= dt;
+          const mode = this.host.player.mode;
+          if (mode === 'hang' && this.phase === 1) {
+            this.phase = 2;
+            this.stepT = 0;
+          }
+          if (this.phase === 2 && this.stepT > 0.3) {
+            this.host.input.press('jump');
+            this.phase = 3;
+          }
+          if (mode === 'climb') this.phase = Math.max(this.phase, 3);
+          this.steer(toTop, 0.8, this.jumpHold > 0);
+          if (this.phase >= 3 && mode === 'move' && this.host.player.grounded && Math.abs(feet.y - step.to[1]) < 0.35) {
+            this.idle();
+            this.next('climb');
+          }
+          if (this.phase === 1 && this.stepT > 1.5) this.fail('no ledge catch');
+          if (this.stepT > 6) this.fail('climb did not complete');
+        }
+        break;
+      }
       case 'interact': {
         const d = flat(v(step.standAt));
         if (this.phase === 0) {

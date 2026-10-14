@@ -123,7 +123,8 @@ test('lever before closing the bypass only hisses; the puzzle state is unchanged
   expect(after.flags).not.toContain('hatch.open');
 });
 
-test('full route: puzzle, practice jump, gap, lookout and completion (autopilot, real physics)', async ({ page }) => {
+test('full route: puzzle, practice jump, gap, lookout, engine route and completion (autopilot, real physics)', async ({ page }) => {
+  test.setTimeout(480_000);
   await boot(page);
   await page.evaluate(() => (window as any).__GAME.autopilot());
   const s = await stepUntil(page, (x) => x.autopilot?.state !== 'running', 60 * 120, 60);
@@ -131,10 +132,10 @@ test('full route: puzzle, practice jump, gap, lookout and completion (autopilot,
   expect(s.autopilot?.state, s.autopilot?.message).toBe('done');
   expect(s.complete).toBe(true);
   expect(s.falls).toBe(0);
-  for (const f of ['clue.read', 'lever.tried', 'valve.closed', 'hatch.open', 'gap.crossed', 'lookout.reached', 'lookout.lit', 'reveal.done']) {
+  for (const f of ['clue.read', 'lever.tried', 'valve.closed', 'hatch.open', 'gap.crossed', 'lookout.reached', 'lookout.lit', 'reveal.done', 'engine.finished']) {
     expect(s.flags).toContain(f);
   }
-  await expect(page.locator('.screen .card h2')).toHaveText('Out of the Quiet Cell');
+  await expect(page.locator('.screen .card h2')).toHaveText('The Breathing Engine');
   expect(errors).toEqual([]);
 });
 
@@ -156,6 +157,7 @@ test('falling into the channel recovers at the landing with the hatch still open
 });
 
 test('restart after completion gives a fresh puzzle', async ({ page }) => {
+  test.setTimeout(480_000);
   await boot(page);
   await page.evaluate(() => (window as any).__GAME.autopilot());
   await stepUntil(page, (x) => x.autopilot?.state !== 'running', 60 * 120, 60);
