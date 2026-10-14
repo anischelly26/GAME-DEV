@@ -17,6 +17,9 @@ export interface AvatarState {
   reach: number;
   /** World point Mara glances at (nearby interactable), or null. */
   lookAt: THREE.Vector3 | null;
+  /** Traversal mode from the controller, and its progress (seconds for hang, 0..1 otherwise). */
+  mode?: 'move' | 'hang' | 'climb' | 'vault';
+  modeT?: number;
 }
 
 /** Mara Venn's palette: warm ochre jacket and coral scarf against the cold blue fortress. */
@@ -77,6 +80,8 @@ export class PlayerAvatar {
   private bunSwing = 0;
   private bunVel = 0;
   private opacity = 1;
+  private hangBlend = 0;
+  private vaultBlend = 0;
 
   /** Called when a foot plants; used for footstep audio. */
   onFootstep: ((speed: number) => void) | null = null;
@@ -403,15 +408,51 @@ export class PlayerAvatar {
       arm.elbow.rotation.x = ex;
     }
 
+    // --- traversal poses: hanging, pulling up, vaulting
+    const mode = s.mode ?? 'move';
+    const mt = s.modeT ?? 0;
+    this.hangBlend = damp(this.hangBlend, mode === 'hang' || mode === 'climb' ? 1 : 0, 18, dt);
+    this.vaultBlend = damp(this.vaultBlend, mode === 'vault' ? 1 : 0, 24, dt);
+    if (this.hangBlend > 0.01) {
+      const pull = mode === 'climb' ? Math.min(1, mt * 1.6) : 0;
+      const sway = mode === 'hang' ? Math.sin(this.time * 2.4) * 0.05 : 0;
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? -1 : 1;
+        const arm = this.arms[i];
+        arm.shoulder.rotation.x = lerp(arm.shoulder.rotation.x, lerp(-2.9, -0.7, pull), this.hangBlend);
+        arm.shoulder.rotation.z = lerp(arm.shoulder.rotation.z, side * lerp(0.2, 0.35, pull), this.hangBlend);
+        arm.elbow.rotation.x = lerp(arm.elbow.rotation.x, lerp(-0.2, -1.5, pull), this.hangBlend);
+        const leg = this.legs[i];
+        const kick = mode === 'climb' ? Math.sin(Math.min(1, mt) * Math.PI) : 0;
+        leg.thigh.rotation.x = lerp(leg.thigh.rotation.x, 0.08 + sway - kick * (i === 0 ? 1.3 : 0.4), this.hangBlend);
+        leg.knee.rotation.x = lerp(leg.knee.rotation.x, 0.25 + kick * (i === 0 ? 1.4 : 0.6), this.hangBlend);
+      }
+    }
+    if (this.vaultBlend > 0.01) {
+      const tuck = Math.sin(Math.min(1, mt) * Math.PI);
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? -1 : 1;
+        const arm = this.arms[i];
+        // Left hand plants on the rail; right arm swings out for balance.
+        arm.shoulder.rotation.x = lerp(arm.shoulder.rotation.x, i === 0 ? -0.5 : -1.1, this.vaultBlend);
+        arm.shoulder.rotation.z = lerp(arm.shoulder.rotation.z, side * (i === 0 ? 0.5 : 1.0), this.vaultBlend);
+        arm.elbow.rotation.x = lerp(arm.elbow.rotation.x, -0.2, this.vaultBlend);
+        const leg = this.legs[i];
+        leg.thigh.rotation.x = lerp(leg.thigh.rotation.x, -1.0 * tuck - 0.2, this.vaultBlend);
+        leg.knee.rotation.x = lerp(leg.knee.rotation.x, 1.4 * tuck + 0.2, this.vaultBlend);
+      }
+    }
+
     // --- body
     const bob = (Math.abs(sp) * 0.055 - 0.02) * run;
     this.hips.position.y = HIP_Y + bob * (1 - this.airBlend) - run * 0.02;
     this.hips.rotation.y = -sp * 0.12 * run;
     this.spine.rotation.y = sp * 0.22 * run;
     this.spine.scale.y = 1 + breath * 0.012 * (1 - run);
-    const lean = run * 0.14 + this.carryBlend * -0.05;
+    const lean = run * 0.14 * (1 - this.hangBlend) + this.carryBlend * -0.05 + this.vaultBlend * 0.25;
     this.visual.rotation.x = damp(this.visual.rotation.x, lean, 8, dt);
-    this.visual.rotation.z = damp(this.visual.rotation.z, clamp(-this.turnRate * 0.035, -0.22, 0.22) * run, 8, dt);
+    const roll = clamp(-this.turnRate * 0.035, -0.22, 0.22) * run * (1 - this.vaultBlend) - this.vaultBlend * 0.35;
+    this.visual.rotation.z = damp(this.visual.rotation.z, roll, 10, dt);
 
     // Squash and stretch (critically damped spring around 0).
     const k = 160;

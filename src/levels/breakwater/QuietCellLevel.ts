@@ -10,8 +10,11 @@ import { LightShaft, SteamEmitter, Water } from '../../world/Atmosphere';
 import { PressureHatchLogic, enginePulse, LIFT_THRESHOLD } from '../../gameplay/puzzles/PressureHatchLogic';
 import { boxVolume } from '../../gameplay/Progression';
 import { mulberry32 } from '../../core/math';
-import { CELL, FALL_FADE_Y, HALL, LOOKOUT, RECOVER_Y, SHAFT, SPAWNS } from './layout';
+import { CELL, FALL_FADE_Y, HALL, LOOKOUT, RECOVER_Y, SHAFT, SPAWNS, sideAngle } from './layout';
+
+const sideAngle10 = sideAngle(10);
 import { buildTurbineHall, type TurbineHall } from './TurbineHall';
+import { EngineRoute, ROUTE_RAIL_GAPS, ROUTE_WALKWAY_OVERRIDES } from './EngineRoute';
 
 const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -24,13 +27,15 @@ const HINT_TIMES = [45, 90, 150];
  */
 export class QuietCellLevel implements Level {
   readonly name = 'The Quiet Cell';
-  readonly checkpointIds = ['cell', 'landing', 'lookout'];
+  readonly checkpointIds = ['cell', 'landing', 'lookout', 'route', 'shuttle', 'engine', 'engine-top', 'breach', 'exit'];
   readonly conditions: Record<string, () => boolean>;
   readonly route: RouteStep[];
+  readonly routeParts: Record<string, RouteStep[]>;
 
   private readonly logic = new PressureHatchLogic();
   private readonly hatch: PressureHatch;
   private readonly hall: TurbineHall;
+  private readonly engine: EngineRoute;
   private readonly landingLight: ServiceLight;
   private readonly lookoutLight: ServiceLight;
   private readonly lamps: WorkLamp[] = [];
@@ -49,7 +54,7 @@ export class QuietCellLevel implements Level {
 
   constructor(private readonly ctx: LevelContext) {
     const { scene, physics, materials: m } = ctx;
-    this.hall = buildTurbineHall(scene, physics, m, ctx.moonDir);
+    this.hall = buildTurbineHall(scene, physics, m, ctx.moonDir, ROUTE_WALKWAY_OVERRIDES, ROUTE_RAIL_GAPS);
 
     const batch = new Batcher();
     const root = new THREE.Group();
@@ -325,11 +330,12 @@ export class QuietCellLevel implements Level {
     }
     const railZ = HALL.aWall - 0.12;
     // A temporary repair railing across the collapsed front (rope-lashed to the posts).
-    batch.add(new THREE.BoxGeometry(4.3, 0.07, 0.07), m.iron, new THREE.Matrix4().makeTranslation(0, L.y + 1.0, railZ));
-    batch.add(new THREE.BoxGeometry(4.3, 0.045, 0.045), m.iron, new THREE.Matrix4().makeTranslation(0, L.y + 0.5, railZ));
-    for (const x of [-2.05, -0.7, 0.7, 2.05]) batch.add(new THREE.BoxGeometry(0.08, 1.05, 0.08), m.iron, new THREE.Matrix4().makeTranslation(x, L.y + 0.52, railZ));
-    for (const x of [-0.7, 0.7]) batch.add(new THREE.TorusGeometry(0.06, 0.02, 6, 12), m.rope, new THREE.Matrix4().makeTranslation(x, L.y + 0.98, railZ));
-    physics.box(v3(0, L.y + 1.3, railZ), v3(2.2, 1.3, 0.08), undefined, { blocksCamera: false });
+    // The right part (x > 0.65) is a rope gate owned by the engine route; it drops after the reveal.
+    batch.add(new THREE.BoxGeometry(2.85, 0.07, 0.07), m.iron, new THREE.Matrix4().makeTranslation(-0.78, L.y + 1.0, railZ));
+    batch.add(new THREE.BoxGeometry(2.85, 0.045, 0.045), m.iron, new THREE.Matrix4().makeTranslation(-0.78, L.y + 0.5, railZ));
+    for (const x of [-2.05, -0.7, 0.65, 2.1]) batch.add(new THREE.BoxGeometry(0.08, 1.05, 0.08), m.iron, new THREE.Matrix4().makeTranslation(x, L.y + 0.52, railZ));
+    batch.add(new THREE.TorusGeometry(0.06, 0.02, 6, 12), m.rope, new THREE.Matrix4().makeTranslation(-0.7, L.y + 0.98, railZ));
+    physics.box(v3(-0.78, L.y + 1.3, railZ), v3(1.43, 1.3, 0.08), undefined, { blocksCamera: false });
     this.lookoutLight = new ServiceLight(m, v3(-1.15, L.y, HALL.aWall + 0.45), Math.PI / 2);
     scene.add(this.lookoutLight.group);
     // Ivo's intercom: a brass speaker box with a cracked grille.
@@ -349,6 +355,10 @@ export class QuietCellLevel implements Level {
     batch.build(root);
     this.intercomPos.set(L.x1 - 0.2, L.y + 1.7, 14.9);
 
+    // ------------------------------------------------------------ the next increment: the engine route
+    this.engine = new EngineRoute(ctx);
+    this.engine.onExit = () => this.finishEngine();
+
     // ------------------------------------------------------------ gameplay wiring
     this.registerCheckpoints();
     this.registerInteractions();
@@ -356,12 +366,14 @@ export class QuietCellLevel implements Level {
     this.registerCameraZones();
 
     this.conditions = {
+      ...this.engine.conditions,
       pressureReady: () => this.logic.inLiftBand,
       hatchOpen: () => this.logic.hatch === 'latched',
       complete: () => ctx.progression.complete,
       revealDone: () => ctx.progression.has('reveal.done'),
     };
-    this.route = buildRoute();
+    this.route = [...buildRoute(), ...this.engine.route];
+    this.routeParts = { slice: buildRoute(), engine: this.engine.route };
     this.startIntro();
   }
 
@@ -373,7 +385,7 @@ export class QuietCellLevel implements Level {
 
   private registerCheckpoints(): void {
     const { checkpoints } = this.ctx;
-    checkpoints.register({ id: 'cell', order: 0, label: 'Cell', feet: v3(SPAWNS.cell.x, SPAWNS.cell.y, SPAWNS.cell.z), facing: SPAWNS.cell.facing, impliesFlags: [] });
+    checkpoints.register({ id: 'cell', order: 0, label: 'Cell', feet: v3(SPAWNS.cell.x, SPAWNS.cell.y, SPAWNS.cell.z), facing: SPAWNS.cell.facing, impliesFlags: [], recoverBelowY: RECOVER_Y });
     checkpoints.register({
       id: 'landing',
       order: 1,
@@ -381,6 +393,7 @@ export class QuietCellLevel implements Level {
       feet: v3(SPAWNS.landing.x, SPAWNS.landing.y, SPAWNS.landing.z),
       facing: SPAWNS.landing.facing,
       impliesFlags: ['hatch.open'],
+      recoverBelowY: RECOVER_Y,
       // The hatch wall is right behind this spawn: frame the landing diagonally instead.
       cameraYaw: SPAWNS.landing.facing + Math.PI + 1.05,
     });
@@ -391,6 +404,7 @@ export class QuietCellLevel implements Level {
       feet: v3(SPAWNS.lookout.x, SPAWNS.lookout.y, SPAWNS.lookout.z),
       facing: SPAWNS.lookout.facing,
       impliesFlags: ['hatch.open', 'gap.crossed'],
+      recoverBelowY: -3,
     });
   }
 
@@ -563,10 +577,16 @@ export class QuietCellLevel implements Level {
       { at: t0 + 4.6, run: () => dialogue.say('Mara', 'Who is this?', 1.8) },
       { at: t0 + 6.6, run: () => events.emit('sfx', { name: 'static' }) },
       {
-        at: t0 + 7.4,
+        at: t0 + 7.0,
         run: () => {
           progression.set('reveal.done');
-          this.ctx.complete();
+          camera.clearShot();
+          camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
+          this.ctx.setControl(true);
+          this.engine.openRoute();
+          events.emit('sfx', { name: 'lever', x: 1.4, y: LOOKOUT.y + 1, z: HALL.aWall - 0.1 });
+          progression.setObjective('Follow the service lights down into the hall');
+          this.ctx.hud.tip('The rope at the right of the railing has dropped. Short drops are safe.', 'route-open');
         },
       },
     );
@@ -578,6 +598,34 @@ export class QuietCellLevel implements Level {
 
   private later(seconds: number, run: () => void): void {
     this.timers.push({ t: seconds, run });
+  }
+
+  /** The increment's ending: out on the gantry in the breach, with the harbour below. */
+  private finishEngine(): void {
+    const { progression, dialogue, camera, events } = this.ctx;
+    if (progression.has('engine.finished')) return;
+    progression.set('engine.finished');
+    progression.setObjective('');
+    const ex = this.engine.exitCenter;
+    const out = v3(Math.sin(sideAngle10), 0, Math.cos(sideAngle10));
+    this.sequence = {
+      t: 0,
+      steps: [
+        { at: 0.2, run: () => this.ctx.setControl(false) },
+        { at: 0.25, run: () => camera.playShot(ex.clone().addScaledVector(out, -3.2).add(v3(1.6, 2.2, 0)), ex.clone().addScaledVector(out, 40).add(v3(0, -6, 0)), 3.0) },
+        { at: 1.4, run: () => events.emit('sfx', { name: 'intercom', x: ex.x, y: ex.y + 1, z: ex.z }) },
+        { at: 1.9, run: () => dialogue.say('Intercom', 'You made the engine carry you. The archive is past the harbour crane.', 4.2) },
+        { at: 6.4, run: () => dialogue.say('Mara', 'Ivo. It has to be.', 2) },
+        {
+          at: 8.8,
+          run: () =>
+            this.ctx.complete({
+              title: 'The Breathing Engine',
+              body: 'The machine that held the prison together just carried you out of the cell block. Next destination: the archive workshop beside the harbour crane. It is not built yet: this is the end of the current playable build.',
+            }),
+        },
+      ],
+    };
   }
 
   // ---------------------------------------------------------------- hints
@@ -610,6 +658,7 @@ export class QuietCellLevel implements Level {
   fixedUpdate(dt: number, time: number): void {
     this.time = time;
     const { progression, player, dialogue, events } = this.ctx;
+    this.engine.fixedUpdate(dt);
 
     // Timers and scripted sequence (fixed step keeps them deterministic for tests).
     for (const t of this.timers) t.t -= dt;
@@ -656,12 +705,11 @@ export class QuietCellLevel implements Level {
       }
     }
 
-    // Falling into the drainage channel: fade, then recover at the last checkpoint.
+    // Falling below the current checkpoint's recovery height: fade, then recover there.
     const y = player.feet.y;
-    if (y < FALL_FADE_Y && player.feet.z < SHAFT.z1 && player.feet.z > SHAFT.z0 - 6) {
-      this.falling = true;
-    }
-    if (this.falling && y < RECOVER_Y) {
+    const recoverY = this.ctx.checkpoints.current?.recoverBelowY ?? -30;
+    if (y < recoverY + (FALL_FADE_Y - RECOVER_Y)) this.falling = true;
+    if (this.falling && y < recoverY) {
       this.falling = false;
       events.emit('sfx', { name: 'splash' });
       progression.falls++;
@@ -677,7 +725,12 @@ export class QuietCellLevel implements Level {
     }
   }
 
-  update(dt: number, time: number): void {
+  afterPlayer(): void {
+    this.engine.applyMotion();
+  }
+
+  update(dt: number, time: number, alpha: number): void {
+    this.engine.update(dt, time, alpha);
     this.hatch.update(dt, time, this.logic.pressure);
     this.hall.update(dt, time, this.ctx.camera.camera.position);
     this.landingLight.update(dt, time);
@@ -711,6 +764,7 @@ export class QuietCellLevel implements Level {
     this.landingLight.extinguish();
     this.lookoutLight.extinguish();
     this.hall.routeLamps.forEach((l) => l.setOn(false, true));
+    this.engine.reset();
     this.sequence = null;
     this.timers = [];
     this.hintTimer = 0;
@@ -739,6 +793,13 @@ export class QuietCellLevel implements Level {
     if (id === 'lookout') {
       progression.set('gap.crossed');
       progression.setObjective('Light the service lamp');
+    }
+    if (this.checkpointIds.indexOf(id) > 2) {
+      for (const f of ['gap.crossed', 'lookout.reached', 'lookout.lit', 'reveal.done']) progression.set(f);
+      this.lookoutLight.ignite(true);
+      this.hall.routeLamps.forEach((l) => l.setOn(true, true));
+      this.engine.applyCheckpointState(id);
+      progression.setObjective('Follow the service lights to the engine');
     }
   }
 
@@ -775,6 +836,6 @@ function buildRoute(): RouteStep[] {
     { kind: 'move', to: [0.0, LOOKOUT.y, 17.9], precise: true },
     { kind: 'move', to: [-0.3, LOOKOUT.y, 14.6], precise: true },
     { kind: 'interact', id: 'lookout-light', standAt: [-0.45, LOOKOUT.y, 13.5], expectFlag: 'lookout.lit' },
-    { kind: 'wait', until: 'complete', timeout: 20 },
+    { kind: 'wait', until: 'revealDone', timeout: 20 },
   ];
 }

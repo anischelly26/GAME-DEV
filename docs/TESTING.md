@@ -33,6 +33,18 @@ End-to-end cases (`tests/e2e/slice.spec.ts`):
 8. **Jump measurement.** Reports running-jump distance and apex, and fails if the distance drops
    below 3.0 m (the level's gap assumes ≥ 3.3 m).
 
+Increment 2 (`tests/e2e/engine.spec.ts`), plus the full-route test above, which now runs on to
+the exit gantry:
+
+9. **Increment route (autopilot).** Drops → gap → vault (must be a real vault, not a jump) →
+   ledge catch and pull-up → shuttle → brake → collar ride → steam valve → breach piston → broad
+   jump → exit. Zero falls.
+10. **Steam curtain.** Walking into it is pushed back without a fall. After the bypass closes,
+    the same walk passes.
+11. **Collar is reversible.** Brake → held → ride up → top → call down → held.
+12. **Recovery on the upper route.** A fall recovers at the upper gantry, and the collar stays
+    latched at the top.
+
 Watch the scripted route play live: `npm run dev`, then open http://localhost:5173/?autoplay=1 and
 click **Begin**.
 
@@ -56,6 +68,27 @@ mouse.
 | 11 | Enter the lookout | Turbine hall view, beacon visible through the far breach, Mara's line, objective "Light the service lamp" |
 | 12 | Light the lamp | Control locks, camera frames the hall, service lights come on one by one, intercom line, Mara's reply, completion card with time and falls |
 | 13 | **Keep exploring**, then Esc → **Restart section** | Control returns at the lookout; restart gives a fresh cell and puzzle |
+
+### Increment 2 (after the reveal, about 5 more minutes)
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 14 | When the intercom line ends, look right at the railing | Rope gate gone, tip about safe drops, objective "Follow the service lights down into the hall" |
+| 15 | Drop to the scaffold, then to the tier-1 walkway | Two safe drops; "Tier one" service light lights |
+| 16 | Run and jump the broken walkway | 1.9 m gap, landing well inside the walkway |
+| 17 | Run at the NO ACCESS rail and press Space | Quick vault over it (jumping over it also works) |
+| 18 | At the rubble, jump at the raised gantry's painted edge while pushing toward it | Catch and pull-up (or a direct mantle); walk along it and drop beyond the rubble |
+| 19 | Wait for the shuttle at the collapse, step on, ride, step off | It rests 2.6 s at each end; "Collapse" service light before it |
+| 20 | Watch the collar heave past the gantry, then pull BRAKE | Collar eases to the gantry and holds; the safety chain across its gap drops |
+| 21 | Step on, pull RIDE | Ride to the top stop; the chain closes during the ride and opens at the top |
+| 22 | Walk into the steam on tier 3 | Pushed back, no damage, Mara mentions the bypass |
+| 23 | Close the vent bypass | Steam stops; the piston at the breach starts cycling |
+| 24 | Ride the piston up and jump to the plank gantry | Broad jump of about 1.9 m; missing it recovers at the "Breach" light |
+| 25 | On the exit gantry | Camera turns to the harbour; Ivo's line; Mara's reply; completion card "The Breathing Engine" |
+
+Also check: ride the collar down again with RIDE at the top; call it back with BRAKE from the
+gantry; try to leave every platform from an angle; let go of a hang by pulling away (it shouldn't
+re-catch at once).
 
 Also check: pausing mid-jump and resuming; alt-tabbing (should pause and release input); the
 camera with your back against each wall of the cell and the landing; interacting from slightly

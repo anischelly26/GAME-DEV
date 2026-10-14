@@ -11,6 +11,7 @@ import type { PlayerController } from '../player/PlayerController';
 import type { PlayerAvatar } from '../player/PlayerAvatar';
 import type { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import type { HUD } from '../ui/HUD';
+import type { TraversalSurfaces } from '../player/Traversal';
 
 /** Everything a level needs from the game. Levels never reach into `Game` directly. */
 export interface LevelContext {
@@ -30,10 +31,12 @@ export interface LevelContext {
   camera: ThirdPersonCamera;
   hud: HUD;
   moonDir: THREE.Vector3;
+  /** Register climbable ledges and vaultable obstacles here. */
+  traversal: TraversalSurfaces;
   /** Respawn at the current checkpoint (used by fall recovery). */
   respawn(reason: 'fall' | 'manual'): void;
   /** Show the completion screen. */
-  complete(): void;
+  complete(card?: { title: string; body: string }): void;
   /** Hold or release player control (cutscene beats). */
   setControl(enabled: boolean): void;
 }
@@ -42,6 +45,8 @@ export interface LevelContext {
 export type RouteStep =
   | { kind: 'move'; to: [number, number, number]; radius?: number; precise?: boolean }
   | { kind: 'jump'; from: [number, number, number]; to: [number, number, number] }
+  | { kind: 'vault'; from: [number, number, number]; to: [number, number, number] }
+  | { kind: 'climb'; from: [number, number, number]; to: [number, number, number] }
   | { kind: 'interact'; id: string; standAt: [number, number, number]; expectFlag?: string }
   | { kind: 'wait'; until: string; timeout?: number }
   | { kind: 'pause'; seconds: number };
@@ -51,6 +56,8 @@ export interface Level {
   /** Ordered checkpoint ids, first is the section start. */
   readonly checkpointIds: string[];
   fixedUpdate(dt: number, time: number): void;
+  /** Runs after the player moved and before the physics step (moving platforms go here). */
+  afterPlayer?(dt: number): void;
   update(dt: number, time: number, alpha: number): void;
   /** Restore the complete initial state ("Restart section"). */
   reset(): void;
@@ -62,5 +69,7 @@ export interface Level {
   readonly conditions: Record<string, () => boolean>;
   /** The intended critical path, executable by the autopilot. */
   readonly route: RouteStep[];
+  /** Named parts of the route that can be run on their own (tests, ?autoplay=part). */
+  readonly routeParts?: Record<string, RouteStep[]>;
   debugInfo(): Record<string, unknown>;
 }

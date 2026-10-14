@@ -43,7 +43,7 @@ export interface TurbineHall {
  * column, a breach on the far side that opens to the sea and the harbour beacon. In this slice it is
  * the reveal seen from the lookout; the next increment makes it playable.
  */
-export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: MaterialLibrary, moonDir: THREE.Vector3): TurbineHall {
+export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: MaterialLibrary, moonDir: THREE.Vector3, walkwayOverrides: Set<string> = new Set(), railGaps: Set<string> = new Set()): TurbineHall {
   const batch = new Batcher();
   const root = new THREE.Group();
   root.name = 'turbine-hall';
@@ -87,8 +87,10 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
       const breach = isBreach(tier, k);
       const isLookout = tier === 1 && k === 0;
 
-      // ---- walkway slab
-      if (walkwayPresent(tier, k)) {
+      // ---- walkway slab (the engine route builds its own pieces for overridden segments)
+      if (walkwayOverrides.has(`${tier}:${k}`)) {
+        // built elsewhere
+      } else if (walkwayPresent(tier, k)) {
         const poly: Array<[number, number]> = [
           sideFraction(k, HALL.aIn, 0),
           sideFraction(k, HALL.aWall + 0.05, 0),
@@ -98,18 +100,22 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
         batch.add(prismGeometry(poly, y0 - HALL.floorT, y0, 3), m.floor, undefined, { tint: tint(0.95) });
         physics.prism(poly, y0 - HALL.floorT, y0);
         // Railing along the inner edge.
-        const inner0 = sideFraction(k, HALL.aIn + 0.12, 0);
-        const inner1 = sideFraction(k, HALL.aIn + 0.12, 1);
-        const len = Math.hypot(inner1[0] - inner0[0], inner1[1] - inner0[1]);
-        const mid: [number, number] = [(inner0[0] + inner1[0]) / 2, (inner0[1] + inner1[1]) / 2];
-        const railM = new THREE.Matrix4().compose(new THREE.Vector3(mid[0], y0 + 1.0, mid[1]), q, new THREE.Vector3(1, 1, 1));
-        batch.add(new THREE.BoxGeometry(len + 0.08, 0.07, 0.07), m.iron, railM);
-        batch.add(new THREE.BoxGeometry(len + 0.08, 0.04, 0.04), m.iron, railM.clone().multiply(new THREE.Matrix4().makeTranslation(0, -0.5, 0)));
-        for (const f of [0, 0.5]) {
-          const p = sideFraction(k, HALL.aIn + 0.12, f);
-          batch.add(new THREE.BoxGeometry(0.07, 1.0, 0.07), m.iron, new THREE.Matrix4().compose(new THREE.Vector3(p[0], y0 + 0.5, p[1]), q, new THREE.Vector3(1, 1, 1)));
+        // Railing: one run, or two runs either side of a gantry opening.
+        const runs: Array<[number, number]> = railGaps.has(`${tier}:${k}`) ? [[0, 0.16], [0.84, 1]] : [[0, 1]];
+        for (const [r0, r1] of runs) {
+          const a0 = sideFraction(k, HALL.aIn + 0.12, r0);
+          const a1 = sideFraction(k, HALL.aIn + 0.12, r1);
+          const runLen = Math.hypot(a1[0] - a0[0], a1[1] - a0[1]);
+          const c: [number, number] = [(a0[0] + a1[0]) / 2, (a0[1] + a1[1]) / 2];
+          const railM = new THREE.Matrix4().compose(new THREE.Vector3(c[0], y0 + 1.0, c[1]), q, new THREE.Vector3(1, 1, 1));
+          batch.add(new THREE.BoxGeometry(runLen + 0.08, 0.07, 0.07), m.iron, railM);
+          batch.add(new THREE.BoxGeometry(runLen + 0.08, 0.04, 0.04), m.iron, railM.clone().multiply(new THREE.Matrix4().makeTranslation(0, -0.5, 0)));
+          for (const f of [r0, r1]) {
+            const p = sideFraction(k, HALL.aIn + 0.12, f);
+            batch.add(new THREE.BoxGeometry(0.07, 1.0, 0.07), m.iron, new THREE.Matrix4().compose(new THREE.Vector3(p[0], y0 + 0.5, p[1]), q, new THREE.Vector3(1, 1, 1)));
+          }
+          physics.box(new THREE.Vector3(c[0], y0 + 1.2, c[1]), new THREE.Vector3(runLen / 2, 1.2, 0.06), q, { blocksCamera: false });
         }
-        physics.box(new THREE.Vector3(mid[0], y0 + 1.2, mid[1]), new THREE.Vector3(len / 2, 1.2, 0.06), q, { blocksCamera: false });
         // Corbel under the vertex.
         const v = sideFraction(k, HALL.aWall - 0.4, 1);
         batch.add(new RoundedBoxGeometry(0.5, 0.7, 0.9, 1, 0.08), m.stone, new THREE.Matrix4().compose(new THREE.Vector3(v[0], y0 - HALL.floorT - 0.35, v[1]), q, new THREE.Vector3(1, 1, 1)));
@@ -308,31 +314,6 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
       engine.add(fill);
     }
   }
-  // The breathing collar: the visible piston head that rises and falls with the engine's cycle.
-  const collar = new THREE.Group();
-  {
-    const ring = new THREE.Mesh(new THREE.CylinderGeometry(HALL.columnR + 1.1, HALL.columnR + 1.1, 1.2, 36, 1, true), m.ironDark);
-    ring.material = m.ironDark.clone();
-    (ring.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
-    const lip = new THREE.Mesh(new THREE.TorusGeometry(HALL.columnR + 1.1, 0.16, 6, 36), m.brass);
-    lip.rotation.x = Math.PI / 2;
-    lip.position.y = 0.6;
-    const deck = new THREE.Mesh(new THREE.RingGeometry(HALL.columnR + 0.1, HALL.columnR + 1.1, 36), m.ironDark);
-    deck.rotation.x = -Math.PI / 2;
-    deck.position.y = 0.6;
-    collar.add(ring, lip, deck);
-    for (let i = 0; i < 12; i++) {
-      const a = (i / 12) * Math.PI * 2;
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), m.warningLamp.clone());
-      (lamp.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.5;
-      lamp.position.set(Math.sin(a) * (HALL.columnR + 1.15), 0.2, Math.cos(a) * (HALL.columnR + 1.15));
-      collar.add(lamp);
-    }
-    collar.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) o.castShadow = true;
-    });
-    root.add(collar);
-  }
   const steam: SteamEmitter[] = [];
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + 0.6;
@@ -385,32 +366,18 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
   ]) {
     lamps.push(wallLamp(k, tier, 1.75, { light: tier === 0, intensity: 4, distance: 10 }));
   }
-  // Route: across tier 2 to the right of the lookout, then down to the engine gantry on tier 1.
+  // Route: down from the lookout and along tier 1 to the engine gantry.
   for (const [k, tier, light] of [
-    [2, 1, true],
-    [3, 1, false],
-    [4, 1, false],
-    [5, 1, true],
+    [1, 0, true],
+    [2, 0, false],
+    [3, 0, false],
+    [4, 0, true],
+    [5, 0, false],
     [6, 0, false],
     [7, 0, true],
   ] as Array<[number, number, boolean]>) {
     routeLamps.push(wallLamp(k, tier, -1.75, { light, intensity: 6, distance: 11, on: false }));
   }
-  // Maintenance gantry from tier 1 to the engine (destination of the next increment).
-  {
-    const a = sideAngle(7);
-    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), a);
-    const r0 = HALL.columnR + 1.2;
-    const r1 = HALL.aIn + 0.2;
-    const mid = (r0 + r1) / 2;
-    const center = new THREE.Vector3(Math.sin(a) * mid, -0.15, Math.cos(a) * mid);
-    batch.add(new THREE.BoxGeometry(1.8, 0.2, r1 - r0), m.grate, new THREE.Matrix4().compose(center, q, new THREE.Vector3(1, 1, 1)));
-    for (const s of [-1, 1]) {
-      const railC = center.clone().add(new THREE.Vector3(Math.cos(a) * 0.9 * s, 1.05, -Math.sin(a) * 0.9 * s));
-      batch.add(new THREE.BoxGeometry(0.06, 0.06, r1 - r0), m.iron, new THREE.Matrix4().compose(railC, q, new THREE.Vector3(1, 1, 1)));
-    }
-  }
-
   batch.build(root);
 
   // ---- exterior beyond the breach: the sea, the headland and the harbour beacon
@@ -424,8 +391,6 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
     update(dt, time, cameraPos) {
       time0 += dt;
       const pulse = enginePulse(time);
-      // The collar heaves with each engine breath.
-      collar.position.y = -1.2 + Math.sin((time / 8.4) * Math.PI * 2) * 2.2;
       for (const child of engine.children) if (child.name === 'flywheel') child.rotation.z += dt * 0.25;
       steam.forEach((s) => {
         s.burst = Math.max(s.burst, pulse > 0.6 ? 0.4 : 0);
