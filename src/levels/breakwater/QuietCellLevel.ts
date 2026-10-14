@@ -124,7 +124,12 @@ export class QuietCellLevel implements Level {
     for (const o of [fold, pillow, cup, bowl]) o.castShadow = true;
     // Locked cell door in the right wall (dressing; the hatch is the way out).
     {
-      const door = new THREE.Mesh(new RoundedBoxGeometry(0.12, 2.1, 1.1, 2, 0.03), m.ironDark);
+      const door = new THREE.Mesh(new RoundedBoxGeometry(0.12, 2.1, 1.1, 2, 0.03), m.iron);
+      for (const y of [0.35, 1.05, 1.85]) {
+        const strap = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.09, 1.12), m.ironDark);
+        strap.position.set(CELL.x1 - 0.105, cy + y, 30.6);
+        root.add(strap);
+      }
       door.position.set(CELL.x1 - 0.04, cy + 1.05, 30.6);
       door.castShadow = door.receiveShadow = true;
       const slot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.5), m.cellShadow);
@@ -147,7 +152,7 @@ export class QuietCellLevel implements Level {
     }
 
     // Salt crust decals: around the slit, along the tide line, below the vent.
-    const salt = new THREE.MeshStandardMaterial({ map: saltStainTexture(5), transparent: true, depthWrite: false, roughness: 1, polygonOffset: true, polygonOffsetFactor: -1 });
+    const salt = new THREE.MeshStandardMaterial({ map: saltStainTexture(5), transparent: true, opacity: 0.7, depthWrite: false, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -1 });
     const decal = (w: number, h: number, pos: THREE.Vector3, rotY: number) => {
       const d = new THREE.Mesh(new THREE.PlaneGeometry(w, h), salt);
       d.position.copy(pos);
@@ -155,11 +160,9 @@ export class QuietCellLevel implements Level {
       d.receiveShadow = true;
       root.add(d);
     };
-    decal(1.4, 2.4, v3(0.6, cy + 2.2, CELL.z1 - 0.01), Math.PI);
-    decal(4.6, 0.9, v3(0, cy + 0.45, CELL.z1 - 0.012), Math.PI);
-    decal(4.8, 0.8, v3(CELL.x0 + 0.01, cy + 0.4, 29.5), Math.PI / 2);
-    decal(4.8, 0.8, v3(CELL.x1 - 0.01, cy + 0.4, 29.5), -Math.PI / 2);
-    decal(1.2, 1.4, v3(-1.6, cy + 0.7, CELL.z0 + 0.012), 0);
+    decal(1.1, 2.0, v3(0.6, cy + 2.3, CELL.z1 - 0.01), Math.PI);
+    decal(1.0, 1.1, v3(-1.75, cy + 0.55, CELL.z0 + 0.012), 0);
+    decal(1.6, 0.7, v3(CELL.x0 + 0.01, cy + 0.35, 31.0), Math.PI / 2);
     // Puddle under the dripping pipe.
     const puddle = new THREE.Mesh(
       new THREE.CircleGeometry(0.42, 24),
@@ -181,7 +184,7 @@ export class QuietCellLevel implements Level {
     scene.add(this.dripSteam.group);
 
     // Practical amber lamp (casts the pipe shadows across the wall) and the slit's moonlight.
-    const cellLamp = new WorkLamp(m, v3(CELL.x1 - 0.01, cy + 2.75, 28.35), v3(-1, 0, 0), { light: true, intensity: 9, distance: 9, castShadow: true });
+    const cellLamp = new WorkLamp(m, v3(CELL.x1 - 0.01, cy + 2.6, 28.6), v3(-1, 0, 0), { light: true, intensity: 6.5, distance: 9, castShadow: true, poolOpacity: 0.06 });
     this.lamps.push(cellLamp);
     scene.add(cellLamp.group);
     const slitLight = new THREE.SpotLight(Palette.moon, 14, 14, 0.16, 0.6, 1.4);
@@ -191,7 +194,7 @@ export class QuietCellLevel implements Level {
     slitLight.shadow.mapSize.set(512, 512);
     slitLight.shadow.bias = -0.0015;
     scene.add(slitLight, slitLight.target);
-    this.slitShaft = new LightShaft(v3(0.6, cy + 2.5, CELL.z1 + 0.25), v3(0.25, cy, 29.5), 0.1, 0.5, Palette.moon, 0.22);
+    this.slitShaft = new LightShaft(v3(0.6, cy + 2.5, CELL.z1 + 0.25), v3(0.25, cy, 29.5), 0.08, 0.32, Palette.moon, 0.07);
     scene.add(this.slitShaft.mesh);
     // A little fill so the room's corners read without washing out the lamp.
     const fill = new THREE.PointLight('#5f7f95', 1.6, 7, 1.5);
@@ -209,21 +212,28 @@ export class QuietCellLevel implements Level {
     solid(S.x0, S.x1, S.channelBottom - 0.5, S.floorY, S.z0, S.gapFar, m.stone, { damp: true });
     batch.add(worldBox(S.x1 - S.x0, 0.06, S.gapFar - S.z0, 3), m.floor, new THREE.Matrix4().makeTranslation(0, S.floorY + 0.005, (S.z0 + S.gapFar) / 2));
     solid(S.x0, S.x1, S.channelBottom - 0.6, S.channelBottom, S.gapFar, S.gapNear, m.stoneDark, { damp: true });
-    // Edge coping so the gap reads clearly from above.
-    for (const z of [S.gapNear + 0.12, S.gapFar - 0.12]) {
-      batch.add(new RoundedBoxGeometry(S.x1 - S.x0, 0.12, 0.26, 1, 0.04), m.stone, new THREE.Matrix4().makeTranslation(0, S.floorY + 0.04, z), { tint: tint(1.25) });
+    // Worn iron edge angles so the gap's lips read clearly from above.
+    for (const z of [S.gapNear + 0.06, S.gapFar - 0.06]) {
+      batch.add(worldBox(S.x1 - S.x0, 0.08, 0.14, 1.5), m.iron, new THREE.Matrix4().makeTranslation(0, S.floorY + 0.02, z), { tint: tint(1.3) });
     }
     // Practice jump: a fallen girder lying across the whole landing.
     {
       const g = S.girder;
       const gy = S.floorY + g.height / 2;
-      batch.add(worldBox(S.x1 - S.x0 - 0.1, 0.08, g.depth, 2), m.iron, new THREE.Matrix4().makeTranslation(0, S.floorY + g.height - 0.04, g.z));
-      batch.add(worldBox(S.x1 - S.x0 - 0.1, 0.08, g.depth, 2), m.iron, new THREE.Matrix4().makeTranslation(0, S.floorY + 0.04, g.z));
-      batch.add(worldBox(S.x1 - S.x0 - 0.1, g.height - 0.12, 0.08, 2), m.iron, new THREE.Matrix4().makeTranslation(0, gy, g.z));
-      for (let i = 0; i < 9; i++) {
-        const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 4), m.brass);
-        rivet.position.set(S.x0 + 0.5 + i * 0.8, gy, g.z + 0.05);
-        root.add(rivet);
+      const len = S.x1 - S.x0 - 0.1;
+      batch.add(new RoundedBoxGeometry(len, g.height - 0.1, g.depth - 0.12, 2, 0.03), m.ironDark, new THREE.Matrix4().makeTranslation(0, gy, g.z));
+      for (const fy of [S.floorY + 0.05, S.floorY + g.height - 0.05]) {
+        batch.add(new RoundedBoxGeometry(len + 0.04, 0.1, g.depth, 2, 0.025), m.iron, new THREE.Matrix4().makeTranslation(0, fy, g.z));
+      }
+      // Stiffener plates and rivets so it reads as a heavy fallen beam, not a plank.
+      for (let i = 0; i < 7; i++) {
+        const x = S.x0 + 0.6 + i * ((len - 1.0) / 6);
+        batch.add(new THREE.BoxGeometry(0.06, g.height - 0.2, g.depth - 0.02), m.iron, new THREE.Matrix4().makeTranslation(x, gy, g.z));
+        for (const side of [-1, 1]) {
+          const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 4), m.brass);
+          rivet.position.set(x + 0.12, gy + 0.12, g.z + side * (g.depth / 2 - 0.055));
+          root.add(rivet);
+        }
       }
       physics.box(v3(0, gy, g.z), v3((S.x1 - S.x0) / 2, g.height / 2, g.depth / 2));
     }
@@ -233,9 +243,11 @@ export class QuietCellLevel implements Level {
       [S.gapFar, 1],
     ] as Array<[number, number]>) {
       const stub = new THREE.Group();
-      const grate = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.06, 0.55), m.grate);
-      grate.position.z = dir * 0.27;
-      stub.add(grate);
+      for (const sx of [-0.68, 0.68]) {
+        const beam = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.1, 0.6), m.iron);
+        beam.position.set(sx, 0, dir * 0.3);
+        stub.add(beam);
+      }
       for (const sx of [-0.68, 0.68]) {
         const post = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.9, 0.05), m.iron);
         post.position.set(sx, 0.45, dir * 0.45);
@@ -312,11 +324,13 @@ export class QuietCellLevel implements Level {
       root.add(bar);
     }
     const railZ = HALL.aWall - 0.12;
-    batch.add(new THREE.BoxGeometry(2.6, 0.07, 0.07), m.iron, new THREE.Matrix4().makeTranslation(0, L.y + 1.0, railZ));
-    batch.add(new THREE.BoxGeometry(2.6, 0.045, 0.045), m.iron, new THREE.Matrix4().makeTranslation(0, L.y + 0.5, railZ));
-    for (const x of [-1.25, 0, 1.25]) batch.add(new THREE.BoxGeometry(0.07, 1.0, 0.07), m.iron, new THREE.Matrix4().makeTranslation(x, L.y + 0.5, railZ));
-    physics.box(v3(0, L.y + 1.3, railZ), v3(1.4, 1.3, 0.08), undefined, { blocksCamera: false });
-    this.lookoutLight = new ServiceLight(m, v3(-1.55, L.y, 14.6), Math.PI / 2);
+    // A temporary repair railing across the collapsed front (rope-lashed to the posts).
+    batch.add(new THREE.BoxGeometry(4.3, 0.07, 0.07), m.iron, new THREE.Matrix4().makeTranslation(0, L.y + 1.0, railZ));
+    batch.add(new THREE.BoxGeometry(4.3, 0.045, 0.045), m.iron, new THREE.Matrix4().makeTranslation(0, L.y + 0.5, railZ));
+    for (const x of [-2.05, -0.7, 0.7, 2.05]) batch.add(new THREE.BoxGeometry(0.08, 1.05, 0.08), m.iron, new THREE.Matrix4().makeTranslation(x, L.y + 0.52, railZ));
+    for (const x of [-0.7, 0.7]) batch.add(new THREE.TorusGeometry(0.06, 0.02, 6, 12), m.rope, new THREE.Matrix4().makeTranslation(x, L.y + 0.98, railZ));
+    physics.box(v3(0, L.y + 1.3, railZ), v3(2.2, 1.3, 0.08), undefined, { blocksCamera: false });
+    this.lookoutLight = new ServiceLight(m, v3(-1.15, L.y, HALL.aWall + 0.45), Math.PI / 2);
     scene.add(this.lookoutLight.group);
     // Ivo's intercom: a brass speaker box with a cracked grille.
     {
@@ -367,6 +381,8 @@ export class QuietCellLevel implements Level {
       feet: v3(SPAWNS.landing.x, SPAWNS.landing.y, SPAWNS.landing.z),
       facing: SPAWNS.landing.facing,
       impliesFlags: ['hatch.open'],
+      // The hatch wall is right behind this spawn: frame the landing diagonally instead.
+      cameraYaw: SPAWNS.landing.facing + Math.PI + 1.05,
     });
     checkpoints.register({
       id: 'lookout',
@@ -521,7 +537,7 @@ export class QuietCellLevel implements Level {
         at: 0.35,
         run: () => {
           // Frame Mara at the rail with the hall, the engine and the beacon beyond.
-          camera.playShot(v3(1.7, LOOKOUT.y + 2.3, 15.9), v3(-6.5, 3.5, -12), 2.6);
+          camera.playShot(v3(1.7, LOOKOUT.y + 2.2, 15.3), v3(-10.5, LOOKOUT.y + 2.6, -16), 2.8);
         },
       },
     ];
@@ -757,8 +773,8 @@ function buildRoute(): RouteStep[] {
     { kind: 'move', to: [0.7, S.floorY, S.gapNear + 1.3], precise: true },
     { kind: 'jump', from: [0.6, S.floorY, S.gapNear + 0.25], to: [0.5, S.floorY, S.gapFar - 1.0] },
     { kind: 'move', to: [0.0, LOOKOUT.y, 17.9], precise: true },
-    { kind: 'move', to: [-0.6, LOOKOUT.y, 15.0], precise: true },
-    { kind: 'interact', id: 'lookout-light', standAt: [-0.75, LOOKOUT.y, 14.7], expectFlag: 'lookout.lit' },
+    { kind: 'move', to: [-0.3, LOOKOUT.y, 14.6], precise: true },
+    { kind: 'interact', id: 'lookout-light', standAt: [-0.45, LOOKOUT.y, 13.5], expectFlag: 'lookout.lit' },
     { kind: 'wait', until: 'complete', timeout: 20 },
   ];
 }

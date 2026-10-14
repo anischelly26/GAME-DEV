@@ -1,8 +1,6 @@
 import * as THREE from 'three';
 
-const SEGMENTS = 7;
 const SEG_LEN = 0.075;
-const WIDTH = 0.085;
 
 const tmp = new THREE.Vector3();
 const tmp2 = new THREE.Vector3();
@@ -11,7 +9,7 @@ const anchorPos = new THREE.Vector3();
 const bodyCenter = new THREE.Vector3();
 
 /**
- * The trailing end of Wren's scarf: a short Verlet chain rendered as a tapered ribbon.
+ * A trailing end of Mara's scarf: a short Verlet chain rendered as a tapered ribbon.
  * Purely cosmetic, but it makes speed, direction changes and jumps readable at a glance.
  */
 export class Scarf {
@@ -23,7 +21,13 @@ export class Scarf {
   private initialised = false;
   private time = 0;
 
-  constructor(material: THREE.Material) {
+  private readonly segments: number;
+  private readonly width: number;
+
+  constructor(material: THREE.Material, segments = 7, width = 0.085) {
+    this.segments = segments;
+    this.width = width;
+    const SEGMENTS = segments;
     for (let i = 0; i <= SEGMENTS; i++) {
       this.points.push(new THREE.Vector3());
       this.prev.push(new THREE.Vector3());
@@ -50,6 +54,8 @@ export class Scarf {
   }
 
   update(dt: number, anchor: THREE.Object3D, body: THREE.Object3D, speed: number): void {
+    const SEGMENTS = this.segments;
+    const WIDTH = this.width;
     this.time += dt;
     anchor.getWorldPosition(anchorPos);
     if (!this.initialised || anchorPos.distanceTo(this.points[0]) > 2) {
@@ -64,7 +70,7 @@ export class Scarf {
     const flutter = 0.6 + speed * 0.25;
     const wind = tmp2.set(Math.sin(this.time * 1.7) * 0.4, Math.sin(this.time * 7.3) * 0.15 * flutter, Math.cos(this.time * 1.3) * 0.3);
     body.getWorldPosition(bodyCenter);
-    bodyCenter.y += 1.05;
+    bodyCenter.y += 1.12;
 
     this.points[0].copy(anchorPos);
     for (let i = 1; i <= SEGMENTS; i++) {

@@ -41,6 +41,8 @@ export class ThirdPersonCamera {
   private shot: Shot | null = null;
   private readonly lookPoint = new THREE.Vector3();
   private recenterTarget: number | null = null;
+  /** 0..1, how much walls have pulled the camera in (smoothed). */
+  private pullIn = 0;
   activeZone = 'default';
 
   constructor(
@@ -51,8 +53,8 @@ export class ThirdPersonCamera {
   }
 
   /** Place the camera behind a yaw (used on spawn/respawn). */
-  snapBehind(feet: THREE.Vector3, facing: number, pitch = 0.3): void {
-    this.yaw = facing + Math.PI;
+  snapBehind(feet: THREE.Vector3, facing: number, pitch = 0.3, yaw?: number): void {
+    this.yaw = yaw ?? facing + Math.PI;
     this.pitch = pitch;
     this.focus.set(feet.x, feet.y + this.zoneHeight, feet.z);
     this.initialised = false;
@@ -134,12 +136,15 @@ export class ThirdPersonCamera {
       this.focus.y = clamp(this.focus.y, targetY - 1.0, targetY + 1.2);
     }
 
-    const cp = Math.cos(this.pitch);
-    const dir = new THREE.Vector3(Math.sin(this.yaw) * cp, Math.sin(this.pitch), Math.cos(this.yaw) * cp);
+    // When a wall pulls the camera in, tilt it up over the shoulder so the player doesn't fill the frame.
+    const pitch = Math.min(1.25, this.pitch + this.pullIn * 0.45);
+    const cp = Math.cos(pitch);
+    const dir = new THREE.Vector3(Math.sin(this.yaw) * cp, Math.sin(pitch), Math.cos(this.yaw) * cp);
     const free = this.physics.sphereCastDistance(this.focus, dir, this.zoneDist + 0.3, PROBE_RADIUS, this.exclude);
     const targetDist = clamp(free - 0.08, 0.3, this.zoneDist);
     if (!this.initialised || targetDist < this.currentDist) this.currentDist = targetDist;
     else this.currentDist = damp(this.currentDist, targetDist, 3.2, dt);
+    this.pullIn = damp(this.pullIn, clamp(1 - this.currentDist / Math.max(0.5, this.zoneDist), 0, 1), 5, dt);
     this.initialised = true;
 
     this.camera.position.copy(this.focus).addScaledVector(dir, this.currentDist);

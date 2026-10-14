@@ -123,13 +123,16 @@ interface MasonryOptions {
   mossiness?: number;
 }
 
-/** Ashlar blocks with chipped bevels, per-block tint and damp mortar. */
+/**
+ * Rounded, chipped ashlar: irregular block edges, per-block relief and tint, recessed damp mortar,
+ * and faint vertical water streaks so walls read as weathered stone rather than tiles.
+ */
 function masonry(o: MasonryOptions): Field {
   const f = newField(o.size);
   const rng = mulberry32(o.seed);
   const rowH = 1 / o.rows;
   // Block boundaries per row, as cumulative u positions that wrap at 1.
-  const rows: { edges: number[]; tints: number[][]; offset: number }[] = [];
+  const rows: { edges: number[]; tints: number[][]; relief: number[]; offset: number }[] = [];
   for (let r = 0; r < o.rows; r++) {
     const edges: number[] = [0];
     let u = 0;
@@ -141,16 +144,17 @@ function masonry(o: MasonryOptions): Field {
     }
     const tints = edges.map(() => {
       const t = 1 + (rng() - 0.5) * o.variation;
-      const warm = (rng() - 0.5) * 0.08;
-      const green = rng() < 0.3 ? rng() * 0.06 : 0;
-      return [t + warm, t + green, t - warm * 0.5];
+      const warm = (rng() - 0.5) * 0.1;
+      const green = rng() < 0.3 ? rng() * 0.07 : 0;
+      return [t + warm, t + green, t - warm * 0.4];
     });
-    rows.push({ edges, tints, offset: rng() });
+    const relief = edges.map(() => 0.7 + rng() * 0.25);
+    rows.push({ edges, tints, relief, offset: rng() });
   }
   const s = o.size;
   for (let y = 0; y < s; y++) {
     const v = y / s;
-    const r = Math.floor(v * o.rows);
+    const r = Math.min(o.rows - 1, Math.floor(v * o.rows));
     const row = rows[r];
     const vIn = (v - r * rowH) / rowH; // 0..1 within row
     for (let x = 0; x < s; x++) {
@@ -162,22 +166,29 @@ function masonry(o: MasonryOptions): Field {
       const right = row.edges[b + 1];
       const dxu = Math.min(u - left, right - u) * o.rows; // in row-height units
       const dyu = Math.min(vIn, 1 - vIn);
-      const edgeDist = Math.min(dxu, dyu);
-      const chip = fbm(u0, v, 16, 3, o.seed + 7) * 0.12;
-      const bevel = smoothstep(o.mortar * 0.5, o.mortar + 0.12 + chip, edgeDist);
-      const surface = fbm(u0, v, 8, 5, o.seed + 3);
-      const fine = fbm(u0, v, 64, 2, o.seed + 11);
-      const h = bevel * (0.65 + surface * 0.3 + fine * 0.08);
+      // Chipped, irregular arris: noise eats into the block edge.
+      const chip = (fbm(u0, v, 24, 3, o.seed + 7) - 0.5) * 0.16;
+      const edgeDist = Math.min(dxu, dyu) + chip;
+      const bevel = smoothstep(o.mortar * 0.7, o.mortar + 0.09, edgeDist);
+      const surface = fbm(u0, v, 6, 5, o.seed + 3);
+      const fine = fbm(u0, v, 48, 2, o.seed + 11);
+      const blockH = row.relief[b];
+      const stoneH = blockH + (surface - 0.5) * 0.3 + (fine - 0.5) * 0.08;
+      const mortarH = 0.18 + fine * 0.08;
       const i = y * s + x;
-      f.height[i] = h;
+      f.height[i] = mortarH + (stoneH - mortarH) * bevel;
       const tint = row.tints[b];
-      const isMortar = bevel < 0.02;
-      const shade = isMortar ? 0.45 : 0.72 + surface * 0.45 + (fine - 0.5) * 0.12;
+      // Vertical water streaks running down the wall.
+      const streak = smoothstep(0.55, 0.8, fbm(u0, v * 0.25, 16, 3, o.seed + 31)) * 0.18;
       const grime = fbm(u0, v, 4, 4, o.seed + 19);
-      const moss = o.mossiness ? smoothstep(0.55, 0.75, grime) * o.mossiness * (isMortar ? 1.4 : 0.6) : 0;
-      f.albedo[i * 3] = o.base[0] * tint[0] * shade * (1 - moss * 0.35);
-      f.albedo[i * 3 + 1] = o.base[1] * tint[1] * shade * (1 + moss * 0.2);
-      f.albedo[i * 3 + 2] = o.base[2] * tint[2] * shade * (1 - moss * 0.25);
+      const moss = o.mossiness ? smoothstep(0.58, 0.78, grime) * o.mossiness : 0;
+      const stoneShade = (0.8 + (surface - 0.5) * 0.4 + (fine - 0.5) * 0.12) * (0.88 + 0.12 * bevel) - streak;
+      const mortarShade = 0.62 + (fine - 0.5) * 0.1 - streak * 0.5;
+      const shade = mortarShade + (stoneShade - mortarShade) * bevel;
+      const mossK = moss * (1.2 - bevel * 0.7);
+      f.albedo[i * 3] = o.base[0] * (1 + (tint[0] - 1) * bevel) * shade * (1 - mossK * 0.3);
+      f.albedo[i * 3 + 1] = o.base[1] * (1 + (tint[1] - 1) * bevel) * shade * (1 + mossK * 0.15);
+      f.albedo[i * 3 + 2] = o.base[2] * (1 + (tint[2] - 1) * bevel) * shade * (1 - mossK * 0.25);
     }
   }
   return f;
@@ -239,8 +250,8 @@ function fabric(size: number, base: [number, number, number], seed: number): Fie
       const weave = 0.5 + 0.25 * (Math.sin(u * size * 0.9) + Math.sin(v * size * 0.9));
       const n = fbm(u, v, 8, 4, seed);
       const i = y * size + x;
-      f.height[i] = weave * 0.6 + n * 0.4;
-      const shade = 0.75 + weave * 0.15 + n * 0.25;
+      f.height[i] = weave * 0.25 + n * 0.75;
+      const shade = 0.86 + weave * 0.04 + (n - 0.5) * 0.2;
       for (let c = 0; c < 3; c++) f.albedo[i * 3 + c] = base[c] * shade;
     }
   }
@@ -519,17 +530,17 @@ export interface TextureLibrary {
 export function createTextureLibrary(): TextureLibrary {
   return {
     stone: fieldToTextures(
-      masonry({ size: 1024, rows: 9, minWidth: 0.16, maxWidth: 0.34, mortar: 0.07, base: [0.56, 0.6, 0.58], variation: 0.28, seed: 11, mossiness: 0.8 }),
-      5,
+      masonry({ size: 1024, rows: 10, minWidth: 0.14, maxWidth: 0.3, mortar: 0.045, base: [0.6, 0.63, 0.6], variation: 0.3, seed: 11, mossiness: 0.7 }),
+      2.6,
     ),
     floor: fieldToTextures(
-      masonry({ size: 1024, rows: 4, minWidth: 0.2, maxWidth: 0.42, mortar: 0.05, base: [0.5, 0.5, 0.48], variation: 0.22, seed: 23, mossiness: 0.4 }),
-      4,
+      masonry({ size: 1024, rows: 4, minWidth: 0.2, maxWidth: 0.42, mortar: 0.035, base: [0.52, 0.52, 0.5], variation: 0.24, seed: 23, mossiness: 0.35 }),
+      2.2,
     ),
     iron: fieldToTextures(metal(512, [0.24, 0.26, 0.28], [0.42, 0.22, 0.12], 0.55, 31), 3),
     brass: fieldToTextures(metal(512, [0.78, 0.6, 0.34], [0.3, 0.58, 0.5], 0.45, 41), 2),
     wood: fieldToTextures(planks(512, 51), 3),
-    wool: fieldToTextures(fabric(256, [0.36, 0.4, 0.46], 61), 2),
-    smock: fieldToTextures(fabric(256, [0.82, 0.84, 0.86], 71), 1.2),
+    wool: fieldToTextures(fabric(256, [0.5, 0.56, 0.62], 61), 2),
+    smock: fieldToTextures(fabric(256, [0.9, 0.9, 0.9], 71), 0.8),
   };
 }

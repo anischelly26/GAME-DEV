@@ -7,7 +7,7 @@ import type { TextureLibrary } from './textures';
  * only other saturated warm colour, which keeps the player readable against the environment.
  */
 export const Palette = {
-  fog: new THREE.Color('#0d1c24'),
+  fog: new THREE.Color('#14303a'),
   moon: new THREE.Color('#a9c8ff'),
   lantern: new THREE.Color('#ffae5a'),
   lanternHot: new THREE.Color('#ffd49a'),

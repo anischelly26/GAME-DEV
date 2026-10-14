@@ -63,7 +63,8 @@ export class Game {
   private textures!: TextureLibrary;
   private materials!: MaterialLibrary;
   private sky!: Sky;
-  private readonly moonDir = new THREE.Vector3(0.18, 0.62, 0.76).normalize();
+  /** Toward the moon: low over the sea behind the harbour beacon, so it shines in through the breach. */
+  private readonly moonDir = new THREE.Vector3(-0.38, 0.33, -0.86).normalize();
   private accumulator = 0;
   private lastFrame = 0;
   time = 0;
@@ -101,7 +102,7 @@ export class Game {
     this.materials = createMaterials(this.textures);
 
     this.scene.background = Palette.skyTop.clone();
-    this.scene.fog = new THREE.FogExp2(Palette.fog, 0.028);
+    this.scene.fog = new THREE.FogExp2(Palette.fog, 0.024);
     this.setupLights();
     this.sky = new Sky(this.moonDir);
     this.scene.add(this.sky.mesh);
@@ -138,7 +139,9 @@ export class Game {
     this.level = new QuietCellLevel(ctx);
     this.wireEvents();
     this.applySettings(this.hud.settings);
-    if (this.options.quality) this.pipeline.setQuality(this.options.quality);
+    // Automated runs default to Low: software rendering in CI sandboxes is slow and memory-bound.
+    const forced = this.options.quality ?? (this.options.test ? 'low' : null);
+    if (forced) this.setQuality(forced);
 
     const startId = this.options.start && this.level.checkpointIds.includes(this.options.start) ? this.options.start : this.level.checkpointIds[0];
     this.teleportToCheckpoint(startId);
@@ -281,7 +284,27 @@ export class Game {
     this.input.mouseSensitivity = BASE_MOUSE_SENSITIVITY * s.sensitivity;
     this.input.invertY = s.invertY;
     this.audio.setVolume(s.volume);
-    if (!this.options.quality) this.pipeline.setQuality(s.quality);
+    if (!this.options.quality && !this.options.test) this.setQuality(s.quality);
+  }
+
+  /** Low: lower resolution, no bloom, smaller moon shadow map, no lamp shadows. */
+  setQuality(level: 'high' | 'low'): void {
+    this.pipeline.setQuality(level);
+    this.scene.traverse((o) => {
+      const light = o as THREE.Light & { shadow?: THREE.LightShadow };
+      if (!light.isLight || !light.shadow) return;
+      if ((light as THREE.DirectionalLight).isDirectionalLight) {
+        const size = level === 'high' ? 4096 : 1536;
+        if (light.shadow.mapSize.x !== size) {
+          light.shadow.mapSize.set(size, size);
+          light.shadow.map?.dispose();
+          light.shadow.map = null;
+        }
+      } else {
+        light.userData.wantsShadow ??= light.castShadow;
+        light.castShadow = level === 'high' && light.userData.wantsShadow;
+      }
+    });
   }
 
   setControl(enabled: boolean): void {
@@ -295,7 +318,7 @@ export class Game {
     if (!cp) return;
     this.player.teleport(cp.feet, cp.facing);
     this.camera.clearShot();
-    this.camera.snapBehind(cp.feet, cp.facing, 0.32);
+    this.camera.snapBehind(cp.feet, cp.facing, 0.32, cp.cameraYaw);
     this.triggers.resetPresence();
     this.respawnFade = 1;
     if (reason === 'fall') this.audio.play('respawn');
@@ -347,7 +370,7 @@ export class Game {
     this.level.applyCheckpointState(id);
     this.player.teleport(cp.feet, cp.facing);
     this.camera.clearShot();
-    this.camera.snapBehind(cp.feet, cp.facing, 0.32);
+    this.camera.snapBehind(cp.feet, cp.facing, 0.32, cp.cameraYaw);
     this.triggers.resetPresence();
   }
 
@@ -434,7 +457,7 @@ export class Game {
     });
     const look = this.state === 'playing' ? this.input.consumeLook() : (this.input.consumeLook(), { dx: 0, dy: 0 });
     this.camera.update(dt, look, 1, feet, this.player.grounded, this.player.speed);
-    this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.45, 1.1, this.camera.distance));
+    this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.5, 1.25, this.camera.distance));
     this.level.update(dt, this.time, alpha);
     this.sky.update(this.time, this.camera.camera.position);
     this.audio.setListener(this.camera.camera);

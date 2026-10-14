@@ -185,17 +185,39 @@ export class PressureHatch {
     this.group.add(barrel, sealRing, footRing, this.rod, this.crossbar);
 
     // --- hatch slab on guide rails, with spring pawls that latch it open
-    const slabMesh = new THREE.Mesh(new RoundedBoxGeometry(SLAB.w, SLAB.h, SLAB.t, 3, 0.035), m.ironDark);
+    const slabMesh = new THREE.Mesh(new RoundedBoxGeometry(SLAB.w, SLAB.h, SLAB.t, 3, 0.035), m.iron);
     slabMesh.position.set(0, SLAB.h / 2, 0);
     slabMesh.castShadow = slabMesh.receiveShadow = true;
     this.slab.add(slabMesh);
-    const ribGeo = new THREE.BoxGeometry(SLAB.w - 0.12, 0.07, 0.05);
-    for (const y of [0.35, 1.03, 1.71]) {
-      const rib = new THREE.Mesh(ribGeo, m.iron);
+    const ribGeo = new RoundedBoxGeometry(SLAB.w - 0.08, 0.09, 0.05, 1, 0.015);
+    for (const y of [0.32, 1.03, 1.74]) {
+      const rib = new THREE.Mesh(ribGeo, m.ironDark);
       rib.position.set(0, y, SLAB.t / 2 + 0.02);
       rib.castShadow = true;
       this.slab.add(rib);
     }
+    // Rivet rows along the edges and ribs.
+    const rivets = new THREE.InstancedMesh(new THREE.SphereGeometry(0.02, 6, 4), m.brass, 64);
+    const mtx = new THREE.Matrix4();
+    let n = 0;
+    for (let i = 0; i < 10; i++) {
+      const t = (i + 0.5) / 10;
+      for (const [x, y] of [
+        [-SLAB.w / 2 + 0.06, 0.08 + t * (SLAB.h - 0.16)],
+        [SLAB.w / 2 - 0.06, 0.08 + t * (SLAB.h - 0.16)],
+      ]) {
+        mtx.makeTranslation(x, y, SLAB.t / 2 + 0.005);
+        rivets.setMatrixAt(n++, mtx);
+      }
+    }
+    for (const y of [0.32, 1.03, 1.74]) {
+      for (let i = 0; i < 7; i++) {
+        mtx.makeTranslation(-SLAB.w / 2 + 0.2 + i * ((SLAB.w - 0.4) / 6), y, SLAB.t / 2 + 0.05);
+        rivets.setMatrixAt(n++, mtx);
+      }
+    }
+    rivets.count = n;
+    this.slab.add(rivets);
     const stencil = new THREE.Mesh(
       new THREE.PlaneGeometry(1.1, 0.3),
       new THREE.MeshStandardMaterial({ map: paintedTextTexture('SERVICE', { w: 512, h: 128, color: 'rgba(214,180,90,0.92)', seed: 12 }), transparent: true, roughness: 0.8 }),

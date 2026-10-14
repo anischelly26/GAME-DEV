@@ -56,6 +56,7 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
     new THREE.Matrix4().makeRotationY(sideAngle(k)).multiply(new THREE.Matrix4().makeTranslation(u, y, a));
 
   const barPositions: THREE.Matrix4[] = [];
+  const glowPositions: THREE.Vector3[] = [];
   const crossbarPositions: THREE.Matrix4[] = [];
   const candlePositions: THREE.Vector3[] = [];
 
@@ -135,6 +136,24 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
         continue;
       }
 
+      if (isLookout) {
+        // The lookout cell's front wall has fallen into the hall: a wide, ragged window.
+        for (let i = 0; i < 5; i++) {
+          const f = 0.08 + i * 0.21;
+          const p = sideFraction(k, HALL.aWall + 0.2, f);
+          const hgt = 0.18 + rng() * 0.22;
+          const blk = new RoundedBoxGeometry(0.55 + rng() * 0.3, hgt, 0.45, 1, 0.06);
+          batch.add(blk, m.stone, new THREE.Matrix4().compose(new THREE.Vector3(p[0], y0 + hgt / 2 - 0.02, p[1]), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, th + (rng() - 0.5) * 0.6, 0)), new THREE.Vector3(1, 1, 1)), { tint: tint(0.85), damp: true });
+        }
+        // Broken stubs of the old wall at both sides and a cracked lintel.
+        for (const s of [-1, 1]) {
+          const u = s * (L - 0.25);
+          batch.add(worldBox(0.5, 2.2 + (s > 0 ? 0.9 : 0), HALL.wallT, 3), m.stone, sideMatrix(k, u, y0 + 1.1 + (s > 0 ? 0.45 : 0), aMid), { tint: tint(1), damp: true });
+        }
+        batch.add(worldBox(2 * L, 0.9, HALL.wallT, 3), m.stone, sideMatrix(k, 0, y0 + HALL.tierH - HALL.floorT - 0.45, aMid), { tint: tint(0.95) });
+        continue;
+      }
+
       // ---- facade with a cell opening
       const h = HALL.tierH;
       const yMid = y0 - HALL.floorT + h / 2;
@@ -152,7 +171,8 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
       // Keystone over the opening.
       batch.add(new RoundedBoxGeometry(0.5, 0.55, 0.16, 1, 0.05), m.stone, sideMatrix(k, 0, y0 + HALL.cellOpeningH + 0.22, HALL.aWall - 0.06), { tint: tint(1.1) });
 
-      if (isLookout) continue; // the lookout cell is built by the level itself
+      // A dim work lamp beside most cells, so the tiers read at a distance.
+      if (rng() < 0.75) glowPositions.push(new THREE.Vector3(...worldOf(k, opening + 0.45, HALL.aWall - 0.12)).setY(y0 + 2.5));
 
       // ---- dark cell recess and bars
       const recessDepth = HALL.recess;
@@ -208,6 +228,16 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
     root.add(cross);
   }
 
+  // ---- distant work-lamp glows on every tier (one draw call)
+  {
+    const geo = new THREE.BufferGeometry().setFromPoints(glowPositions);
+    const glowMat = new THREE.PointsMaterial({ map: glowSprite(), color: '#ffb466', size: 1.5, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.8 });
+    root.add(new THREE.Points(geo, glowMat));
+    const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 8, 6), m.glassWarm, glowPositions.length);
+    glowPositions.forEach((p, i) => bulbs.setMatrixAt(i, new THREE.Matrix4().makeTranslation(p.x, p.y, p.z)));
+    root.add(bulbs);
+  }
+
   // ---- candles in a few cells: signs of other prisoners
   for (const p of candlePositions) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowSprite(), color: '#ffb46a', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.55 }));
@@ -221,7 +251,9 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
   root.add(engine);
   {
     const colH = 36;
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(HALL.columnR, HALL.columnR * 1.1, colH, 36, 1), m.iron);
+    // Painted, oxidised iron rather than bare metal: bare metal reads black without bright reflections.
+    const paint = new THREE.MeshStandardMaterial({ color: '#6f8c86', map: m.iron.map, normalMap: m.iron.normalMap, roughness: 0.62, metalness: 0.3 });
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(HALL.columnR, HALL.columnR * 1.1, colH, 36, 1), paint);
     col.position.y = -13 + colH / 2;
     col.castShadow = col.receiveShadow = true;
     engine.add(col);
@@ -241,15 +273,39 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
       engine.add(pipe);
     }
     // Two great flywheels on the column, slowly turning.
-    for (const [y, r] of [
-      [2.2, 1.9],
-      [7.4, 1.5],
+    for (const [y, r, side] of [
+      [2.2, 1.9, 1],
+      [7.4, 1.5, -1],
     ]) {
       const fly = new THREE.Mesh(gearGeometry(r, 24, 0.18, 0.35, 0.35), m.brass);
-      fly.position.set(0, y, HALL.columnR + 0.5);
+      fly.position.set(side * (HALL.columnR + 0.5), y, -0.8);
+      fly.rotation.y = Math.PI / 2;
       fly.castShadow = true;
       fly.name = 'flywheel';
       engine.add(fly);
+    }
+    // Rings of amber service lamps up the column: the engine reads as lit, working machinery.
+    const lampPos: THREE.Matrix4[] = [];
+    for (let y = -6.8; y < 16; y += 4.6) {
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + y * 0.3;
+        lampPos.push(new THREE.Matrix4().makeTranslation(Math.sin(a) * (HALL.columnR + 0.12), y + 1.1, Math.cos(a) * (HALL.columnR + 0.12)));
+      }
+    }
+    const colLamps = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 8, 6), m.glassWarm, lampPos.length);
+    lampPos.forEach((mtx, i) => colLamps.setMatrixAt(i, mtx));
+    engine.add(colLamps);
+    const glowGeo = new THREE.BufferGeometry().setFromPoints(lampPos.map((mtx) => new THREE.Vector3().setFromMatrixPosition(mtx)));
+    engine.add(new THREE.Points(glowGeo, new THREE.PointsMaterial({ map: glowSprite(), color: '#ffb466', size: 1.1, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.7 })));
+    // Warm fill from the engine's working lamps, so the hall's inner faces read from the lookout.
+    for (const [x, y, z] of [
+      [0, 3.5, 4.6],
+      [-4.2, 8, -1.5],
+      [4.2, -1, -1.5],
+    ]) {
+      const fill = new THREE.PointLight('#ffb070', 26, 22, 1.4);
+      fill.position.set(x, y, z);
+      engine.add(fill);
     }
   }
   // The breathing collar: the visible piston head that rises and falls with the engine's cycle.
@@ -302,12 +358,13 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
   const water = new Water({ radius: HALL.aWall + 0.4, y: HALL.waterY, deep: new THREE.Color('#06171c'), moonDir, fogDensity: 0.03, fogColor: Palette.fog, scale: 1.4, foamRadius: HALL.aWall - 0.2 });
   root.add(water.mesh);
 
-  // ---- moonlight shaft through the oculus and dust in it
-  const shaftFrom = new THREE.Vector3(0, HALL.roofY + 1, 0).addScaledVector(moonDir, 0).add(new THREE.Vector3(Math.sin(0.1) * 4.5, 0, Math.cos(0.1) * 4.5));
-  const shaftTo = shaftFrom.clone().addScaledVector(moonDir, -26);
-  const shaft = new LightShaft(shaftFrom, shaftTo, 2.4, 3.8, Palette.moon, 0.12);
+  // ---- moonbeam pouring in through the breach, with dust glittering in it
+  const breachMid = sideFraction(10.5, HALL.aWall + 1.5, 0.5);
+  const shaftFrom = new THREE.Vector3(breachMid[0], 11.5, breachMid[1]);
+  const shaftTo = shaftFrom.clone().addScaledVector(moonDir, -30);
+  const shaft = new LightShaft(shaftFrom, shaftTo, 3.2, 5.5, Palette.moon, 0.075);
   root.add(shaft.mesh);
-  const dust = new Dust(700, new THREE.Vector3(0, 0, 0), HALL.aWall - 0.5, -8, HALL.roofY, shaftFrom, moonDir.clone().negate());
+  const dust = new Dust(800, new THREE.Vector3(0, 0, 0), HALL.aWall - 0.5, -8, HALL.roofY, shaftFrom, moonDir.clone().negate());
   root.add(dust.points);
 
   // ---- lamps: a few permanent ones, and the service-light route revealed from the lookout

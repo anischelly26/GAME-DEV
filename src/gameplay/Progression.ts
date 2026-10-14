@@ -55,6 +55,8 @@ export interface Checkpoint {
   facing: number;
   /** Flags implied by reaching this checkpoint (used by dev teleports to keep state consistent). */
   impliesFlags: string[];
+  /** Camera yaw on respawn; defaults to directly behind `facing`. Used to avoid framing into a wall. */
+  cameraYaw?: number;
 }
 
 export class Checkpoints {

@@ -53,6 +53,7 @@ export class WorkLamp {
   private readonly pool: THREE.Mesh | null;
   private readonly seed = seedCounter++ * 7.31;
   private readonly baseIntensity: number;
+  private poolOpacity = 0.12;
   private level: number;
   private target: number;
 
@@ -60,7 +61,7 @@ export class WorkLamp {
    * @param position lamp centre (on the wall surface)
    * @param outward unit vector pointing away from the wall
    */
-  constructor(m: MaterialLibrary, position: THREE.Vector3, outward: THREE.Vector3, opts: { light?: boolean; intensity?: number; distance?: number; pool?: boolean; on?: boolean; scale?: number; castShadow?: boolean } = {}) {
+  constructor(m: MaterialLibrary, position: THREE.Vector3, outward: THREE.Vector3, opts: { light?: boolean; intensity?: number; distance?: number; pool?: boolean; poolOpacity?: number; on?: boolean; scale?: number; castShadow?: boolean } = {}) {
     this.group.position.copy(position);
     this.group.rotation.y = Math.atan2(outward.x, outward.z);
     this.glass = m.glassWarm.clone();
@@ -77,6 +78,7 @@ export class WorkLamp {
         new THREE.MeshBasicMaterial({ map: glowSprite(), color: Palette.lantern, transparent: true, opacity: 0.14, depthWrite: false, blending: THREE.AdditiveBlending }),
       );
       this.pool.position.z = 0.01;
+      this.poolOpacity = opts.poolOpacity ?? 0.12;
       this.group.add(this.pool);
     } else this.pool = null;
     this.baseIntensity = opts.intensity ?? 5;
@@ -109,8 +111,8 @@ export class WorkLamp {
     // A dead lamp still shows a faint cold glint so the fixture reads in the dark.
     this.glass.emissive.copy(Palette.lantern);
     this.glass.emissiveIntensity = 0.05 + 3 * k;
-    (this.halo.material as THREE.SpriteMaterial).opacity = 0.35 * k;
-    if (this.pool) (this.pool.material as THREE.MeshBasicMaterial).opacity = 0.14 * k;
+    (this.halo.material as THREE.SpriteMaterial).opacity = 0.28 * k;
+    if (this.pool) (this.pool.material as THREE.MeshBasicMaterial).opacity = this.poolOpacity * k;
     if (this.light) this.light.intensity = this.baseIntensity * k;
   }
 
