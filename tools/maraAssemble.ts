@@ -10,8 +10,8 @@ import { retargetClip, rigifyToUE, sameNames } from './retarget';
  */
 export const Q = '/import-cache/quaternius/';
 
-/** Game clip name -> [library, source clip, options]. */
-export const CLIPS: Record<string, [1 | 2, string, { inPlace?: boolean }?]> = {
+/** Game clip name -> [library, source clip]. */
+export const CLIPS: Record<string, [1 | 2, string]> = {
   idle: [1, 'Idle_Loop'],
   walk: [1, 'Walk_Loop'],
   jog: [1, 'Jog_Fwd_Loop'],
@@ -20,13 +20,16 @@ export const CLIPS: Record<string, [1 | 2, string, { inPlace?: boolean }?]> = {
   jumpLoop: [1, 'Jump_Loop'],
   land: [1, 'Jump_Land'],
   interact: [1, 'Interact'],
-  roll: [1, 'Roll', { inPlace: true }],
+  roll: [1, 'Roll'],
   push: [1, 'Push_Loop'],
-  climb: [2, 'ClimbUp_1m_RM', { inPlace: true }],
-  vault: [2, 'NinjaJump_Start', { inPlace: true }],
+  climb: [2, 'ClimbUp_1m_RM'],
+  vault: [2, 'NinjaJump_Start'],
   airVault: [2, 'NinjaJump_Idle_Loop'],
   knockback: [2, 'Hit_Knockback'],
   railIdle: [2, 'Idle_Rail_Loop'],
+  // Chapter One opening: lying on the bunk, then getting up.
+  wake: [2, 'LayToIdle'],
+  shakeHead: [2, 'Idle_No_Loop'],
 };
 
 export function bonesOf(root: THREE.Object3D): Map<string, THREE.Bone> {
@@ -75,20 +78,13 @@ export async function assembleMara(): Promise<Assembled> {
     2: { root: ual2.scene, reference: ual2.animations.find((a) => a.name === 'A_TPose')!, map: sameNames(bones.keys()), clips: ual2.animations },
   };
   const clips: THREE.AnimationClip[] = [];
-  for (const [name, [lib, srcName, opts]] of Object.entries(CLIPS)) {
+  for (const [name, [lib, srcName]] of Object.entries(CLIPS)) {
     const s = sources[lib];
     const clip = s.clips.find((a) => a.name === srcName);
     if (!clip) throw new Error(`Missing clip ${srcName}`);
+    // Horizontal travel is removed in world space by the retargeter, so every clip plays in place
+    // and the game's controller moves Mara; vertical motion (crouching, lying, climbing) is kept.
     const out = retargetClip(s, clip, target, s.map, { name });
-    if (opts?.inPlace) {
-      // Hold the hips at their rest position: the game's controller moves Mara.
-      const hips = out.tracks.find((t) => t.name === 'pelvis.position')!;
-      const rest = bones.get('pelvis')!.position;
-      for (let i = 0; i < hips.values.length; i += 3) {
-        hips.values[i] = rest.x;
-        hips.values[i + 2] = rest.z;
-      }
-    }
     clips.push(out);
   }
   return { root, clips };

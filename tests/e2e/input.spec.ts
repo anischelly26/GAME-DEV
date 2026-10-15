@@ -86,7 +86,7 @@ test.describe('mouse look (R1)', () => {
   });
 
   test('pointer-locked look in normal play mode uses the same scale', async ({ page }) => {
-    await boot(page, '?dev=1&quality=low');
+    await boot(page, '?dev=1&quality=low&intro=0');
     await page.locator('[data-a="start"]').click({ timeout: 120_000 });
     await frames(page, 6);
     const locked = await page.evaluate(() => !!document.pointerLockElement);
@@ -245,7 +245,7 @@ test.describe('hints (R3)', () => {
 
 test.describe('real keyboard movement in normal play', () => {
   test('holding W in real time moves Mara', async ({ page }) => {
-    await boot(page, '?dev=1&quality=low');
+    await boot(page, '?dev=1&quality=low&intro=0');
     await page.locator('[data-a="start"]').click({ timeout: 120_000 });
     await frames(page, 10);
     // A real-time check needs real frames: under software rendering (seconds per frame) 0.7 s of

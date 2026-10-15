@@ -71,6 +71,7 @@ export class HUD {
   private readonly documentEl: HTMLElement;
   private readonly debugEl: HTMLElement;
   private readonly skipEl: HTMLElement;
+  private readonly storyEl: HTMLElement;
   private readonly screen: HTMLElement;
   private readonly card: HTMLElement;
   private tipTimer = 0;
@@ -82,6 +83,7 @@ export class HUD {
   constructor(container: HTMLElement) {
     this.root = el('div', 'hud', container);
     this.fallFadeEl = el('div', 'fade', this.root);
+    this.storyEl = el('div', 'story hidden', this.root);
     this.objective = el('div', 'objective hidden', this.root, '<div class="label">Objective</div><div class="text"></div>');
     this.objectiveText = this.objective.querySelector('.text')!;
     this.prompt = el('div', 'prompt hidden', this.root);
@@ -107,8 +109,8 @@ export class HUD {
     this.card.innerHTML = `
       <div class="eyebrow">Working title</div>
       <h1>It Takes One</h1>
-      <p>Chapter 1, <i>The Quiet Cell</i> — first playable section.<br/>
-      Breakwater prison runs on the tide. So will your way out.</p>
+      <p>Mara Venn fell asleep in her workshop and woke up inside Breakwater, the prison that runs
+      on the tide.<br/>Chapter One, <i>The Quiet Cell</i>.</p>
       ${CONTROLS_HTML}
       <div class="buttons"><button class="primary" data-a="start">Begin</button></div>`;
     const btn = this.card.querySelector<HTMLButtonElement>('[data-a="start"]')!;
@@ -253,6 +255,24 @@ export class HUD {
   }
 
   /** Respawn / transition fade (0..1). */
+  /**
+   * Full-screen story card: the opening's narration and chapter titles. `backdrop` blacks out the
+   * view (narration); without it the text sits over the scene (titles). null fades it away.
+   */
+  story(card: { eyebrow?: string; title?: string; text?: string; backdrop?: boolean } | null): void {
+    if (!card) {
+      this.storyEl.classList.add('hidden');
+      return;
+    }
+    this.storyEl.classList.toggle('backdrop', card.backdrop ?? false);
+    this.storyEl.innerHTML = `<div class="inner">${card.eyebrow ? `<div class="eyebrow">${card.eyebrow}</div>` : ''}${card.title ? `<h1>${card.title}</h1>` : ''}${card.text ? `<p>${card.text}</p>` : ''}</div>`;
+    this.storyEl.classList.remove('hidden');
+  }
+
+  get storyText(): string {
+    return this.storyEl.classList.contains('hidden') ? '' : (this.storyEl.textContent ?? '');
+  }
+
   setFade(v: number): void {
     this.fadeEl.style.opacity = String(v);
   }
@@ -274,6 +294,7 @@ export class HUD {
   }
 
   resetRun(): void {
+    this.story(null);
     this.shownTips.clear();
     this.tipEl.classList.add('hidden');
     this.hideDocument();

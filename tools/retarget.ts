@@ -175,9 +175,12 @@ export function rigifyToUE(): Record<string, string> {
   return m;
 }
 
-/** Identity map for skeletons that already share UE-style names (UAL2). */
+/**
+ * Identity map for skeletons that already share UE-style names (UAL2). The `root` bone is left
+ * out: some clips rotate it (lying down), and the hips already carry that motion in world space.
+ */
 export function sameNames(names: Iterable<string>): Record<string, string> {
   const m: Record<string, string> = {};
-  for (const n of names) m[n] = n;
+  for (const n of names) if (n !== 'root') m[n] = n;
   return m;
 }

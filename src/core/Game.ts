@@ -33,6 +33,8 @@ export interface GameOptions {
   /** In test mode, also run the simulation in real time. */
   realtime: boolean;
   autoplay: boolean;
+  /** Play the story opening (Mara waking in the cell). */
+  intro?: boolean;
   start: string | null;
   quality: 'high' | 'low' | null;
 }
@@ -132,6 +134,7 @@ export class Game {
     this.environmentMap();
 
     const ctx: LevelContext = {
+      intro: (this.options.intro ?? !this.options.test) && !this.options.start,
       scene: this.scene,
       physics: this.physics,
       materials: this.materials,

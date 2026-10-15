@@ -135,7 +135,7 @@ test('full route: puzzle, practice jump, gap, lookout, engine route and completi
   for (const f of ['clue.read', 'lever.tried', 'valve.closed', 'hatch.open', 'gap.crossed', 'lookout.reached', 'lookout.lit', 'reveal.done', 'engine.finished']) {
     expect(s.flags).toContain(f);
   }
-  await expect(page.locator('.screen .card h2')).toHaveText('The Breathing Engine');
+  await expect(page.locator('.screen .card h2')).toHaveText('Chapter One complete');
   expect(errors).toEqual([]);
 });
 

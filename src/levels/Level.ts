@@ -15,6 +15,8 @@ import type { TraversalSurfaces } from '../player/Traversal';
 
 /** Everything a level needs from the game. Levels never reach into `Game` directly. */
 export interface LevelContext {
+  /** Play the story opening when the level starts. */
+  intro: boolean;
   scene: THREE.Scene;
   physics: Physics;
   materials: MaterialLibrary;

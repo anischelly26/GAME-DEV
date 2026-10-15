@@ -34,6 +34,14 @@ const HINT_ORDER: HintTier[] = ['reminder', 'evidence', 'explicit'];
  * Chapter 1 slice, "The Quiet Cell": Mara's cell and its pressure hatch, the maintenance shaft with
  * a practice jump and a drainage gap, and the lookout over the turbine hall.
  */
+/** One beat of a scripted sequence. `watchOnly` beats (narration, lines, camera) are dropped on skip. */
+interface SequenceStep {
+  at: number;
+  run: () => void;
+  done?: boolean;
+  watchOnly?: boolean;
+}
+
 export class QuietCellLevel implements Level {
   readonly name = 'The Quiet Cell';
   readonly checkpointIds = ['cell', 'landing', 'lookout', 'route', 'shuttle', 'engine', 'engine-top', 'breach', 'exit'];
@@ -62,7 +70,7 @@ export class QuietCellLevel implements Level {
   /** Requested hints for the split feed at the breach. */
   private requestedEngineHint = 0;
   private lastPulse = 0;
-  private sequence: { t: number; steps: Array<{ at: number; run: () => void; done?: boolean }> } | null = null;
+  private sequence: { t: number; steps: SequenceStep[] } | null = null;
   private fadeLevel = 0;
   private falling = false;
 
@@ -634,10 +642,96 @@ export class QuietCellLevel implements Level {
   // ---------------------------------------------------------------- story beats
 
   private startIntro(): void {
+    if (this.ctx.intro) {
+      this.playOpening();
+      return;
+    }
     const { dialogue, progression } = this.ctx;
     progression.setObjective('Open the service hatch');
     this.later(1.2, () => dialogue.say('Horn', 'Pressure cycle in progress. All cells remain sealed.'));
     this.later(4.2, () => dialogue.say('Mara', 'Fresh copper on that line. Who repairs a pipe in a cell?'));
+  }
+
+  /**
+   * Chapter One's opening. The night before, Mara refused to sign off a flood diversion that
+   * would drown her district, went back to her workshop to prove the plan wrong and fell asleep
+   * over the drawings. She wakes on the floor of a cell in Breakwater. Narration cards over black,
+   * then the cell: she gets up, looks around, works out where she is, and the chapter title plays.
+   *
+   * Skipping (Jump/Interact) leaves out the narration, lines and camera moves (`watchOnly`) and
+   * runs every other step, so watching and skipping end the same way: Mara standing at the cell
+   * spawn, camera behind her, control on, objective set.
+   */
+  private playOpening(): void {
+    const { dialogue, progression, camera, avatar, hud, events } = this.ctx;
+    const y = CELL.y;
+    const at = (x: number, dy: number, z: number) => v3(x, y + dy, z);
+    const steps: SequenceStep[] = [
+      {
+        at: 0,
+        run: () => {
+          this.ctx.setControl(false);
+          progression.setObjective('');
+          // Asleep on the floor between the bunk and the hatch: the first frame of getting up.
+          avatar.cinematic('wake', 0);
+          camera.playShot(at(1.75, 2.35, 27.55), at(-0.45, 0.1, 30.0), 0.001);
+          hud.story({
+            backdrop: true,
+            eyebrow: 'Saltmere, the night before',
+            text: 'Mara Venn keeps the tide engines of Saltmere running. Yesterday she was ordered to sign off a flood diversion that would drown her own district at the next high tide.',
+          });
+        },
+      },
+      { at: 6.2, watchOnly: true, run: () => hud.story({ backdrop: true, text: 'She refused. She went back to her workshop to prove the plan was wrong, and fell asleep over the drawings.' }) },
+      { at: 11.4, watchOnly: true, run: () => hud.story({ backdrop: true, text: 'She woke up somewhere else.' }) },
+      {
+        at: 14.2,
+        watchOnly: true,
+        run: () => {
+          hud.story(null);
+          events.emit('sfx', { name: 'horn' });
+        },
+      },
+      { at: 15.0, watchOnly: true, run: () => dialogue.say('Horn', 'Pressure cycle in progress. All cells remain sealed.', 3.4) },
+      {
+        at: 16.4,
+        watchOnly: true,
+        run: () => {
+          avatar.cinematic('wake', 0.75);
+          camera.playShot(at(1.3, 1.6, 27.85), at(-0.4, 0.95, 29.75), 2.6);
+        },
+      },
+      { at: 18.9, watchOnly: true, run: () => dialogue.say('Mara', "Where... This isn't my workshop.", 2.4) },
+      {
+        at: 19.3,
+        watchOnly: true,
+        run: () => {
+          // Face on: she looks around the cell.
+          avatar.cinematic('shakeHead', 0.9);
+          camera.playShot(at(0.25, 1.6, 27.95), at(-0.35, 1.45, 29.7), 1.6);
+        },
+      },
+      { at: 21.6, watchOnly: true, run: () => dialogue.say('Mara', 'Salt on the walls. That engine thump... I know this place. Breakwater.', 3.6) },
+      { at: 22.6, watchOnly: true, run: () => camera.playShot(at(1.85, 3.3, 27.4), at(-0.3, 0.7, 30.4), 5.0) },
+      {
+        at: 25.2,
+        watchOnly: true,
+        run: () => hud.story({ eyebrow: 'Chapter One', title: 'The Quiet Cell', text: 'The prison runs on the tide. So will her way out.' }),
+      },
+      {
+        at: 29.4,
+        run: () => {
+          hud.story(null);
+          avatar.endCinematic();
+          camera.clearShot();
+          camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
+          this.ctx.setControl(true);
+          progression.setObjective('Open the service hatch');
+        },
+      },
+      { at: 31.2, run: () => dialogue.say('Mara', 'Fresh copper on that line. Who repairs a pipe in a cell?') },
+    ];
+    this.sequence = { t: 0, steps };
   }
 
   private activateLookout(): void {
@@ -651,7 +745,7 @@ export class QuietCellLevel implements Level {
     progression.setObjective('');
     // Control is held only for the camera move and the lights coming on (about 3 s); the intercom
     // exchange plays over gameplay. The whole beat can be skipped (Jump/Interact).
-    const steps: Array<{ at: number; run: () => void }> = [
+    const steps: SequenceStep[] = [
       { at: 0.25, run: () => this.ctx.setControl(false) },
       {
         at: 0.3,
@@ -709,15 +803,16 @@ export class QuietCellLevel implements Level {
 
   /**
    * Finish the running sequence now: every remaining step runs once, in order, so the camera,
-   * gate, objective, dialogue and checkpoint end exactly as if the player had watched it.
+   * gate, objective, dialogue and checkpoint end exactly as if the player had watched it. Steps
+   * marked `watchOnly` (narration cards, story lines, camera moves) are dropped.
    */
   skipCinematic(): void {
     if (!this.cinematicActive || !this.sequence) return;
     const seq = this.sequence;
-    for (const s of seq.steps as Array<{ at: number; run: () => void; done?: boolean }>) {
+    for (const s of seq.steps) {
       if (s.done) continue;
       s.done = true;
-      s.run();
+      if (!s.watchOnly) s.run();
     }
     this.ctx.camera.clearShot();
     this.ctx.camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
@@ -729,9 +824,9 @@ export class QuietCellLevel implements Level {
     this.timers.push({ t: seconds, run });
   }
 
-  /** The increment's ending: out on the gantry in the breach, with the harbour below. */
+  /** Chapter One's ending: out on the gantry in the breach, with the harbour below. */
   private finishEngine(): void {
-    const { progression, dialogue, camera, events } = this.ctx;
+    const { progression, dialogue, camera, events, hud } = this.ctx;
     if (progression.has('engine.finished')) return;
     progression.set('engine.finished');
     progression.setObjective('');
@@ -741,17 +836,26 @@ export class QuietCellLevel implements Level {
       t: 0,
       steps: [
         { at: 0.2, run: () => this.ctx.setControl(false) },
-        { at: 0.25, run: () => camera.playShot(ex.clone().addScaledVector(out, -3.2).add(v3(1.6, 2.2, 0)), ex.clone().addScaledVector(out, 40).add(v3(0, -6, 0)), 3.0) },
-        { at: 1.4, run: () => events.emit('sfx', { name: 'intercom', x: ex.x, y: ex.y + 1, z: ex.z }) },
-        { at: 1.9, run: () => dialogue.say('Intercom', 'You made the engine carry you. The archive is past the harbour crane.', 4.2) },
-        { at: 6.4, run: () => dialogue.say('Mara', 'Ivo. It has to be.', 2) },
+        { at: 0.25, watchOnly: true, run: () => camera.playShot(ex.clone().addScaledVector(out, -3.2).add(v3(1.6, 2.2, 0)), ex.clone().addScaledVector(out, 40).add(v3(0, -6, 0)), 3.0) },
+        { at: 1.4, watchOnly: true, run: () => events.emit('sfx', { name: 'intercom', x: ex.x, y: ex.y + 1, z: ex.z }) },
+        { at: 1.9, watchOnly: true, run: () => dialogue.say('Intercom', "You made the engine carry you. You're out of the cells, not off the rock.", 3.8) },
+        { at: 6.0, watchOnly: true, run: () => dialogue.say('Mara', 'Who are you? Who brought me here?', 2.4) },
+        { at: 8.6, watchOnly: true, run: () => dialogue.say('Intercom', 'Sorn wants your signature, or your silence. The only thing on Breakwater that still flies is in the hangar cell. Get there.', 5.4) },
+        { at: 14.2, watchOnly: true, run: () => dialogue.say('Mara', 'Ivo. It has to be.', 2) },
         {
-          at: 8.8,
-          run: () =>
+          at: 16.6,
+          watchOnly: true,
+          run: () => hud.story({ eyebrow: 'End of Chapter One', title: 'The Quiet Cell', text: 'Mara is out of the cell block. Somewhere above her, in the hangar cell, an old aircraft is waiting.' }),
+        },
+        {
+          at: 21.4,
+          run: () => {
+            hud.story(null);
             this.ctx.complete({
-              title: 'The Breathing Engine',
-              body: 'The machine that held the prison together just carried you out of the cell block. Next destination: the archive workshop beside the harbour crane. It is not built yet: this is the end of the current playable build.',
-            }),
+              title: 'Chapter One complete',
+              body: 'The machine that held the prison together just carried you out of the cell block. Next: Chapter Two, Wings in a Cage, the hangar cell and the old aircraft. It is in development; this is the end of the current build.',
+            });
+          },
         },
       ],
     };
@@ -807,13 +911,13 @@ export class QuietCellLevel implements Level {
     due.forEach((t) => t.run());
     if (this.sequence) {
       this.sequence.t += dt;
-      for (const s of this.sequence.steps as Array<{ at: number; run: () => void; done?: boolean }>) {
+      for (const s of this.sequence.steps) {
         if (!s.done && this.sequence.t >= s.at) {
           s.done = true;
           s.run();
         }
       }
-      if (this.sequence.steps.every((s) => (s as { done?: boolean }).done)) this.sequence = null;
+      if (this.sequence.steps.every((s) => s.done)) this.sequence = null;
     }
 
     // Puzzle state.

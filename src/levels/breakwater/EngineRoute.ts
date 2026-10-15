@@ -958,6 +958,6 @@ function buildEngineRoute(r: EngineRoute): RouteStep[] {
     { kind: 'interact', id: 'ram-release', standAt: p(9, 10.7, 0.86, T3), expectFlag: 'ram.released' },
     { kind: 'wait', until: 'pistonUp', timeout: 10 },
     { kind: 'jump', from: [r.exitTakeoff.x, r.exitTakeoff.y, r.exitTakeoff.z], to: [r.exitLanding.x, r.exitLanding.y, r.exitLanding.z] },
-    { kind: 'wait', until: 'complete', timeout: 20 },
+    { kind: 'wait', until: 'complete', timeout: 30 },
   ];
 }

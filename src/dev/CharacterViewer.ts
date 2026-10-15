@@ -83,6 +83,11 @@ export async function startCharacterViewer(container: HTMLElement): Promise<void
       renderer.render(scene, camera);
     },
     play,
+    /** World height of a bone (dev checks of clips). */
+    boneY: (name: string) => {
+      const b = model.getObjectByName(name);
+      return b ? b.getWorldPosition(new THREE.Vector3()).y : null;
+    },
   };
   addEventListener('resize', () => {
     renderer.setSize(container.clientWidth, container.clientHeight);

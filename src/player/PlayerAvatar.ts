@@ -231,6 +231,21 @@ export class PlayerAvatar {
     }
   }
 
+  /** Story beats: play a clip on the whole body (timeScale 0 holds a pose, e.g. lying asleep). */
+  cinematic(name: string, timeScale = 1, startAt = 0): void {
+    this.play(name, timeScale, startAt);
+    if (this.oneShot && timeScale === 0) this.oneShot.weight = 1;
+  }
+
+  /** End any story clip at once and return to the normal locomotion pose. */
+  endCinematic(): void {
+    if (!this.oneShot) return;
+    const a = this.actions.get(this.oneShot.name);
+    a?.stop();
+    a?.setEffectiveWeight(0);
+    this.oneShot = null;
+  }
+
   /** Start a full-body one-shot: fades in, holds until it ends (or the mode ends), fades out. */
   private play(name: string, timeScale = 1, startAt = 0): void {
     const a = this.actions.get(name);
@@ -373,8 +388,9 @@ export class PlayerAvatar {
         targetPitch = clamp(Math.atan2(s.lookAt.y - (s.feet.y + 1.55), Math.hypot(dx, dz)), -0.45, 0.45);
       }
     }
-    this.headYaw = dampAngle(this.headYaw, targetYaw, 6, dt);
-    this.headPitch = damp(this.headPitch, targetPitch, 6, dt);
+    // Full-body clips (climbing, lying down, getting up) own the head.
+    this.headYaw = dampAngle(this.headYaw, targetYaw * (1 - shot), 6, dt);
+    this.headPitch = damp(this.headPitch, targetPitch * (1 - shot), 6, dt);
     this.root.updateMatrixWorld(true);
     this.turnBone('neck_01', this.headYaw * 0.4, this.headPitch * 0.4);
     this.turnBone('Head', this.headYaw * 0.6, this.headPitch * 0.6);
