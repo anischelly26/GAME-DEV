@@ -78,7 +78,7 @@ export class Game {
   private physicsLines: THREE.LineSegments | null = null;
   private fps = 60;
   /** Character build cost (dev overlay and tests). */
-  characterStats: { triangles: number; rawTriangles: number; millis: number } | null = null;
+  characterStats: { triangles: number; lowTriangles: number; rawTriangles: number; millis: number; source: string } | null = null;
   private reachChecks = 0;
   private reachPulse = 0;
 
@@ -310,6 +310,7 @@ export class Game {
   /** Low: lower resolution, no bloom, smaller moon shadow map, no lamp shadows. */
   setQuality(level: 'high' | 'low'): void {
     this.pipeline.setQuality(level);
+    this.avatar?.setDetail(level);
     this.scene.traverse((o) => {
       const light = o as THREE.Light & { shadow?: THREE.LightShadow };
       if (!light.isLight || !light.shadow) return;

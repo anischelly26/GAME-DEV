@@ -248,6 +248,16 @@ test.describe('real keyboard movement in normal play', () => {
     await boot(page, '?dev=1&quality=low');
     await page.locator('[data-a="start"]').click({ timeout: 120_000 });
     await frames(page, 10);
+    // A real-time check needs real frames: under software rendering (seconds per frame) 0.7 s of
+    // holding W is less than one frame, so the result would say nothing about the controls.
+    const frameMs = await page.evaluate(
+      () =>
+        new Promise<number>((res) => {
+          const t0 = performance.now();
+          requestAnimationFrame(() => requestAnimationFrame(() => res((performance.now() - t0) / 2)));
+        }),
+    );
+    test.skip(frameMs > 150, `Frame time ${Math.round(frameMs)} ms is too slow for a real-time movement check (software rendering).`);
     const before = await state(page);
     await page.keyboard.down('KeyW');
     await page.waitForTimeout(700);

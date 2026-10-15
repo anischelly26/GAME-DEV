@@ -7,6 +7,6 @@ scope.onmessage = async (e: MessageEvent<{ names: string[]; boneIndex: Array<[st
   const index = new Map(e.data.boneIndex);
   const out: BuiltPart[] = [];
   for (const name of e.data.names) out.push(await buildPart(name, index));
-  const transfer = out.flatMap((p) => [p.mesh.position.buffer, p.mesh.normal.buffer, p.mesh.color.buffer, p.mesh.skinIndex.buffer, p.mesh.skinWeight.buffer, p.mesh.index.buffer]);
+  const transfer = out.flatMap((p) => [p.mesh, p.low].flatMap((m) => [m.position.buffer, m.normal.buffer, m.color.buffer, m.skinIndex.buffer, m.skinWeight.buffer, m.index.buffer]));
   scope.postMessage(out, transfer as ArrayBuffer[]);
 };

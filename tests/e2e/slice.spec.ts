@@ -124,7 +124,7 @@ test('lever before closing the bypass only hisses; the puzzle state is unchanged
 });
 
 test('full route: puzzle, practice jump, gap, lookout, engine route and completion (autopilot, real physics)', async ({ page }) => {
-  test.setTimeout(480_000);
+  test.setTimeout(test.info().timeout * 2);
   await boot(page);
   await page.evaluate(() => (window as any).__GAME.autopilot());
   const s = await stepUntil(page, (x) => x.autopilot?.state !== 'running', 60 * 120, 60);
@@ -157,7 +157,7 @@ test('falling into the channel recovers at the landing with the hatch still open
 });
 
 test('restart after completion gives a fresh puzzle', async ({ page }) => {
-  test.setTimeout(480_000);
+  test.setTimeout(test.info().timeout * 2);
   await boot(page);
   await page.evaluate(() => (window as any).__GAME.autopilot());
   await stepUntil(page, (x) => x.autopilot?.state !== 'running', 60 * 120, 60);

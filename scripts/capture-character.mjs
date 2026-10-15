@@ -42,13 +42,17 @@ const views = [
   ['stride', 'stride', [1.2, 3.6, 1.0, 0.86]],
   ['bind', 'bind', [0, 3.6, 1.0, 0.86]],
   ['hang', 'hang', [0.6, 3.8, 1.3, 1.0]],
+  // The Low-quality level of detail (integrated GPUs).
+  ['low-three-quarter', 'relaxed', [0.75, 3.6, 1.1, 0.86], 'low'],
+  ['low-face', 'relaxed', [0.35, 0.75, 1.52, 1.5], 'low'],
 ];
-for (const [name, pose, v] of views) {
+for (const [name, pose, v, detail] of views) {
   if (only && !only.includes(name)) continue;
-  await page.evaluate(([p, view]) => {
+  await page.evaluate(([p, view, d]) => {
+    window.__VIEWER.detail(d);
     window.__VIEWER.pose(p);
     window.__VIEWER.view(...view);
-  }, [pose, v]);
+  }, [pose, v, detail ?? 'high']);
   await page.waitForTimeout(150);
   await page.screenshot({ path: join(out, `${name}.png`) });
 }

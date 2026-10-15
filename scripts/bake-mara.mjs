@@ -32,7 +32,7 @@ try {
   const r = await bakeMara(hash);
   mkdirSync(join('public', 'mara'), { recursive: true });
   writeFileSync(out, r.bytes);
-  console.log(`baked ${out}: ${r.triangles} triangles (from ${r.rawTriangles}), ${(r.bytes.length / 1024 / 1024).toFixed(2)} MB, ${((Date.now() - t0) / 1000).toFixed(1)} s, hash ${hash}`);
+  console.log(`baked ${out}: ${r.triangles} triangles, Low ${r.lowTriangles} (from ${r.rawTriangles}), ${(r.bytes.length / 1024 / 1024).toFixed(2)} MB, ${((Date.now() - t0) / 1000).toFixed(1)} s, hash ${hash}`);
 } finally {
   await server.close();
 }

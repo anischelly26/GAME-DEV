@@ -110,6 +110,10 @@ export async function startCharacterViewer(container: HTMLElement): Promise<void
       place();
       renderer.render(scene, camera);
     },
+    detail: (level: 'high' | 'low') => {
+      rig.setDetail(level);
+      renderer.render(scene, camera);
+    },
     pose: (name: string) => {
       poses[name]?.();
       renderer.render(scene, camera);
@@ -135,6 +139,8 @@ export async function startCharacterViewer(container: HTMLElement): Promise<void
     if (e.code === 'Digit1') poses.bind();
     if (e.code === 'Digit2') poses.relaxed();
     if (e.code === 'Digit3') poses.stride();
+    if (e.code === 'Digit4') rig.setDetail('high');
+    if (e.code === 'Digit5') rig.setDetail('low');
   });
   poses.relaxed();
   const clock = new THREE.Clock();
@@ -144,5 +150,5 @@ export async function startCharacterViewer(container: HTMLElement): Promise<void
     place();
     renderer.render(scene, camera);
   });
-  console.info(`Mara: ${rig.stats.triangles} triangles, ${rig.stats.source}, ready in ${rig.stats.millis} ms`);
+  console.info(`Mara: ${rig.stats.triangles} triangles (Low: ${rig.stats.lowTriangles}), ${rig.stats.source}, ready in ${rig.stats.millis} ms`);
 }

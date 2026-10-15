@@ -40,7 +40,7 @@ async function stepUntil(page: Page, pred: (s: State) => boolean, maxSteps: numb
 }
 
 test('increment route: drops, gap, vault, ledge catch, shuttle, collar, split feed, ram, exit (autopilot)', async ({ page }) => {
-  test.setTimeout(480_000);
+  test.setTimeout(test.info().timeout * 2);
   await boot(page);
   // Start at the lookout with the reveal already done, then run only the increment's part of the route.
   await page.evaluate(() => (window as any).__GAME.teleport('route'));

@@ -530,6 +530,8 @@ export interface PartSpec {
   weightFalloff?: number;
   /** [target triangle ratio, max error in metres] for meshoptimizer. */
   simplify: [number, number];
+  /** Override for the Low-quality level of detail (thin layers need a tighter error). */
+  lowSimplify?: [number, number];
   /** Rough relative cost, used to balance work between workers. */
   cost: number;
 }
@@ -581,6 +583,8 @@ export function partSpecs(): PartSpec[] {
       material: 'patch',
       ao: 0.5,
       simplify: [0.3, 0.0004],
+      // A 3.5 mm shell over the trousers: a coarse error would let them poke through.
+      lowSimplify: [0.2, 0.0005],
       cost: 0.5,
     },
     { name: 'belt', shape: beltShape, min: [-0.2, 0.895, -0.13], max: [0.2, 1.035, 0.14], voxel: 0.005, material: 'belt', simplify: [0.25, 0.0005], cost: 0.8 },

@@ -6,6 +6,8 @@ export interface BuiltPart {
   name: string;
   material: MaterialKey;
   mesh: MeshData;
+  /** Coarser level of detail (about a quarter of the triangles), used on Low quality. */
+  low: MeshData;
   millis: number;
   simplifyMillis: number;
   rawTriangles: number;
@@ -20,7 +22,11 @@ export async function buildPart(name: string, boneIndex: Map<string, number>): P
   const t1 = performance.now();
   await simplifierReady;
   const mesh = simplifyMesh(raw, spec.simplify[0], spec.simplify[1]);
-  return { name, material: spec.material, mesh, millis: Math.round(t1 - t0), simplifyMillis: Math.round(performance.now() - t1), rawTriangles: raw.index.length / 3 };
+  // Low quality: about a quarter of the triangles, with the error capped at 1.5 mm so layered
+  // clothing (patch over trousers, jacket over shirt) does not interpenetrate.
+  const [lowRatio, lowError] = spec.lowSimplify ?? [Math.max(0.04, spec.simplify[0] * 0.28), Math.min(spec.simplify[1] * 5, 0.0015)];
+  const low = simplifyMesh(raw, lowRatio, lowError);
+  return { name, material: spec.material, mesh, low, millis: Math.round(t1 - t0), simplifyMillis: Math.round(performance.now() - t1), rawTriangles: raw.index.length / 3 };
 }
 
 /**

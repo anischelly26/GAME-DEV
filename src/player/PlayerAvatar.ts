@@ -44,6 +44,7 @@ export class PlayerAvatar {
   readonly carryAnchor = new THREE.Object3D();
   private readonly visual = new THREE.Group();
   private rig: MaraRig | null = null;
+  private detail: 'high' | 'low' = 'high';
   private hipsRestY = 0.93;
   private hips!: THREE.Bone;
   private spine!: THREE.Bone;
@@ -109,6 +110,7 @@ export class PlayerAvatar {
   attach(rig: MaraRig): void {
     this.rig = rig;
     this.visual.add(rig.root);
+    rig.setDetail(this.detail);
     const bone = (n: string) => rig.bones.get(n)!;
     this.hips = bone('hips');
     this.spine = bone('spine');
@@ -127,6 +129,12 @@ export class PlayerAvatar {
       if (m !== rig.materials.eye && m !== rig.materials.brass && m !== rig.materials.steel) addRimLight(m, Palette.moon, 0.1, 3);
       this.materials.push(m);
     }
+  }
+
+  /** Character level of detail follows the graphics quality. */
+  setDetail(level: 'high' | 'low'): void {
+    this.detail = level;
+    this.rig?.setDetail(level);
   }
 
   get ready(): boolean {

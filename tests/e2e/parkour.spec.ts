@@ -14,8 +14,6 @@ async function boot(page: Page): Promise<void> {
   await page.waitForFunction(() => (window as any).__GAME?.ready, null, { timeout: 120_000 });
   await page.evaluate(() => (window as any).__GAME.teleport('route'));
 }
-const state = (page: Page) => page.evaluate(() => (window as any).__GAME.state() as State);
-const step = (page: Page, n: number) => page.evaluate((k) => (window as any).__GAME.stepFast(k), n);
 /** World point on route side k at apothem a and fraction f, as [x, y, z]. */
 const pt = (page: Page, k: number, a: number, f: number, y = T1) =>
   page.evaluate(([kk, aa, ff, yy]) => (window as any).__GAME.game.level.engine.debugPoint(kk, aa, ff, yy) as number[], [k, a, f, y]);
@@ -27,54 +25,54 @@ const rotY = (v: number[], deg: number) => {
   return [v[0] * Math.cos(a) + v[2] * Math.sin(a), 0, -v[0] * Math.sin(a) + v[2] * Math.cos(a)];
 };
 
-/** Hold a world-space direction on the stick (converted through the current camera yaw). */
-function hold(page: Page, dir: number[], jumpHeld = false) {
-  return page.evaluate(
-    ([d, j]) => {
-      const g = (window as any).__GAME;
-      const yaw = g.game.camera.yaw;
-      const fx = -Math.sin(yaw);
-      const fz = -Math.cos(yaw);
-      const rx = Math.cos(yaw);
-      const rz = -Math.sin(yaw);
-      const len = Math.hypot(d[0], d[2]);
-      g.setInput({ moveX: (d[0] * rx + d[2] * rz) / len, moveY: (d[0] * fx + d[2] * fz) / len, jumpHeld: j });
-    },
-    [dir, jumpHeld] as [number[], boolean],
-  );
-}
-
 /**
- * Run from `start` along `dir`; press jump once the feet are `jumpAt` metres short of `plane`
- * (measured along `normal`), keep holding the direction, then settle. Returns the modes seen.
+ * Run from `start` along `dir` (stick input converted through the live camera yaw); press jump once
+ * the feet are `jumpAt` metres short of `plane` (measured along `normal`), keep holding the
+ * direction, then settle. The whole loop runs inside the page in one call, so it does not wait on
+ * rendered frames (software rendering takes seconds per frame). The drop shadow is updated each
+ * step with the live physics state, exactly as the render loop would.
  */
 async function runAndJump(page: Page, start: number[], dir: number[], plane: number[], normal: number[], jumpAt: number, settleSteps = 150): Promise<{ modes: Set<string>; end: State; airShadow: number[] }> {
-  const facing = Math.atan2(dir[0], dir[2]);
-  await page.evaluate(([s, f]) => (window as any).__GAME.setPlayer(s[0], s[1], s[2], f), [start, facing] as [number[], number]);
-  await page.evaluate((f) => (window as any).__GAME.setCamera(f + Math.PI, 0.35), facing);
-  await step(page, 10);
-  const modes = new Set<string>();
-  const airShadow: number[] = [];
-  let jumped = false;
-  for (let i = 0; i < 240; i++) {
-    await hold(page, dir, jumped);
-    await step(page, 2);
-    const s = await state(page);
-    modes.add(s.mode);
-    const dist = (plane[0] - s.feet[0]) * normal[0] + (plane[2] - s.feet[2]) * normal[2];
-    if (!jumped && dist < jumpAt) {
-      await page.evaluate(() => (window as any).__GAME.press('jump'));
-      jumped = true;
-    }
-    if (jumped && !s.grounded) {
-      const gy = await page.evaluate(() => (window as any).__GAME.game.dropShadow.groundY as number | null);
-      if (gy !== null) airShadow.push(gy);
-    }
-    if (jumped && i > 30 && s.grounded && s.mode === 'move') break;
-  }
-  await page.evaluate(() => (window as any).__GAME.setInput({ moveX: 0, moveY: 0, jumpHeld: false }));
-  await step(page, settleSteps);
-  return { modes, end: await state(page), airShadow };
+  const r = await page.evaluate(
+    ([start, dir, plane, normal, jumpAt, settleSteps]) => {
+      const g = (window as any).__GAME;
+      const game = g.game;
+      const facing = Math.atan2(dir[0], dir[2]);
+      g.setPlayer(start[0], start[1], start[2], facing);
+      g.setCamera(facing + Math.PI, 0.35);
+      g.stepFast(10);
+      const len = Math.hypot(dir[0], dir[2]);
+      const modes: string[] = [];
+      const airShadow: number[] = [];
+      let jumped = false;
+      for (let i = 0; i < 240; i++) {
+        const yaw = game.camera.yaw;
+        const fx = -Math.sin(yaw);
+        const fz = -Math.cos(yaw);
+        const rx = Math.cos(yaw);
+        const rz = -Math.sin(yaw);
+        g.setInput({ moveX: (dir[0] * rx + dir[2] * rz) / len, moveY: (dir[0] * fx + dir[2] * fz) / len, jumpHeld: jumped });
+        g.stepFast(2);
+        const s = g.state();
+        if (!modes.includes(s.mode)) modes.push(s.mode);
+        const dist = (plane[0] - s.feet[0]) * normal[0] + (plane[2] - s.feet[2]) * normal[2];
+        if (!jumped && dist < jumpAt) {
+          g.press('jump');
+          jumped = true;
+        }
+        if (jumped && !s.grounded) {
+          game.dropShadow.update(game.physics, game.player.feet, game.player.grounded, game.player.collider, true);
+          if (game.dropShadow.groundY !== null) airShadow.push(game.dropShadow.groundY);
+        }
+        if (jumped && i > 30 && s.grounded && s.mode === 'move') break;
+      }
+      g.setInput({ moveX: 0, moveY: 0, jumpHeld: false });
+      g.stepFast(settleSteps);
+      return { modes, end: g.state(), airShadow };
+    },
+    [start, dir, plane, normal, jumpAt, settleSteps] as [number[], number[], number[], number[], number, number],
+  );
+  return { modes: new Set(r.modes), end: r.end as State, airShadow: r.airShadow };
 }
 
 test.describe('imperfect approach angles', () => {

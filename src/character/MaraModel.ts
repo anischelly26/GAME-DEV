@@ -46,7 +46,9 @@ export interface MaraRig {
   setBlink(t: number): void;
   /** Turn both eyes (radians, relative to the head). */
   setGaze(yaw: number, pitch: number): void;
-  stats: { triangles: number; rawTriangles: number; millis: number; source: 'baked' | 'workers' | 'main'; parts: Record<string, string> };
+  /** Full detail on High; about a quarter of the triangles on Low (integrated GPUs). */
+  setDetail(level: 'high' | 'low'): void;
+  stats: { triangles: number; lowTriangles: number; rawTriangles: number; millis: number; source: 'baked' | 'workers' | 'main'; parts: Record<string, string> };
 }
 
 function toGeometry(m: MeshData | BakedMesh): THREE.BufferGeometry {
@@ -64,7 +66,7 @@ function toGeometry(m: MeshData | BakedMesh): THREE.BufferGeometry {
 }
 
 /** The pre-built parts from public/mara/mara.bin, if present and baked from this exact source. */
-async function loadBaked(): Promise<Array<{ name: string; material: MaterialKey; mesh: BakedMesh }> | null> {
+async function loadBaked(): Promise<Array<{ name: string; material: MaterialKey; lod: number; mesh: BakedMesh }> | null> {
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}mara/mara.bin`);
     if (!res.ok) return null;
@@ -118,36 +120,52 @@ export async function buildMara(opts: { workers?: boolean; baked?: boolean } = {
   const skeleton = new THREE.Skeleton(order);
   const materials = maraMaterials();
 
-  const byMaterial = new Map<MaterialKey, THREE.BufferGeometry[]>();
+  // Geometry per level of detail and material ("0:skin", "1:skin", ...).
+  const byMaterial = new Map<string, { material: MaterialKey; lod: number; geos: THREE.BufferGeometry[] }>();
+  const add = (lod: number, material: MaterialKey, m: MeshData | BakedMesh) => {
+    const key = `${lod}:${material}`;
+    const entry = byMaterial.get(key) ?? { material, lod, geos: [] };
+    entry.geos.push(toGeometry(m));
+    byMaterial.set(key, entry);
+  };
   const parts: Record<string, string> = {};
   let rawTriangles = 0;
   const baked = opts.baked === false ? null : await loadBaked();
   const source: MaraRig['stats']['source'] = baked ? 'baked' : opts.workers === false ? 'main' : 'workers';
-  for (const p of baked ?? (await buildAllParts(index, opts.workers ?? true))) {
-    if ('millis' in p) {
-      parts[p.name] = `${p.millis}+${p.simplifyMillis}ms ${p.rawTriangles}->${p.mesh.index.length / 3}`;
+  if (baked) for (const p of baked) add(p.lod, p.material, p.mesh);
+  else {
+    for (const p of await buildAllParts(index, opts.workers ?? true)) {
+      parts[p.name] = `${p.millis}+${p.simplifyMillis}ms ${p.rawTriangles}->${p.mesh.index.length / 3}/${p.low.index.length / 3}`;
       rawTriangles += p.rawTriangles;
+      add(0, p.material, p.mesh);
+      add(1, p.material, p.low);
     }
-    const list = byMaterial.get(p.material) ?? [];
-    list.push(toGeometry(p.mesh));
-    byMaterial.set(p.material, list);
   }
 
   const meshes: THREE.Mesh[] = [];
-  let triangles = 0;
-  for (const [key, geos] of byMaterial) {
+  const lodMeshes: THREE.SkinnedMesh[][] = [[], []];
+  const lodTriangles = [0, 0];
+  for (const { material, lod, geos } of byMaterial.values()) {
     const geo = geos.length === 1 ? geos[0] : mergeGeometries(geos)!;
     geo.computeBoundingSphere();
-    const mesh = new THREE.SkinnedMesh(geo, materials[key]);
-    mesh.name = `mara-${key}`;
+    const mesh = new THREE.SkinnedMesh(geo, materials[material]);
+    mesh.name = `mara-${material}${lod ? '-low' : ''}`;
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.frustumCulled = false;
+    mesh.visible = lod === 0;
     root.add(mesh);
     mesh.bind(skeleton);
     meshes.push(mesh);
-    triangles += (geo.index?.count ?? 0) / 3;
+    lodMeshes[lod].push(mesh);
+    lodTriangles[lod] += (geo.index?.count ?? 0) / 3;
   }
+  const setDetail = (level: 'high' | 'low') => {
+    // Fall back to full detail if a stale bake had no low level.
+    const low = level === 'low' && lodMeshes[1].length > 0;
+    for (const m of lodMeshes[0]) m.visible = !low;
+    for (const m of lodMeshes[1]) m.visible = low;
+  };
 
   // Eyes and eyelids are rigid children of the head bone.
   const head = bones.get('head')!;
@@ -195,7 +213,8 @@ export async function buildMara(opts: { workers?: boolean; baked?: boolean } = {
     materials,
     setBlink,
     setGaze,
-    stats: { triangles, rawTriangles, millis: Math.round(performance.now() - t0), source, parts },
+    setDetail,
+    stats: { triangles: lodTriangles[0], lowTriangles: lodTriangles[1], rawTriangles, millis: Math.round(performance.now() - t0), source, parts },
   };
 }
 

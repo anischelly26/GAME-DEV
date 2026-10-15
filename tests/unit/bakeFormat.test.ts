@@ -12,11 +12,12 @@ describe("Mara's bake format", () => {
       ],
     };
     const mesh = meshShape(shape, { min: [-0.15, -0.15, -0.15], max: [0.15, 0.3, 0.15], voxel: 0.02, bones: new Map([['a', 0], ['b', 1]]) });
-    const bytes = encodeBake('abc123', [{ name: 'blob', material: 'skin', mesh }]);
+    const bytes = encodeBake('abc123', [{ name: 'blob', material: 'skin', mesh, low: mesh }]);
     const copy = new Uint8Array(bytes).buffer;
     const bake = decodeBake(copy)!;
     expect(bake.hash).toBe('abc123');
-    expect(bake.parts).toHaveLength(1);
+    // Both levels of detail are stored.
+    expect(bake.parts.map((x) => x.lod)).toEqual([0, 1]);
     const p = bake.parts[0];
     expect(p.name).toBe('blob');
     expect(p.material).toBe('skin');

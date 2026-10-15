@@ -21,14 +21,16 @@ export interface BakedMesh {
 export interface BakedPart {
   name: string;
   material: MaterialKey;
+  /** 0 = full detail, 1 = Low-quality level of detail. */
+  lod: number;
   mesh: BakedMesh;
 }
 
 interface Header {
-  version: 1;
+  version: 2;
   /** Hash of the character source that produced this file (see scripts/maraHash.mjs). */
   hash: string;
-  parts: Array<{ name: string; material: MaterialKey; vertices: number; indices: number; offset: number }>;
+  parts: Array<{ name: string; material: MaterialKey; lod: number; vertices: number; indices: number; offset: number }>;
 }
 
 const MAGIC = 0x4152414d; // "MARA" little-endian
@@ -60,14 +62,17 @@ function quantise(m: MeshData): BakedMesh {
   return { position: m.position, normal, color, skinIndex, skinWeight, index: Uint16Array.from(m.index) };
 }
 
-export function encodeBake(hash: string, parts: Array<{ name: string; material: MaterialKey; mesh: MeshData }>): Uint8Array {
-  const q = parts.map((p) => ({ ...p, baked: quantise(p.mesh) }));
+export function encodeBake(hash: string, parts: Array<{ name: string; material: MaterialKey; mesh: MeshData; low?: MeshData }>): Uint8Array {
+  const q = parts.flatMap((p) => [
+    { name: p.name, material: p.material, lod: 0, baked: quantise(p.mesh) },
+    ...(p.low ? [{ name: p.name, material: p.material, lod: 1, baked: quantise(p.low) }] : []),
+  ]);
   let offset = 0;
-  const header: Header = { version: 1, hash, parts: [] };
+  const header: Header = { version: 2, hash, parts: [] };
   for (const p of q) {
     const v = p.baked.position.length / 3;
     const i = p.baked.index.length;
-    header.parts.push({ name: p.name, material: p.material, vertices: v, indices: i, offset });
+    header.parts.push({ name: p.name, material: p.material, lod: p.lod, vertices: v, indices: i, offset });
     offset += partBytes(v, i);
   }
   const json = new TextEncoder().encode(JSON.stringify(header));
@@ -99,7 +104,7 @@ export function decodeBake(buffer: ArrayBuffer): { hash: string; parts: BakedPar
   if (buffer.byteLength < 8 || view.getUint32(0, true) !== MAGIC) return null;
   const len = view.getUint32(4, true);
   const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 8, len))) as Header;
-  if (header.version !== 1) return null;
+  if (header.version !== 2) return null;
   const start = align4(8 + len);
   const parts = header.parts.map((p) => {
     let o = start + p.offset;
@@ -117,7 +122,7 @@ export function decodeBake(buffer: ArrayBuffer): { hash: string; parts: BakedPar
       skinWeight: take((b, off, n) => new Uint8Array(b, off, n), v * 4, v * 4),
       index: take((b, off, n) => new Uint16Array(b, off, n), p.indices, p.indices * 2),
     };
-    return { name: p.name, material: p.material, mesh };
+    return { name: p.name, material: p.material, lod: p.lod, mesh };
   });
   return { hash: header.hash, parts };
 }
