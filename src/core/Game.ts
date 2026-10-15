@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { EventBus, type GameEvents } from './Events';
-import { Input } from './Input';
+import { Input, BASE_RADIANS_PER_PIXEL } from './Input';
 import { Physics, RAPIER } from '../physics/Physics';
 import { RenderPipeline } from '../render/RenderPipeline';
 import { createTextureLibrary, type TextureLibrary } from '../world/textures';
@@ -21,7 +21,6 @@ import { TraversalSurfaces } from '../player/Traversal';
 import { smoothstep } from './math';
 
 export const FIXED_DT = 1 / 60;
-const BASE_MOUSE_SENSITIVITY = 0.0022;
 
 export interface GameOptions {
   /** Dev hotkeys, debug overlay, test API. */
@@ -159,6 +158,7 @@ export class Game {
     if (this.options.test) {
       this.hud.hideScreen();
       this.state = 'playing';
+      this.input.setGameplayActive(true);
       if (this.options.autoplay) this.startAutopilot();
     } else {
       this.state = 'title';
@@ -251,6 +251,7 @@ export class Game {
     this.audio.unlock();
     this.audio.setVolume(this.hud.settings.volume);
     this.state = 'playing';
+    this.input.setGameplayActive(true);
     this.input.requestPointerLock();
     if (this.options.autoplay) this.startAutopilot();
   }
@@ -258,7 +259,9 @@ export class Game {
   pause(): void {
     if (this.state !== 'playing') return;
     this.state = 'paused';
-    this.input.clear();
+    // The menu owns input now; anything pressed while paused is discarded on resume. The
+    // cinematic lock (input.enabled) is deliberately left untouched.
+    this.input.setGameplayActive(false);
     this.input.exitPointerLock();
     this.audio.suspend(true);
     this.hud.showPause(
@@ -280,12 +283,14 @@ export class Game {
     if (this.state !== 'paused') return;
     this.hud.hideScreen();
     this.state = 'playing';
+    this.input.setGameplayActive(true);
     this.audio.suspend(false);
-    this.input.requestPointerLock();
+    // Automation keeps the mouse free (drag-look), like restart and "keep exploring".
+    if (!this.options.test) this.input.requestPointerLock();
   }
 
   private applySettings(s: Settings): void {
-    this.input.mouseSensitivity = BASE_MOUSE_SENSITIVITY * s.sensitivity;
+    this.input.mouseRadiansPerPixel = BASE_RADIANS_PER_PIXEL * s.sensitivity;
     this.input.invertY = s.invertY;
     this.audio.setVolume(s.volume);
     if (!this.options.quality && !this.options.test) this.setQuality(s.quality);
@@ -314,7 +319,8 @@ export class Game {
   setControl(enabled: boolean): void {
     this.input.enabled = enabled;
     this.player.frozen = !enabled;
-    if (!enabled) this.input.clear();
+    // Keep physically held keys (so a held W works the moment control returns); drop queued presses.
+    this.input.discardQueued();
   }
 
   respawn(reason: 'fall' | 'manual'): void {
@@ -344,6 +350,7 @@ export class Game {
     this.respawnFade = 1;
     this.hud.hideScreen();
     this.state = 'playing';
+    this.input.setGameplayActive(true);
     this.audio.suspend(false);
     if (!this.options.test) this.input.requestPointerLock();
   }
@@ -351,6 +358,7 @@ export class Game {
   private complete(card?: { title: string; body: string }): void {
     this.progression.complete = true;
     this.state = 'complete';
+    this.input.setGameplayActive(false);
     this.input.exitPointerLock();
     this.events.emit('complete', { timeSeconds: this.progression.elapsed, falls: this.progression.falls });
     this.hud.showComplete(
@@ -361,6 +369,7 @@ export class Game {
         this.camera.clearShot();
         this.setControl(true);
         this.state = 'playing';
+        this.input.setGameplayActive(true);
         if (!this.options.test) this.input.requestPointerLock();
       },
     );
@@ -425,6 +434,7 @@ export class Game {
       this.hud.hideDocument();
       frame.interactPressed = false;
     }
+    if (frame.skipPressed) this.level.skipCinematic?.();
     this.level.fixedUpdate(dt, this.time);
     this.player.fixedUpdate(dt, frame, this.camera.yaw);
     this.level.afterPlayer?.(dt);
@@ -462,8 +472,7 @@ export class Game {
       mode: this.player.mode,
       modeT: this.player.modeT,
     });
-    const look = this.state === 'playing' ? this.input.consumeLook() : (this.input.consumeLook(), { dx: 0, dy: 0 });
-    this.camera.update(dt, look, 1, feet, this.player.grounded, this.player.speed);
+    this.camera.update(dt, this.input.consumeLook(), feet, this.player.grounded, this.player.speed);
     this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.5, 1.25, this.camera.distance));
     this.level.update(dt, this.time, alpha);
     this.sky.update(this.time, this.camera.camera.position);

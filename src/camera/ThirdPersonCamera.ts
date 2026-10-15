@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Physics, RAPIER } from '../physics/Physics';
 import { clamp, damp, dampAngle, lerp, smoothstep } from '../core/math';
+import type { LookDelta } from '../core/Input';
 
 /** A region that changes how the camera frames the player (tight in the cell, wide over the Well). */
 export interface CameraZone {
@@ -91,7 +92,12 @@ export class ThirdPersonCamera {
     return this.currentDist;
   }
 
-  update(dt: number, look: { dx: number; dy: number }, sensitivity: number, feet: THREE.Vector3, grounded: boolean, speed: number): void {
+  /** Pitch limits in radians: looking up from below (negative) to looking down from above. */
+  static readonly PITCH_MIN = -0.6;
+  static readonly PITCH_MAX = 1.2;
+
+  /** `look` is already in radians (Input applies sensitivity and invert exactly once). */
+  update(dt: number, look: LookDelta, feet: THREE.Vector3, grounded: boolean, speed: number): void {
     if (this.shot) {
       const s = this.shot;
       s.t = Math.min(s.duration, s.t + dt);
@@ -102,9 +108,9 @@ export class ThirdPersonCamera {
       return;
     }
 
-    if (look.dx !== 0 || look.dy !== 0) this.recenterTarget = null;
-    this.yaw -= look.dx * sensitivity;
-    this.pitch = clamp(this.pitch + look.dy * sensitivity, -0.6, 1.2);
+    if (look.yaw !== 0 || look.pitch !== 0) this.recenterTarget = null;
+    this.yaw -= look.yaw;
+    this.pitch = clamp(this.pitch + look.pitch, ThirdPersonCamera.PITCH_MIN, ThirdPersonCamera.PITCH_MAX);
     if (this.recenterTarget !== null) {
       this.yaw = dampAngle(this.yaw, this.recenterTarget, 10, dt);
       if (Math.abs(this.yaw - this.recenterTarget) < 0.01) this.recenterTarget = null;

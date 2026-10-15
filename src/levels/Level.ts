@@ -56,6 +56,8 @@ export interface Level {
   /** Ordered checkpoint ids, first is the section start. */
   readonly checkpointIds: string[];
   fixedUpdate(dt: number, time: number): void;
+  /** Jump/Interact pressed while a cinematic holds control: finish it now in a valid state. */
+  skipCinematic?(): void;
   /** Runs after the player moved and before the physics step (moving platforms go here). */
   afterPlayer?(dt: number): void;
   update(dt: number, time: number, alpha: number): void;
