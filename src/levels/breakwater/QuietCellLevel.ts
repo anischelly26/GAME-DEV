@@ -18,8 +18,17 @@ import { EngineRoute, ROUTE_RAIL_GAPS, ROUTE_WALKWAY_OVERRIDES } from './EngineR
 
 const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
-/** Hint tiers for the hatch puzzle: reminder -> point at evidence -> explicit causal hint. */
-const HINT_TIMES = [45, 90, 150];
+/**
+ * Hatch puzzle hints. Automatic hints are gentle and happen at most once each: a reminder of the
+ * goal, then attention to the diagram. The explicit causal solution is only given on request
+ * (Pause -> Hint); repeated requests may repeat it.
+ */
+const AUTO_HINTS: Array<{ after: number; tier: HintTier }> = [
+  { after: 60, tier: 'reminder' },
+  { after: 120, tier: 'evidence' },
+];
+type HintTier = 'reminder' | 'evidence' | 'explicit';
+const HINT_ORDER: HintTier[] = ['reminder', 'evidence', 'explicit'];
 
 /**
  * Chapter 1 slice, "The Quiet Cell": Mara's cell and its pressure hatch, the maintenance shaft with
@@ -46,7 +55,10 @@ export class QuietCellLevel implements Level {
   private dripT = 0;
   private time = 0;
   private hintTimer = 0;
-  private hintTier = 0;
+  /** Next automatic hint (index into AUTO_HINTS); never wraps around. */
+  private autoHint = 0;
+  /** Next tier for a requested hint. */
+  private requestedHint = 0;
   private lastPulse = 0;
   private sequence: { t: number; steps: Array<{ at: number; run: () => void; done?: boolean }> } | null = null;
   private fadeLevel = 0;
@@ -545,39 +557,39 @@ export class QuietCellLevel implements Level {
     progression.set('lookout.lit');
     events.emit('sfx', { name: 'ignite', x: this.lookoutLight.lampWorld.x, y: this.lookoutLight.lampWorld.y, z: this.lookoutLight.lampWorld.z });
     progression.setObjective('');
+    // Control is held only for the camera move and the lights coming on (about 3 s); the intercom
+    // exchange plays over gameplay. The whole beat can be skipped (Jump/Interact).
     const steps: Array<{ at: number; run: () => void }> = [
-      { at: 0.3, run: () => this.ctx.setControl(false) },
+      { at: 0.25, run: () => this.ctx.setControl(false) },
       {
-        at: 0.35,
+        at: 0.3,
         run: () => {
           // Frame Mara at the rail with the hall, the engine and the beacon beyond.
-          camera.playShot(v3(1.7, LOOKOUT.y + 2.2, 15.3), v3(-10.5, LOOKOUT.y + 2.6, -16), 2.8);
+          camera.playShot(v3(1.7, LOOKOUT.y + 2.2, 15.3), v3(-10.5, LOOKOUT.y + 2.6, -16), 1.8);
         },
       },
     ];
     this.hall.routeLamps.forEach((lamp, i) => {
       steps.push({
-        at: 1.4 + i * 0.5,
+        at: 0.9 + i * 0.24,
         run: () => {
           lamp.setOn(true);
           events.emit('sfx', { name: 'lampOn', x: lamp.group.position.x, y: lamp.group.position.y, z: lamp.group.position.z });
         },
       });
     });
-    const t0 = 1.4 + this.hall.routeLamps.length * 0.5 + 0.4;
+    const tLights = 0.9 + this.hall.routeLamps.length * 0.24;
     steps.push(
       {
-        at: t0,
+        at: tLights,
         run: () => {
           events.emit('sfx', { name: 'intercom', x: this.intercomPos.x, y: this.intercomPos.y, z: this.intercomPos.z });
           this.intercomBlink = 4;
+          dialogue.say('Intercom', 'The tide turns soon. Follow the service lights.', 3.6);
         },
       },
-      { at: t0 + 0.6, run: () => dialogue.say('Intercom', 'The tide turns soon. Follow the service lights.', 3.6) },
-      { at: t0 + 4.6, run: () => dialogue.say('Mara', 'Who is this?', 1.8) },
-      { at: t0 + 6.6, run: () => events.emit('sfx', { name: 'static' }) },
       {
-        at: t0 + 7.0,
+        at: tLights + 0.9,
         run: () => {
           progression.set('reveal.done');
           camera.clearShot();
@@ -589,12 +601,37 @@ export class QuietCellLevel implements Level {
           this.ctx.hud.tip('The rope at the right of the railing has dropped. Short drops are safe.', 'route-open');
         },
       },
+      { at: tLights + 4.0, run: () => dialogue.say('Mara', 'Who is this?', 1.8) },
+      { at: tLights + 5.6, run: () => events.emit('sfx', { name: 'static' }) },
     );
     this.sequence = { t: 0, steps };
   }
 
   private intercomBlink = 0;
   private timers: Array<{ t: number; run: () => void }> = [];
+
+  /** Whether a cinematic currently holds control (and can be skipped). */
+  get cinematicActive(): boolean {
+    return this.sequence !== null && this.ctx.player.frozen;
+  }
+
+  /**
+   * Finish the running sequence now: every remaining step runs once, in order, so the camera,
+   * gate, objective, dialogue and checkpoint end exactly as if the player had watched it.
+   */
+  skipCinematic(): void {
+    if (!this.cinematicActive || !this.sequence) return;
+    const seq = this.sequence;
+    for (const s of seq.steps as Array<{ at: number; run: () => void; done?: boolean }>) {
+      if (s.done) continue;
+      s.done = true;
+      s.run();
+    }
+    this.ctx.camera.clearShot();
+    this.ctx.camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
+    this.sequence = null;
+    this.ctx.events.emit('sfx', { name: 'paper' });
+  }
 
   private later(seconds: number, run: () => void): void {
     this.timers.push({ t: seconds, run });
@@ -630,26 +667,31 @@ export class QuietCellLevel implements Level {
 
   // ---------------------------------------------------------------- hints
 
+  /** A hint the player asked for (pause menu): the next tier, up to the explicit solution. */
   hint(): void {
-    const { dialogue, hud, progression } = this.ctx;
     if (this.logic.hatch !== 'closed') {
-      const next = progression.objective || 'Explore the lookout';
-      hud.tip(`Objective: ${next}.`);
+      const next = this.ctx.progression.objective || 'Explore the lookout';
+      this.ctx.hud.tip(`Objective: ${next}.`);
       return;
     }
-    const tier = this.hintTier;
-    this.hintTier = Math.min(2, this.hintTier + 1);
+    const tier = HINT_ORDER[Math.min(this.requestedHint, HINT_ORDER.length - 1)];
+    this.requestedHint++;
     this.hintTimer = 0;
-    if (tier === 0) {
+    this.giveHint(tier);
+  }
+
+  private giveHint(tier: HintTier): void {
+    const { dialogue, hud } = this.ctx;
+    if (tier === 'reminder') {
       hud.tip('Objective: open the service hatch.');
       hud.pulseObjective();
-    } else if (tier === 1) {
+    } else if (tier === 'evidence') {
       dialogue.interrupt();
       dialogue.say('Mara', 'Someone scratched a diagram next to the hatch.');
       this.hatch.pulseHighlight();
     } else {
       dialogue.interrupt();
-      dialogue.say('Mara', "The bypass is dumping it all into the vent. Shut the bypass, wait for the needle, then the lever.", 5);
+      dialogue.say('Mara', 'The bypass is dumping it all into the vent. Shut the bypass, wait for the needle, then the lever.', 5);
     }
   }
 
@@ -700,8 +742,10 @@ export class QuietCellLevel implements Level {
     // Hints, only while the puzzle is unsolved and the player is in the cell.
     if (this.logic.hatch === 'closed' && player.feet.z > CELL.z0) {
       this.hintTimer += dt;
-      if (this.hintTier < HINT_TIMES.length && this.hintTimer >= HINT_TIMES[this.hintTier] - (this.hintTier > 0 ? HINT_TIMES[this.hintTier - 1] : 0)) {
-        this.hint();
+      const next = AUTO_HINTS[this.autoHint];
+      if (next && this.hintTimer >= next.after) {
+        this.autoHint++;
+        this.giveHint(next.tier);
       }
     }
 
@@ -730,6 +774,7 @@ export class QuietCellLevel implements Level {
   }
 
   update(dt: number, time: number, alpha: number): void {
+    this.ctx.hud.setSkipHint(this.cinematicActive, this.ctx.input.usingGamepad);
     this.engine.update(dt, time, alpha);
     this.hatch.update(dt, time, this.logic.pressure);
     this.hall.update(dt, time, this.ctx.camera.camera.position);
@@ -768,7 +813,8 @@ export class QuietCellLevel implements Level {
     this.sequence = null;
     this.timers = [];
     this.hintTimer = 0;
-    this.hintTier = 0;
+    this.autoHint = 0;
+    this.requestedHint = 0;
     this.falling = false;
     this.fadeLevel = 0;
     this.startIntro();
@@ -810,7 +856,8 @@ export class QuietCellLevel implements Level {
       liftBand: this.logic.pressure >= LIFT_THRESHOLD,
       hatch: this.logic.hatch,
       failedPulls: this.logic.failedPulls,
-      hintTier: this.hintTier,
+      autoHints: this.autoHint,
+      requestedHints: this.requestedHint,
     };
   }
 }

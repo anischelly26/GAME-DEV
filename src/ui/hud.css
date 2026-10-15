@@ -117,6 +117,19 @@ html, body {
 }
 .tip.hidden { opacity: 0; transform: translateY(8px); }
 
+/* ---------- cinematic skip hint */
+.skip {
+  right: 26px;
+  bottom: 26px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--ink-dim);
+  transition: opacity 0.3s;
+}
+.skip.hidden { opacity: 0; }
+
 /* ---------- fades */
 .fade { inset: 0; background: #000; opacity: 0; }
 

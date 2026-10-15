@@ -70,6 +70,7 @@ export class HUD {
   private readonly fallFadeEl: HTMLElement;
   private readonly documentEl: HTMLElement;
   private readonly debugEl: HTMLElement;
+  private readonly skipEl: HTMLElement;
   private readonly screen: HTMLElement;
   private readonly card: HTMLElement;
   private tipTimer = 0;
@@ -88,6 +89,7 @@ export class HUD {
     this.tipEl = el('div', 'tip hidden', this.root);
     this.documentEl = el('div', 'document hidden', this.root);
     this.debugEl = el('div', 'debug hidden', this.root);
+    this.skipEl = el('div', 'skip hidden', this.root, '<span class="key">Space</span> or <span class="key">E</span> skip');
     this.fadeEl = el('div', 'fade', this.root);
     this.screen = el('div', 'screen', this.root);
     this.card = el('div', 'card', this.screen);
@@ -257,6 +259,13 @@ export class HUD {
 
   setFallFade(v: number): void {
     this.fallFadeEl.style.opacity = String(Math.min(1, v));
+  }
+
+  /** Shown while a skippable cinematic holds control. */
+  setSkipHint(visible: boolean, gamepad = false): void {
+    const html = gamepad ? '<span class="key pad">A</span> skip' : '<span class="key">Space</span> or <span class="key">E</span> skip';
+    if (visible && this.skipEl.innerHTML !== html) this.skipEl.innerHTML = html;
+    this.skipEl.classList.toggle('hidden', !visible);
   }
 
   setDebug(text: string | null): void {
