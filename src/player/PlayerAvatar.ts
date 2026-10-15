@@ -109,7 +109,7 @@ export class PlayerAvatar {
       m.castShadow = true;
       m.receiveShadow = true;
       m.frustumCulled = false;
-      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) this.materials.push(mat);
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) this.addFadeable(mat);
     });
     this.mixer = new THREE.AnimationMixer(model);
     for (const clip of gltf.animations) {
@@ -172,7 +172,7 @@ export class PlayerAvatar {
     const chest = this.bones.get('spine_03');
     if (!neck || !chest) return;
     const knit = new THREE.MeshStandardMaterial({ color: SCARF_COLOR, roughness: 1, normalMap: this.tex.wool.normalMap });
-    this.materials.push(knit);
+    this.addFadeable(knit);
     const neckPos = neck.getWorldPosition(new THREE.Vector3());
     const facing = this.root.getWorldQuaternion(new THREE.Quaternion());
     const wrap = new THREE.Group();
@@ -195,7 +195,7 @@ export class PlayerAvatar {
     this.scene.add(wrap);
     neck.attach(wrap);
     const tailMat = new THREE.MeshStandardMaterial({ color: SCARF_COLOR, roughness: 1 });
-    this.materials.push(tailMat);
+    this.addFadeable(tailMat);
     for (const [x, len, width] of [
       [0.03, 3, 0.05],
       [0.055, 2, 0.044],
@@ -263,12 +263,22 @@ export class PlayerAvatar {
     this.oneShot = { name, weight: this.oneShot?.name === name ? this.oneShot.weight : 0, target: 1 };
   }
 
+  /**
+   * Materials that fade near the camera use a dithered alpha hash that is always on, so changing
+   * the opacity only changes a uniform. Switching `transparent` instead changes the shader: on
+   * integrated GPUs (ANGLE/D3D11) recompiling Mara's eight programs froze the game for 4-6 s the
+   * first time the camera came close (review 492bce4 R2).
+   */
+  private addFadeable(m: THREE.Material): void {
+    if (!m.transparent) m.alphaHash = true;
+    this.materials.push(m);
+  }
+
   /** Fade the avatar when the camera gets very close so it never blocks the view. */
   setOpacity(o: number): void {
     if (Math.abs(o - this.opacity) < 0.01) return;
     this.opacity = o;
     for (const m of this.materials) {
-      m.transparent = o < 0.999;
       m.opacity = o;
       m.depthWrite = o > 0.5;
     }
