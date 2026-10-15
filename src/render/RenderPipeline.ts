@@ -5,6 +5,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 
 /** Final display-space grade: gentle contrast and saturation, split toning, a light vignette. */
 const GradeShader = {
@@ -50,6 +51,7 @@ export class RenderPipeline {
   private readonly grade: ShaderPass;
   private readonly renderPass: RenderPass;
   private readonly ao: GTAOPass;
+  private readonly fxaa: ShaderPass;
   private quality: QualityLevel = 'high';
 
   constructor(
@@ -82,6 +84,12 @@ export class RenderPipeline {
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader);
     this.composer.addPass(this.grade);
+    // Low smooths edges with FXAA on the final image instead of 4x MSAA on the half-float scene
+    // target: on an Intel UHD (ANGLE/D3D11) the MSAA target alone took the frame from about 21 ms
+    // to 35 ms (scripts/profile-render.mjs).
+    this.fxaa = new ShaderPass(FXAAShader);
+    this.fxaa.enabled = false;
+    this.composer.addPass(this.fxaa);
 
     window.addEventListener('resize', this.resize);
     this.resize();
@@ -94,11 +102,31 @@ export class RenderPipeline {
   setQuality(level: QualityLevel): void {
     this.quality = level;
     // Low keeps full resolution (blurry sub-native rendering read as "pixelated"); it saves cost
-    // on bloom, ambient occlusion and shadow resolution instead.
+    // on multisampling, bloom, ambient occlusion and shadow resolution instead.
     this.renderer.setPixelRatio(level === 'high' ? Math.min(window.devicePixelRatio, 2) : Math.min(window.devicePixelRatio, 1));
     this.ao.enabled = level === 'high';
     this.bloom.enabled = level === 'high';
+    this.fxaa.enabled = level === 'low';
+    const samples = level === 'high' ? 4 : 0;
+    for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) {
+      if (rt.samples === samples) continue;
+      rt.samples = samples;
+      rt.dispose();
+    }
     this.resize();
+  }
+
+  /**
+   * The preset 'Auto' resolves to: Low on integrated, mobile and software GPUs, High on the rest.
+   * Measured on an Intel UHD 0x46A3: High averaged about 9 FPS on the route (review 492bce4 R1).
+   */
+  get recommendedQuality(): QualityLevel {
+    const gl = this.renderer.getContext();
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    const discrete = /NVIDIA|GeForce|Quadro|Radeon RX|Radeon Pro|Intel\(R\) Arc|Apple M\d/i.test(name);
+    const weak = /Intel|UHD|Iris|Mali|Adreno|PowerVR|Vega \d+ Graphics|Radeon\(TM\) Graphics|SwiftShader|llvmpipe|Basic Render/i.test(name);
+    return weak && !discrete ? 'low' : 'high';
   }
 
   getQuality(): QualityLevel {
@@ -119,7 +147,9 @@ export class RenderPipeline {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
-    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    const pr = this.renderer.getPixelRatio();
+    this.composer.setPixelRatio(pr);
     this.composer.setSize(w, h);
+    this.fxaa.material.uniforms.resolution.value.set(1 / (w * pr), 1 / (h * pr));
   };
 }

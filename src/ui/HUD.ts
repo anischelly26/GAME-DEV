@@ -5,16 +5,24 @@ export interface Settings {
   sensitivity: number; // 0.2 .. 3, multiplies the base mouse sensitivity
   invertY: boolean;
   volume: number; // 0..1
-  quality: 'high' | 'low';
+  /** 'auto' picks Low on integrated and mobile GPUs, High otherwise (see RenderPipeline). */
+  quality: 'auto' | 'high' | 'low';
+  version?: number;
 }
 
-export const DEFAULT_SETTINGS: Settings = { sensitivity: 1, invertY: false, volume: 0.8, quality: 'high' };
+const SETTINGS_VERSION = 2;
+export const DEFAULT_SETTINGS: Settings = { sensitivity: 1, invertY: false, volume: 0.8, quality: 'auto', version: SETTINGS_VERSION };
 const SETTINGS_KEY = 'it-takes-one.settings';
 
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const stored = JSON.parse(raw) as Partial<Settings>;
+      // Version 1 saved 'high' as the default whenever any setting changed; there was no 'auto'.
+      if ((stored.version ?? 1) < SETTINGS_VERSION) stored.quality = 'auto';
+      return { ...DEFAULT_SETTINGS, ...stored, version: SETTINGS_VERSION };
+    }
   } catch {
     /* storage unavailable: use defaults */
   }
@@ -79,6 +87,8 @@ export class HUD {
   documentOpen: string | null = null;
   private documentTimer = 0;
   settings: Settings = loadSettings();
+  /** What 'Auto' resolves to on this machine, shown in the settings menu. */
+  autoQualityLabel = 'High';
 
   constructor(container: HTMLElement) {
     this.root = el('div', 'hud', container);
@@ -145,7 +155,7 @@ export class HUD {
         <label>Mouse sensitivity <input type="range" min="0.2" max="3" step="0.05" value="${s.sensitivity}" data-s="sensitivity"></label>
         <label>Invert vertical look <input type="checkbox" ${s.invertY ? 'checked' : ''} data-s="invertY"></label>
         <label>Volume <input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-s="volume"></label>
-        <label>Graphics <select data-s="quality"><option value="high" ${s.quality === 'high' ? 'selected' : ''}>High</option><option value="low" ${s.quality === 'low' ? 'selected' : ''}>Low (faster)</option></select></label>
+        <label>Graphics <select data-s="quality"><option value="auto" ${s.quality === 'auto' ? 'selected' : ''}>Auto (${this.autoQualityLabel})</option><option value="high" ${s.quality === 'high' ? 'selected' : ''}>High (dedicated graphics card)</option><option value="low" ${s.quality === 'low' ? 'selected' : ''}>Low (faster)</option></select></label>
       </div>
       ${CONTROLS_HTML}`;
     const on = (a: string, fn: () => void) => this.card.querySelector(`[data-a="${a}"]`)?.addEventListener('click', fn);

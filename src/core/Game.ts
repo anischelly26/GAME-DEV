@@ -158,6 +158,7 @@ export class Game {
     };
     this.level = new QuietCellLevel(ctx);
     this.wireEvents();
+    this.hud.autoQualityLabel = this.pipeline.recommendedQuality === 'low' ? 'Low on this GPU' : 'High on this GPU';
     this.applySettings(this.hud.settings);
     // Automated runs default to Low: software rendering in CI sandboxes is slow and memory-bound.
     const forced = this.options.quality ?? (this.options.test ? 'low' : null);
@@ -318,7 +319,7 @@ export class Game {
     this.input.mouseRadiansPerPixel = BASE_RADIANS_PER_PIXEL * s.sensitivity;
     this.input.invertY = s.invertY;
     this.audio.setVolume(s.volume);
-    if (!this.options.quality && !this.options.test) this.setQuality(s.quality);
+    if (!this.options.quality && !this.options.test) this.setQuality(s.quality === 'auto' ? this.pipeline.recommendedQuality : s.quality);
   }
 
   /** Low: lower resolution, no bloom, smaller moon shadow map, no lamp shadows. */
@@ -450,7 +451,43 @@ export class Game {
       if (steps === 6) this.accumulator = 0;
     }
     this.renderFrame(dt, this.options.test && !this.options.realtime ? 1 : this.accumulator / FIXED_DT);
+    this.probeAutoQuality(now);
   };
+
+  /** Frame times sampled on the title screen while 'Auto' has chosen High. */
+  private autoProbe: number[] | null = null;
+  private autoProbeLast = 0;
+  private autoProbeDone = false;
+
+  /**
+   * 'Auto' starts from the GPU name (RenderPipeline.recommendedQuality), then checks it: while the
+   * title screen is up, if High's median frame takes longer than 20 ms, switch to Low there, before
+   * play starts. Switching recompiles shaders, which can hitch for a few seconds on an integrated
+   * GPU, so it never happens during play.
+   */
+  private probeAutoQuality(now: number): void {
+    if (this.autoProbeDone || this.state !== 'title' || this.hud.settings.quality !== 'auto' || this.pipeline.getQuality() !== 'high' || this.options.quality) {
+      this.autoProbe = null;
+      return;
+    }
+    if (!this.autoProbe) {
+      this.autoProbe = [];
+      this.autoProbeLast = now;
+      return;
+    }
+    this.autoProbe.push(now - this.autoProbeLast);
+    this.autoProbeLast = now;
+    if (this.autoProbe.length < 90) return;
+    const sorted = this.autoProbe.slice(30).sort((a, b) => a - b);
+    const median = sorted[sorted.length >> 1];
+    if (median > 20) {
+      this.setQuality('low');
+      this.hud.autoQualityLabel = 'Low on this GPU';
+      this.pipeline.renderer.compile(this.scene, this.camera.camera);
+    }
+    this.autoProbe = null;
+    this.autoProbeDone = true;
+  }
 
   /** One deterministic simulation step. */
   fixedStep(): void {
