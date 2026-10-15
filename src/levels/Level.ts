@@ -60,6 +60,8 @@ export interface Level {
   skipCinematic?(): void;
   /** Runs after the player moved and before the physics step (moving platforms go here). */
   afterPlayer?(dt: number): void;
+  /** Called after the player is recovered at checkpoint `id` (falls and manual respawn). */
+  onRespawn?(id: string): void;
   update(dt: number, time: number, alpha: number): void;
   /** Restore the complete initial state ("Restart section"). */
   reset(): void;

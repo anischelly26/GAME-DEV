@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { LevelContext, RouteStep } from '../Level';
 import { Batcher, prismGeometry, worldBox } from '../../world/geometry';
-import { valvePlateTexture, paintedTextTexture } from '../../world/textures';
-import { ServiceLight, glowSprite } from '../../world/props/Lanterns';
+import { paintedTextTexture } from '../../world/textures';
+import { ServiceLight, WorkLamp, glowSprite } from '../../world/props/Lanterns';
 import { SteamEmitter } from '../../world/Atmosphere';
 import { EngineCollar, PistonPlatform } from '../../world/props/EngineRides';
-import { braceGantry, buildBarrierBeam, buildSparesRack } from '../../world/props/Maintenance';
+import { braceGantry, buildBarrierBeam, buildSparesRack, catchPlateTexture, dialTexture, feedPlateTexture, hazardStripeTexture } from '../../world/props/Maintenance';
+import { SplitFeedLogic } from '../../gameplay/puzzles/SplitFeedLogic';
 import { mulberry32 } from '../../core/math';
 import { HALL, sideAngle, sideFraction, halfSide } from './layout';
 
@@ -80,14 +81,23 @@ export class EngineRoute {
   readonly breachPiston: PistonPlatform;
   private readonly brakeLever: Lever;
   private readonly deckLever: Lever;
-  private readonly steamValveWheel = new THREE.Group();
+  private readonly feedWheel = new THREE.Group();
+  private readonly catchLever: Lever;
+  private readonly releaseLever: Lever;
+  private readonly pawl = new THREE.Group();
+  private readonly gauges: Array<{ needle: THREE.Object3D; value: number; target: () => number }> = [];
+  private readonly reliefSteam: SteamEmitter;
+  private readonly boardLamp: WorkLamp;
   private readonly curtain: SteamEmitter[] = [];
   private readonly curtainSheet: THREE.Mesh;
   private readonly lights: ServiceLight[] = [];
   private readonly lightById = new Map<string, ServiceLight>();
-  steamOn = true;
-  private pistonPowered = false;
-  private steamWheelAngle = 0;
+  /** The split feed at the breach: the curtain, the ram and its catch (see SplitFeedLogic). */
+  readonly feed = new SplitFeedLogic();
+  private feedWheelAngle = 0.6;
+  private shudder = 0;
+  private lastEmptyRises = 0;
+  readonly releaseAnchor = new THREE.Vector3();
   private time = 0;
   readonly deckLeverAnchor = new THREE.Vector3();
   private readonly deckLeverLocal: THREE.Vector3;
@@ -96,6 +106,8 @@ export class EngineRoute {
   private readonly gateMesh: THREE.Group;
   routeOpen = false;
   readonly route: RouteStep[];
+  /** The split-feed puzzle and exit only, from the upper gantry (reviews and movement captures). */
+  readonly feedRoute: RouteStep[];
 
   constructor(private readonly ctx: LevelContext) {
     const { scene, physics, materials: m, player, traversal } = ctx;
@@ -160,6 +172,25 @@ export class EngineRoute {
     // ------------------------------------------------------------ k = 2: first gap on tier 1 (1.9 m)
     walkwayPiece(2, 0, 0.27, T1);
     walkwayPiece(2, 0.77, 1, T1);
+    for (const [f, side] of [
+      [0.27, -1],
+      [0.77, 1],
+    ]) {
+      // The walkway's end runs along a radial line (constant fraction), so the strip follows it.
+      const p0 = sidePos(2, HALL.aIn + 0.15, uAt(HALL.aIn + 0.15, f), T1 + 0.006);
+      const p1 = sidePos(2, HALL.aWall - 0.15, uAt(HALL.aWall - 0.15, f), T1 + 0.006);
+      const d = p1.clone().sub(p0);
+      const lip = new THREE.Mesh(
+        new THREE.PlaneGeometry(d.length(), 0.16),
+        new THREE.MeshStandardMaterial({ map: hazardStripeTexture(), roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -1 }),
+      );
+      // Inset 9 cm from the lip, on the walkway side.
+      lip.position.copy(p0.clone().add(p1).multiplyScalar(0.5)).addScaledVector(sideTangent(2), side * 0.09);
+      lip.quaternion
+        .setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(-d.z, d.x))
+        .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2));
+      root.add(lip);
+    }
 
     // ------------------------------------------------------------ k = 3: low maintenance rail to vault
     {
@@ -309,20 +340,99 @@ export class EngineRoute {
       main.position.copy(sidePos(k, HALL.aWall - 0.25, 0, T3 + 2.7));
       main.quaternion.copy(sideQuat(k)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2));
       root.add(main);
-      // Redirect valve before the curtain: same language as the cell (plate + pointer bar).
-      const vp = sidePos(k, HALL.aWall - 0.05, uAt(HALL.aWall, 0.25), T3 + 1.15);
-      const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.21), new THREE.MeshStandardMaterial({ map: valvePlateTexture(), roughness: 0.8 }));
-      plate.position.copy(vp).add(v3(0, 0.42, 0));
-      plate.quaternion.copy(sideQuat(k)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
-      root.add(plate);
+      // The junction before the curtain, in the cell's language (plates, pointer bar, gauges):
+      // a RAM CATCH lever, two gauges, and the FEED diverter between VENT and RAM.
+      const inward = sideAngle(k) + Math.PI;
+      const faceQ = sideQuat(k).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+      // Everything is mounted on a free-standing control board in front of the cell facade.
+      const ja = HALL.aWall - 0.3;
+      const boardU0 = uAt(ja, 0.02);
+      const boardU1 = uAt(ja, 0.36);
+      const boardCenter = sidePos(k, ja + 0.03, (boardU0 + boardU1) / 2, T3 + 1.3);
+      batch.add(worldBox(boardU1 - boardU0, 2.1, 0.05, 2), m.ironDark, new THREE.Matrix4().compose(boardCenter, sideQuat(k), v3(1, 1, 1)));
+      for (const u of [boardU0 + 0.06, boardU1 - 0.06]) {
+        batch.add(new THREE.BoxGeometry(0.08, 2.4, 0.08), m.iron, new THREE.Matrix4().compose(sidePos(k, ja + 0.09, u, T3 + 1.2), sideQuat(k), v3(1, 1, 1)));
+      }
+      // A caged work lamp over the board so the plates and gauges read from the walkway.
+      const boardLamp = new WorkLamp(m, sidePos(k, ja - 0.08, uAt(ja, 0.19), T3 + 2.45), v3(-Math.sin(sideAngle(k)), 0, -Math.cos(sideAngle(k))), { light: true, intensity: 3.2, distance: 4.5, pool: false, scale: 0.8 });
+      root.add(boardLamp.group);
+      this.boardLamp = boardLamp;
+      // The feed main drops into the board from the line above.
+      batch.add(new THREE.CylinderGeometry(0.07, 0.07, 0.9, 10), m.brass, new THREE.Matrix4().compose(sidePos(k, ja + 0.12, uAt(ja, 0.25), T3 + 2.55), sideQuat(k), v3(1, 1, 1)));
+      const wallPlate = (tex: THREE.Texture, f: number, y: number, w = 0.56, h = 0.28) => {
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }));
+        mesh.position.copy(sidePos(k, ja - 0.005, uAt(ja, f), y));
+        mesh.quaternion.copy(faceQ);
+        root.add(mesh);
+      };
+      const vp = sidePos(k, ja - 0.03, uAt(ja, 0.25), T3 + 1.15);
+      wallPlate(feedPlateTexture(), 0.25, T3 + 1.6);
       const rim = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.024, 8, 24), m.ironDark);
       const bar = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.3, 0.04, 1, 0.015), m.ceramic);
       bar.position.z = 0.03;
-      this.steamValveWheel.add(rim, bar);
-      this.steamValveWheel.position.copy(vp);
-      this.steamValveWheel.quaternion.copy(plate.quaternion);
-      root.add(this.steamValveWheel);
+      this.feedWheel.add(rim, bar);
+      this.feedWheel.position.copy(vp);
+      this.feedWheel.quaternion.copy(faceQ);
+      root.add(this.feedWheel);
       this.steamValvePos = vp;
+      this.catchLever = new Lever(ctx, 'CATCH');
+      this.catchLever.group.position.copy(sidePos(k, ja - 0.05, uAt(ja, 0.09), T3));
+      this.catchLever.group.rotation.y = inward;
+      root.add(this.catchLever.group);
+      wallPlate(catchPlateTexture(), 0.09, T3 + 1.62);
+      this.catchPos = sidePos(k, ja - 0.05, uAt(ja, 0.09), T3 + 1.1);
+      // Gauges: where the pressure is going.
+      const gauge = (label: string, f: number, target: () => number) => {
+        const g = new THREE.Group();
+        const face = new THREE.Mesh(new THREE.CircleGeometry(0.13, 28), new THREE.MeshStandardMaterial({ map: dialTexture(label), roughness: 0.5 }));
+        const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.012, 6, 28), m.brass);
+        const needle = new THREE.Group();
+        const stick = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.1, 0.006), new THREE.MeshStandardMaterial({ color: '#1b1714', roughness: 0.5 }));
+        stick.position.y = 0.045;
+        needle.add(stick);
+        needle.position.z = 0.006;
+        g.add(face, bezel, needle);
+        g.position.copy(sidePos(k, ja - 0.01, uAt(ja, f), T3 + 2.08));
+        g.quaternion.copy(faceQ);
+        root.add(g);
+        this.gauges.push({ needle, value: target(), target });
+      };
+      gauge('VENT', 0.19, () => (this.feed.route === 'vent' ? 0.72 : 0.06));
+      gauge('RAM', 0.31, () => (this.feed.route === 'ram' ? (this.feed.straining ? 0.95 : 0.66) : 0.06));
+      // Hazard band on the deck where the steam starts to push.
+      const band = new THREE.Mesh(
+        new THREE.PlaneGeometry(HALL.aWall - HALL.aIn - 0.2, 0.22),
+        new THREE.MeshStandardMaterial({ map: hazardStripeTexture(), roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -1 }),
+      );
+      band.position.copy(sidePos(k, (HALL.aIn + HALL.aWall) / 2, uAt(10.7, fCurtain) - 0.55, T3 + 0.01));
+      band.quaternion.copy(sideQuat(k)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, Math.PI / 2)));
+      root.add(band);
+      // Linkage rod from the catch lever along the wall to the ram's rack post on side 9.
+      const rodY = T3 + 0.32;
+      const ra = HALL.aWall - 0.07;
+      const rod = (p0: THREE.Vector3, p1: THREE.Vector3) => {
+        const d = p1.clone().sub(p0);
+        batch.add(
+          new THREE.CylinderGeometry(0.016, 0.016, d.length(), 6),
+          m.iron,
+          new THREE.Matrix4().compose(p0.clone().add(p1).multiplyScalar(0.5), new THREE.Quaternion().setFromUnitVectors(v3(0, 1, 0), d.normalize()), v3(1, 1, 1)),
+        );
+      };
+      const rodStart = sidePos(k, ra, uAt(ra, 0.09), rodY);
+      const corner = sidePos(k, ra, uAt(ra, 1), rodY);
+      const rackFoot = sidePos(9, ra, uAt(ra, 0.86), rodY);
+      rod(sidePos(k, ja + 0.06, uAt(ja, 0.09), T3 + 0.95), sidePos(k, ja + 0.06, uAt(ja, 0.09), rodY));
+      rod(sidePos(k, ja + 0.06, uAt(ja, 0.09), rodY), rodStart);
+      rod(rodStart, corner);
+      rod(corner, rackFoot);
+      const brackets: Array<[number, number]> = [
+        [8, 0.4],
+        [8, 0.75],
+        [9, 0.3],
+        [9, 0.6],
+      ];
+      for (const [kk, f] of brackets)
+        batch.add(new THREE.BoxGeometry(0.05, 0.06, 0.09), m.ironDark, new THREE.Matrix4().compose(sidePos(kk, HALL.aWall - 0.045, uAt(HALL.aWall, f), rodY), sideQuat(kk), v3(1, 1, 1)));
     }
 
     // ------------------------------------------------------------ k = 9 (tier 3): breach piston + exit gantry
@@ -332,7 +442,34 @@ export class EngineRoute {
       const a = 10.7;
       const base = sidePos(k, a, uAt(a, 0.86), T3);
       this.breachPiston = new PistonPlatform(physics, m, base, 2.4, { w: 1.8, d: 1.8 }, { rest: 2.8, travel: 2.4, phase: 0 }, sideAngle(k));
+      this.breachPiston.heightOverride = 0;
       root.add(this.breachPiston.group);
+      // Toothed rack post beside the ram, worked by the catch rod; the pawl rides on the deck.
+      const rackA = 11.95;
+      const post = sidePos(k, rackA, uAt(rackA, 0.86), T3 + 1.45);
+      batch.add(new THREE.BoxGeometry(0.12, 2.9, 0.1), m.ironDark, new THREE.Matrix4().compose(post, sideQuat(k), v3(1, 1, 1)));
+      for (let i = 0; i < 26; i++) {
+        const tooth = sidePos(k, rackA - 0.06, uAt(rackA, 0.86), T3 + 0.15 + i * 0.1);
+        batch.add(new THREE.BoxGeometry(0.1, 0.035, 0.04), m.iron, new THREE.Matrix4().compose(tooth, sideQuat(k), v3(1, 1, 1)));
+      }
+      batch.add(
+        new THREE.CylinderGeometry(0.016, 0.016, HALL.aWall - 0.07 - rackA, 6),
+        m.iron,
+        new THREE.Matrix4().compose(sidePos(k, (HALL.aWall - 0.07 + rackA) / 2, uAt(rackA, 0.86), T3 + 0.32), sideQuat(k).multiply(new THREE.Quaternion().setFromAxisAngle(v3(1, 0, 0), Math.PI / 2)), v3(1, 1, 1)),
+      );
+      const pawlArm = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.36), m.brass);
+      pawlArm.position.z = 0.18;
+      pawlArm.castShadow = true;
+      this.pawl.add(pawlArm);
+      this.pawl.position.set(0, -0.14, 0.9);
+      this.breachPiston.group.add(this.pawl);
+      this.releaseLever = new Lever(ctx, 'RELEASE');
+      this.releaseLever.group.position.set(-0.6, 0, 0.72);
+      this.releaseLever.group.rotation.y = Math.PI;
+      this.breachPiston.group.add(this.releaseLever.group);
+      this.reliefSteam = new SteamEmitter(base.clone().add(v3(0, 0.1, 0)), v3(0, 1.4, 0), 0, new THREE.Color('#aebcc0'));
+      this.reliefSteam.peakOpacity = 0.14;
+      root.add(this.reliefSteam.group);
       for (const c of this.breachPiston.colliders) player.platforms.set(c.handle, this.breachPiston);
       // Exit gantry bolted to the broken wall, jutting out through the breach over the sea.
       const k2 = 10;
@@ -399,9 +536,27 @@ export class EngineRoute {
     this.registerTriggers();
     ctx.camera.zones.push({ id: 'hall', contains: (p) => Math.hypot(p.x, p.z) < HALL.aWall + 0.2 && p.y < 14, distance: 6.2, height: 1.7, fov: 60, priority: 1 });
     this.route = buildEngineRoute(this);
+    const from = this.route.findIndex((st) => st.kind === 'interact' && st.id === 'ram-catch');
+    this.feedRoute = [{ kind: 'move', to: this.debugPoint(8, 10.6, 0.05, T3) as [number, number, number], precise: true }, ...this.route.slice(from)];
   }
 
   private steamValvePos = new THREE.Vector3();
+  private catchPos = new THREE.Vector3();
+
+  /** The steam curtain is on while the feed vents. */
+  get steamOn(): boolean {
+    return this.feed.curtainOn;
+  }
+
+  /** After a fall past the curtain, the solved ram is waiting again (a missed jump never costs the puzzle). */
+  onRespawn(checkpointId: string): void {
+    if ((checkpointId === 'breach' || checkpointId === 'exit') && this.ctx.progression.has('ram.released') && !this.feed.primed) {
+      this.feed.reset();
+      this.feed.toggleCatch();
+      this.feed.toggleRoute();
+      this.catchLever.set(true);
+    }
+  }
   exitCenter = new THREE.Vector3();
   readonly exitLanding = new THREE.Vector3();
   readonly exitTakeoff = new THREE.Vector3();
@@ -457,21 +612,105 @@ export class EngineRoute {
       },
     });
 
+    // The split feed (see SplitFeedLogic): a diverter, a catch, and a release on the ram deck.
     interactions.add({
-      id: 'steam-valve',
+      id: 'feed-diverter',
       position: this.steamValvePos,
-      radius: 2.2,
-      prompt: () => (this.steamOn ? 'Close the vent bypass' : null),
+      radius: 2.0,
+      prompt: () => (this.feed.route === 'vent' ? 'Turn the feed to the ram' : 'Turn the feed to the vent'),
       interact: () => {
         player.lockFor(0.7, this.steamValvePos);
-        this.steamOn = false;
-        this.pistonPowered = true;
-        events.emit('sfx', { name: 'valveClose', x: this.steamValvePos.x, y: this.steamValvePos.y, z: this.steamValvePos.z });
-        progression.set('steam.redirected');
-        dialogue.say('Mara', 'Same trick. Now the pressure goes to that piston instead.');
-        progression.setObjective('Ride the piston up to the gantry in the breach');
+        const route = this.feed.toggleRoute();
+        const at = this.steamValvePos;
+        events.emit('sfx', { name: route === 'ram' ? 'valveClose' : 'valveOpen', x: at.x, y: at.y, z: at.z });
+        progression.set(route === 'ram' ? 'feed.ram' : 'feed.vent');
+        if (route === 'ram') {
+          progression.set('steam.redirected');
+          if (this.feed.caught && this.feed.ram === 0) {
+            progression.set('ram.primed');
+            dialogue.sayOnce('ram-primed', 'Mara', "The catch is holding it down. It'll go the moment I let it.");
+            progression.setObjective('Stand on the ram and release the catch');
+          } else {
+            dialogue.sayOnce('feed-ram', 'Mara', "Steam's off the walkway. The feed is going to that ram now.");
+            progression.setObjective('Get the ram to carry you up to the breach gantry');
+          }
+        } else {
+          dialogue.sayOnce('feed-vent', 'Mara', 'Back to the vent. The ram comes down, the steam comes back.');
+        }
       },
     });
+
+    interactions.add({
+      id: 'ram-catch',
+      position: this.catchPos,
+      radius: 2.0,
+      prompt: () => (this.feed.caught ? 'Free the ram catch' : 'Set the ram catch'),
+      interact: () => {
+        player.lockFor(0.5, this.catchPos);
+        const caught = this.feed.toggleCatch();
+        this.catchLever.set(caught);
+        events.emit('sfx', { name: 'lever', x: this.catchPos.x, y: this.catchPos.y, z: this.catchPos.z });
+        if (caught) {
+          progression.set('ram.caught');
+          if (this.feed.ram === 0) dialogue.sayOnce('catch-down', 'Mara', 'Catch is on. That holds the ram right where it stands.');
+          else dialogue.sayOnce('catch-up', 'Mara', "Caught it... up there. Where I can't reach it.");
+          if (this.feed.primed) progression.set('ram.primed');
+        }
+      },
+    });
+
+    interactions.add({
+      id: 'ram-release',
+      position: this.releaseAnchor,
+      radius: 1.6,
+      prompt: () => (this.feed.caught && this.onRamDeck() ? 'Release the catch' : null),
+      interact: () => {
+        player.lockFor(0.4, this.releaseAnchor);
+        this.releaseLever.set(true);
+        if (this.feed.release()) {
+          this.catchLever.set(false);
+          events.emit('sfx', { name: 'lever', x: this.releaseAnchor.x, y: this.releaseAnchor.y, z: this.releaseAnchor.z });
+          progression.set('ram.released');
+          if (this.feed.route === 'ram') {
+            events.emit('sfx', { name: 'piston', x: this.releaseAnchor.x, y: this.releaseAnchor.y, z: this.releaseAnchor.z });
+            dialogue.sayOnce('ram-ride', 'Mara', 'Hold tight...');
+            progression.setObjective('Jump to the gantry in the breach');
+          }
+        }
+      },
+    });
+  }
+
+  /** Is Mara standing on the breach ram's deck? */
+  onRamDeck(): boolean {
+    const g = this.breachPiston.group.position;
+    const f = this.ctx.player.feet;
+    const th = sideAngle(9);
+    const dx = f.x - g.x;
+    const dz = f.z - g.z;
+    const lx = dx * Math.cos(th) - dz * Math.sin(th);
+    const lz = dx * Math.sin(th) + dz * Math.cos(th);
+    return Math.abs(lx) < 0.95 && Math.abs(lz) < 0.95 && Math.abs(f.y - g.y) < 0.4;
+  }
+
+  /** The split-feed puzzle is in play: Mara is up top and has not reached the exit yet. */
+  get feedPuzzleActive(): boolean {
+    return this.ctx.progression.has('engine.top') && !this.ctx.progression.has('exit.reached');
+  }
+
+  /** Graduated, optional hints for the split feed (requested from the pause menu). */
+  hint(tier: 'reminder' | 'evidence' | 'explicit'): void {
+    const { dialogue, hud, progression } = this.ctx;
+    dialogue.interrupt();
+    if (tier === 'reminder') {
+      hud.tip(`Objective: ${progression.objective || 'Find a way past the steam'}.`);
+      hud.pulseObjective();
+      dialogue.say('Mara', 'The feed goes one way or the other: into the cracked line, or up to that ram.');
+    } else if (tier === 'evidence') {
+      dialogue.say('Mara', 'That catch holds the ram wherever it stands, even with the feed on it. And it lets go from the deck.');
+    } else {
+      dialogue.say('Mara', 'Feed to the vent so the ram comes down. Set the catch. Feed to the ram, walk over, and release it from the deck.', 6);
+    }
   }
 
   private registerTriggers(): void {
@@ -488,7 +727,7 @@ export class EngineRoute {
       onEnter: () => {
         player.knockback(back.clone().multiplyScalar(7).setY(3.5), 0.35);
         events.emit('sfx', { name: 'hiss', x: centre.x, y: centre.y + 1, z: centre.z });
-        dialogue.sayOnce('steam', 'Mara', "Too hot to push through. There's a bypass on this line.");
+        dialogue.sayOnce('steam', 'Mara', 'Too hot to push through. Something up here is feeding that line.');
       },
     });
     triggers.add({
@@ -527,18 +766,31 @@ export class EngineRoute {
   }
 
   /** Dev/review helper: stand the player at a framed viewpoint of one route feature. */
-  debugFrame(which: 'vault' | 'ledge' | 'steam'): void {
+  debugFrame(which: 'vault' | 'ledge' | 'steam' | 'junction' | 'ram'): void {
     const spots = {
       vault: { k: 3, a: 10.6, f: 0.2, y: T1 },
       ledge: { k: 3, a: 11.2, f: 0.85, y: T1 },
       steam: { k: 8, a: 10.6, f: 0.2, y: T3 },
-    };
+      junction: { k: 8, a: 10.9, f: 0.2, y: T3, wall: true },
+      ram: { k: 9, a: 10.0, f: 0.45, y: T3 },
+    } as Record<string, { k: number; a: number; f: number; y: number; wall?: boolean }>;
     const s = spots[which];
     const feet = sidePos(s.k, s.a, uAt(s.a, s.f), s.y);
     const t = sideTangent(s.k);
-    const facing = Math.atan2(t.x, t.z);
+    // Face along the route, or toward the wall for the junction.
+    const facing = s.wall ? sideAngle(s.k) : Math.atan2(t.x, t.z);
     this.ctx.player.teleport(feet, facing);
     this.ctx.camera.snapBehind(feet, facing, 0.35);
+  }
+
+  /** Test helper: a world point on side k (apothem a, fraction f along the side, height y). */
+  debugPoint(k: number, a: number, f: number, y: number): number[] {
+    return sidePos(k, a, uAt(a, f), y).toArray();
+  }
+
+  /** Test helper: unit tangent of side k (toward increasing fraction). */
+  debugTangent(k: number): number[] {
+    return sideTangent(k).toArray();
   }
 
   /** Set by the level: the increment's ending beat. */
@@ -557,8 +809,9 @@ export class EngineRoute {
 
   /** Restore the initial state ("Restart section"). Recreates the lookout barrier. */
   reset(): void {
-    this.steamOn = true;
-    this.pistonPowered = false;
+    this.feed.reset();
+    this.lastEmptyRises = 0;
+    this.catchLever.set(false);
     this.collar.setMode('cycling', 0);
     for (const l of this.lights) l.extinguish();
     if (this.routeOpen) {
@@ -576,9 +829,16 @@ export class EngineRoute {
     this.openRoute();
     for (let j = 0; j <= i; j++) this.lightById.get(order[j])?.ignite(true);
     if (i >= 3 && this.collar.mode !== 'top') this.collar.setMode('top');
+    // Past the curtain: the ram waits primed at the bottom (or, at the exit, has carried her up).
     if (i >= 4) {
-      this.steamOn = false;
-      this.pistonPowered = true;
+      this.feed.reset();
+      this.feed.toggleCatch();
+      this.feed.toggleRoute();
+      if (id === 'exit') {
+        this.feed.release();
+        this.feed.ram = 1;
+      }
+      this.catchLever.set(this.feed.caught);
     }
   }
 
@@ -586,10 +846,11 @@ export class EngineRoute {
     return {
       collarHeld: () => this.collar.mode === 'held',
       collarTop: () => this.collar.mode === 'top',
-      steamOff: () => !this.steamOn,
+      steamOff: () => !this.feed.curtainOn,
+      ramPrimed: () => this.feed.primed,
       shuttleAtStart: () => this.shuttle.height === 0,
       shuttleAtEnd: () => this.shuttle.height === 1,
-      pistonDown: () => this.pistonPowered && this.breachPiston.height === 0,
+      pistonDown: () => this.feed.ram === 0,
       pistonUp: () => this.breachPiston.height === 1,
     };
   }
@@ -599,8 +860,13 @@ export class EngineRoute {
     this.time += dt;
     this.shuttle.fixedUpdate(dt);
     this.collar.fixedUpdate(dt);
-    if (this.pistonPowered) this.breachPiston.fixedUpdate(dt);
-    else this.breachPiston.stepDelta.set(0, 0, 0);
+    this.feed.step(dt, this.onRamDeck());
+    this.breachPiston.heightOverride = this.feed.height;
+    this.breachPiston.fixedUpdate(dt);
+    if (this.feed.emptyRises > this.lastEmptyRises) {
+      this.lastEmptyRises = this.feed.emptyRises;
+      this.ctx.dialogue.sayOnce('ram-empty', 'Mara', '...and up it goes. Without me.');
+    }
   }
 
   /** After the player moves: put platform colliders at this step's pose. */
@@ -613,7 +879,22 @@ export class EngineRoute {
   update(dt: number, time: number, alpha: number): void {
     this.shuttle.render(alpha);
     this.collar.render(alpha, time);
-    this.breachPiston.render(this.pistonPowered ? alpha : 1);
+    this.breachPiston.render(alpha);
+    // A caught ram strains against its pawl: a fine shudder and a relief valve hissing at the base.
+    this.shudder = this.feed.straining ? Math.sin(time * 57) * 0.004 : 0;
+    this.breachPiston.group.position.y += this.shudder;
+    this.reliefSteam.rate = this.feed.straining ? 5 : 0;
+    this.reliefSteam.update(dt);
+    this.pawl.rotation.x += ((this.feed.caught ? 0 : -1.1) - this.pawl.rotation.x) * (1 - Math.exp(-dt * 12));
+    this.catchLever.update(dt);
+    this.releaseLever.update(dt);
+    if (!this.feed.caught) this.releaseLever.set(false);
+    this.breachPiston.group.updateMatrixWorld(true);
+    this.releaseLever.group.getWorldPosition(this.releaseAnchor).add(v3(0, 1.1, 0));
+    for (const gauge of this.gauges) {
+      gauge.value += (gauge.target() - gauge.value) * (1 - Math.exp(-dt * 3));
+      gauge.needle.rotation.z = -((-2 / 3) * Math.PI + (4 / 3) * Math.PI * gauge.value) + (this.feed.straining && gauge.value > 0.9 ? Math.sin(time * 40) * 0.03 : 0);
+    }
     this.brakeLever.update(dt);
     if (this.collar.mode !== 'braking' && this.collar.mode !== 'cycling') this.brakeLever.set(false);
     this.deckLever.update(dt);
@@ -621,15 +902,17 @@ export class EngineRoute {
     this.collar.group.updateMatrixWorld(true);
     this.deckLeverAnchor.copy(this.deckLeverLocal).setY(this.collar.group.position.y + 1.25);
     for (const l of this.lights) l.update(dt, time);
+    this.boardLamp.update(dt, time);
     for (const e of this.curtain) {
       e.update(dt);
     }
     // Steam curtain fades out once redirected.
     const sheet = this.curtainSheet.material as THREE.MeshBasicMaterial;
-    sheet.opacity += ((this.steamOn ? 0.05 : 0) - sheet.opacity) * (1 - Math.exp(-dt * 3));
-    for (const e of this.curtain) e.rate = this.steamOn ? 16 : 0;
-    this.steamWheelAngle += ((this.steamOn ? 0 : Math.PI / 2) - this.steamWheelAngle) * (1 - Math.exp(-dt * 7));
-    this.steamValveWheel.rotation.z = this.steamWheelAngle;
+    sheet.opacity += ((this.feed.curtainOn ? 0.05 : 0) - sheet.opacity) * (1 - Math.exp(-dt * 3));
+    for (const e of this.curtain) e.rate = this.feed.curtainOn ? 16 : 0;
+    // The pointer bar leans toward the plate's VENT (left) or RAM (right).
+    this.feedWheelAngle += ((this.feed.route === 'vent' ? 0.6 : -0.6) - this.feedWheelAngle) * (1 - Math.exp(-dt * 7));
+    this.feedWheel.rotation.z = this.feedWheelAngle;
   }
 }
 
@@ -668,10 +951,11 @@ function buildEngineRoute(r: EngineRoute): RouteStep[] {
     { kind: 'move', to: p(7, 7.0, 0.5, T3), precise: true },
     { kind: 'move', to: p(7, 10.4, 0.5, T3), precise: true },
     { kind: 'move', to: p(8, 10.6, 0.15, T3), precise: true },
-    { kind: 'interact', id: 'steam-valve', standAt: p(8, 11.5, 0.25, T3), expectFlag: 'steam.redirected' },
+    { kind: 'interact', id: 'ram-catch', standAt: p(8, 11.4, 0.09, T3), expectFlag: 'ram.caught' },
+    { kind: 'interact', id: 'feed-diverter', standAt: p(8, 11.4, 0.25, T3), expectFlag: 'ram.primed' },
     { kind: 'move', to: p(9, 10.6, 0.6, T3), precise: true },
-    { kind: 'wait', until: 'pistonDown', timeout: 14 },
     { kind: 'move', to: p(9, 10.7, 0.86, T3), precise: true },
+    { kind: 'interact', id: 'ram-release', standAt: p(9, 10.7, 0.86, T3), expectFlag: 'ram.released' },
     { kind: 'wait', until: 'pistonUp', timeout: 10 },
     { kind: 'jump', from: [r.exitTakeoff.x, r.exitTakeoff.y, r.exitTakeoff.z], to: [r.exitLanding.x, r.exitLanding.y, r.exitLanding.z] },
     { kind: 'wait', until: 'complete', timeout: 20 },

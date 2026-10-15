@@ -39,7 +39,7 @@ async function stepUntil(page: Page, pred: (s: State) => boolean, maxSteps: numb
   return s;
 }
 
-test('increment route: drops, gap, vault, ledge catch, shuttle, collar, steam, piston, exit (autopilot)', async ({ page }) => {
+test('increment route: drops, gap, vault, ledge catch, shuttle, collar, split feed, ram, exit (autopilot)', async ({ page }) => {
   test.setTimeout(480_000);
   await boot(page);
   // Start at the lookout with the reveal already done, then run only the increment's part of the route.
@@ -51,7 +51,7 @@ test('increment route: drops, gap, vault, ledge catch, shuttle, collar, steam, p
   console.log(s.autopilot?.log.join('\n'));
   expect(s.autopilot?.state, s.autopilot?.message).toBe('done');
   expect(s.falls).toBe(0);
-  for (const f of ['collar.braked', 'collar.ridden', 'steam.redirected', 'exit.reached', 'engine.finished']) expect(s.flags).toContain(f);
+  for (const f of ['collar.braked', 'collar.ridden', 'ram.caught', 'steam.redirected', 'ram.primed', 'ram.released', 'exit.reached', 'engine.finished']) expect(s.flags).toContain(f);
   expect(s.complete).toBe(true);
   expect(errors).toEqual([]);
 });
@@ -83,8 +83,8 @@ test('steam curtain pushes Mara back without harm until the bypass is closed', a
   // The curtain sits about 0.94 m along the walk; the push keeps Mara short of it.
   expect(along(blocked.feet)).toBeLessThan(0.9);
   expect(blocked.falls).toBe(0);
-  // Close the bypass, start again from the same point: the same walk now passes the curtain.
-  await page.evaluate(() => (window as any).__GAME.game.interactions.get('steam-valve').interact());
+  // Send the feed to the ram, start again from the same point: the same walk now passes the curtain.
+  await page.evaluate(() => (window as any).__GAME.game.interactions.get('feed-diverter').interact());
   await step(page, 60);
   await page.evaluate((f) => (window as any).__GAME.setPlayer(f[0], f[1], f[2], 0), curtain.from);
   await step(page, 50);
@@ -122,4 +122,131 @@ test('a fall from the upper route recovers at the upper gantry with the collar s
   expect(back.checkpoint).toBe('engine-top');
   expect(Math.abs(back.feet[1] - top.feet[1])).toBeLessThan(0.3);
   expect(await level(page, '__GAME.game.level.engine.collar.mode')).toBe('top');
+});
+
+// ---------------------------------------------------------------- the split feed (R8)
+
+type Feed = { route: string; caught: boolean; ram: number; primed: boolean; straining: boolean; curtainOn: boolean; emptyRises: number };
+const feed = (page: Page) =>
+  page.evaluate(() => {
+    const f = (window as any).__GAME.game.level.engine.feed;
+    return { route: f.route, caught: f.caught, ram: f.ram, primed: f.primed, straining: f.straining, curtainOn: f.curtainOn, emptyRises: f.emptyRises } as Feed;
+  });
+const use = (page: Page, id: string) => page.evaluate((i) => (window as any).__GAME.game.interactions.get(i).interact(), id);
+/** Stand Mara on the ram deck, facing its release lever. */
+const standOnRam = (page: Page) =>
+  page.evaluate(() => {
+    const g = (window as any).__GAME;
+    const e = g.game.level.engine;
+    const deck = e.breachPiston.group.position;
+    const lever = e.releaseAnchor;
+    const facing = Math.atan2(lever.x - deck.x, lever.z - deck.z);
+    g.setPlayer(deck.x, deck.y + 0.05, deck.z, facing);
+  });
+
+test('split feed: feeding the ram first sends it up empty; venting, catching and feeding again primes it', async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => {
+    const w = window as any;
+    w.__lines = [];
+    w.__GAME.game.events.on('line', (l: { text: string }) => w.__lines.push(l.text));
+  });
+  await page.evaluate(() => (window as any).__GAME.teleport('engine-top'));
+  await step(page, 10);
+  let f = await feed(page);
+  expect(f.curtainOn).toBe(true);
+  expect(f.ram).toBe(0);
+  // The natural first try: feed the ram. The steam stops, but the ram leaves without her.
+  await use(page, 'feed-diverter');
+  await step(page, 60 * 3);
+  f = await feed(page);
+  expect(f.curtainOn).toBe(false);
+  expect(f.ram).toBe(1);
+  expect(f.emptyRises).toBe(1);
+  // Her remark queues behind the line about the steam stopping.
+  await step(page, 60 * 5);
+  expect(await page.evaluate(() => (window as any).__lines.some((t: string) => t.includes('Without me')))).toBe(true);
+  // Recover entirely from the junction: vent (ram drops, steam returns), catch, feed the ram.
+  await use(page, 'feed-diverter');
+  await step(page, 60 * 3);
+  f = await feed(page);
+  expect(f.ram).toBe(0);
+  expect(f.curtainOn).toBe(true);
+  await use(page, 'ram-catch');
+  await use(page, 'feed-diverter');
+  await step(page, 60 * 4);
+  f = await feed(page);
+  expect(f.primed).toBe(true);
+  expect(f.straining).toBe(true);
+  expect(f.ram).toBe(0);
+  expect(f.curtainOn).toBe(false);
+  // Board the deck: the release is offered there, and pressing E (real key) carries her up.
+  await standOnRam(page);
+  await step(page, 20);
+  expect((await state(page)).focused).toBe('ram-release');
+  await page.keyboard.press('KeyE');
+  await step(page, 60 * 3);
+  f = await feed(page);
+  expect(f.caught).toBe(false);
+  expect(f.ram).toBe(1);
+  const s = await state(page);
+  expect(s.feet[1]).toBeGreaterThan(9.2 + 2.3);
+  expect(s.flags).toContain('ram.released');
+  expect(errors).toEqual([]);
+});
+
+test('split feed: catching the ram at the top holds it out of reach until freed', async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => (window as any).__GAME.teleport('engine-top'));
+  await use(page, 'feed-diverter');
+  await step(page, 60 * 3);
+  await use(page, 'ram-catch');
+  await use(page, 'feed-diverter');
+  await step(page, 60 * 3);
+  let f = await feed(page);
+  expect(f.ram).toBe(1);
+  expect(f.curtainOn).toBe(true);
+  expect(f.straining).toBe(true);
+  await use(page, 'ram-catch');
+  await step(page, 60 * 3);
+  f = await feed(page);
+  expect(f.ram).toBe(0);
+  expect(f.caught).toBe(false);
+});
+
+test('split feed: the breach checkpoint reloads primed; a missed jump after riding recovers primed', async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => (window as any).__GAME.teleport('breach'));
+  await step(page, 10);
+  let f = await feed(page);
+  expect(f.primed).toBe(true);
+  await standOnRam(page);
+  await step(page, 20);
+  await use(page, 'ram-release');
+  await step(page, 60 * 3);
+  expect((await feed(page)).ram).toBe(1);
+  // Fall off the raised ram into the breach.
+  await page.evaluate(() => {
+    const e = (window as any).__GAME.game.level.engine;
+    const c = e.exitCenter;
+    (window as any).__GAME.setPlayer(c.x, c.y - 4, c.z, 0);
+  });
+  const s = await stepUntil(page, (x) => x.falls > 0 && x.grounded, 60 * 8);
+  expect(s.falls).toBeGreaterThan(0);
+  expect(s.checkpoint).toBe('breach');
+  f = await feed(page);
+  expect(f.primed).toBe(true);
+  expect(f.ram).toBe(0);
+});
+
+test('restart resets the split feed', async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => (window as any).__GAME.teleport('engine-top'));
+  await use(page, 'ram-catch');
+  await use(page, 'feed-diverter');
+  await step(page, 30);
+  await page.evaluate(() => (window as any).__GAME.restart());
+  await step(page, 5);
+  const f = await feed(page);
+  expect(f).toMatchObject({ route: 'vent', caught: false, ram: 0, curtainOn: true });
 });

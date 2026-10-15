@@ -9,6 +9,7 @@ import { Sky } from '../world/Atmosphere';
 import { PlayerController } from '../player/PlayerController';
 import { PlayerAvatar } from '../player/PlayerAvatar';
 import { buildMara } from '../character/MaraModel';
+import { DropShadow } from '../player/DropShadow';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { Progression, Checkpoints, Triggers } from '../gameplay/Progression';
 import { InteractionSystem } from '../gameplay/Interaction';
@@ -58,6 +59,7 @@ export class Game {
   pipeline!: RenderPipeline;
   player!: PlayerController;
   avatar!: PlayerAvatar;
+  dropShadow!: DropShadow;
   camera!: ThirdPersonCamera;
   level!: Level;
   autopilot: Autopilot | null = null;
@@ -117,6 +119,7 @@ export class Game {
     this.player = new PlayerController(this.physics, this.events, spawn, 0);
     this.player.traversal = this.traversal;
     this.avatar = new PlayerAvatar(this.scene, this.textures);
+    this.dropShadow = new DropShadow(this.scene);
     this.camera = new ThirdPersonCamera(this.physics, this.player.collider);
     this.pipeline = new RenderPipeline(this.container, this.scene, this.camera.camera);
     this.container.insertBefore(this.pipeline.canvas, this.hud.root);
@@ -338,6 +341,7 @@ export class Game {
     this.camera.clearShot();
     this.camera.snapBehind(cp.feet, cp.facing, 0.32, cp.cameraYaw);
     this.triggers.resetPresence();
+    this.level.onRespawn?.(cp.id);
     this.respawnFade = 1;
     if (reason === 'fall') this.audio.play('respawn');
   }
@@ -482,6 +486,7 @@ export class Game {
     });
     this.camera.update(dt, this.input.consumeLook(), feet, this.player.grounded, this.player.speed);
     this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.5, 1.25, this.camera.distance));
+    this.dropShadow.update(this.physics, feet, this.player.grounded, this.player.collider, this.camera.inShot || this.camera.distance > 0.8);
     this.level.update(dt, this.time, alpha);
     this.sky.update(this.time, this.camera.camera.position);
     this.audio.setListener(this.camera.camera);

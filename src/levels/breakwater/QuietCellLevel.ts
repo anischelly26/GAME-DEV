@@ -59,6 +59,8 @@ export class QuietCellLevel implements Level {
   private autoHint = 0;
   /** Next tier for a requested hint. */
   private requestedHint = 0;
+  /** Requested hints for the split feed at the breach. */
+  private requestedEngineHint = 0;
   private lastPulse = 0;
   private sequence: { t: number; steps: Array<{ at: number; run: () => void; done?: boolean }> } | null = null;
   private fadeLevel = 0;
@@ -475,7 +477,7 @@ export class QuietCellLevel implements Level {
       revealDone: () => ctx.progression.has('reveal.done'),
     };
     this.route = [...buildRoute(), ...this.engine.route];
-    this.routeParts = { slice: buildRoute(), engine: this.engine.route };
+    this.routeParts = { slice: buildRoute(), engine: this.engine.route, feed: this.engine.feedRoute };
     this.startIntro();
   }
 
@@ -759,6 +761,12 @@ export class QuietCellLevel implements Level {
 
   /** A hint the player asked for (pause menu): the next tier, up to the explicit solution. */
   hint(): void {
+    // Up at the split feed, hints are about that puzzle (their own escalation).
+    if (this.engine.feedPuzzleActive) {
+      this.engine.hint(HINT_ORDER[Math.min(this.requestedEngineHint, HINT_ORDER.length - 1)]);
+      this.requestedEngineHint++;
+      return;
+    }
     if (this.logic.hatch !== 'closed') {
       const next = this.ctx.progression.objective || 'Explore the lookout';
       this.ctx.hud.tip(`Objective: ${next}.`);
@@ -859,6 +867,11 @@ export class QuietCellLevel implements Level {
     }
   }
 
+  /** After a fall recovery at a checkpoint. */
+  onRespawn(checkpointId: string): void {
+    this.engine.onRespawn(checkpointId);
+  }
+
   afterPlayer(): void {
     this.engine.applyMotion();
   }
@@ -905,6 +918,7 @@ export class QuietCellLevel implements Level {
     this.hintTimer = 0;
     this.autoHint = 0;
     this.requestedHint = 0;
+    this.requestedEngineHint = 0;
     this.falling = false;
     this.fadeLevel = 0;
     this.startIntro();

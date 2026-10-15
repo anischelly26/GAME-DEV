@@ -157,3 +157,102 @@ export function buildBarrierBeam(batch: Batcher, m: MaterialLibrary, frame: THRE
   cap.castShadow = cap.receiveShadow = true;
   parent.add(cap);
 }
+
+function canvas(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  draw(c.getContext('2d')!);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+/** Gauge face with a name, ticks and a red band at the top of the scale. */
+export function dialTexture(label: string): THREE.CanvasTexture {
+  return canvas(256, 256, (g) => {
+    const c = 128;
+    g.fillStyle = '#e6dcc4';
+    g.beginPath();
+    g.arc(c, c, 124, 0, Math.PI * 2);
+    g.fill();
+    const ang = (v: number) => (-2 / 3) * Math.PI + (4 / 3) * Math.PI * v - Math.PI / 2;
+    g.strokeStyle = '#b5372a';
+    g.lineWidth = 16;
+    g.beginPath();
+    g.arc(c, c, 92, ang(0.85), ang(1));
+    g.stroke();
+    g.strokeStyle = '#2a2420';
+    for (let i = 0; i <= 10; i++) {
+      const a = ang(i / 10);
+      g.lineWidth = i % 5 === 0 ? 6 : 3;
+      g.beginPath();
+      g.moveTo(c + Math.cos(a) * 104, c + Math.sin(a) * 104);
+      g.lineTo(c + Math.cos(a) * (i % 5 === 0 ? 76 : 88), c + Math.sin(a) * (i % 5 === 0 ? 76 : 88));
+      g.stroke();
+    }
+    g.fillStyle = '#2a2420';
+    g.font = 'bold 40px "Arial Black", Arial, sans-serif';
+    g.textAlign = 'center';
+    g.fillText(label, c, c + 78);
+    g.lineWidth = 6;
+    g.beginPath();
+    g.arc(c, c, 122, 0, Math.PI * 2);
+    g.stroke();
+  });
+}
+
+/** Diverter plate: FEED, with VENT on the left and RAM on the right. */
+export function feedPlateTexture(): THREE.CanvasTexture {
+  return canvas(512, 256, (g) => {
+    g.fillStyle = '#d9cfb6';
+    g.fillRect(0, 0, 512, 256);
+    g.strokeStyle = '#2a2420';
+    g.lineWidth = 10;
+    g.strokeRect(8, 8, 496, 240);
+    g.fillStyle = '#2a2420';
+    g.textAlign = 'center';
+    g.font = 'bold 48px "Arial Black", Arial, sans-serif';
+    g.fillText('FEED', 256, 66);
+    g.font = 'bold 42px Arial, sans-serif';
+    g.fillText('VENT', 104, 222);
+    g.fillText('RAM', 408, 222);
+    g.lineWidth = 8;
+    for (const [x0, x1] of [
+      [200, 130],
+      [312, 382],
+    ]) {
+      g.beginPath();
+      g.moveTo(x0, 150);
+      g.lineTo(x1, 150);
+      g.stroke();
+      g.beginPath();
+      const d = Math.sign(x1 - x0);
+      g.moveTo(x1, 150);
+      g.lineTo(x1 - d * 22, 134);
+      g.lineTo(x1 - d * 22, 166);
+      g.fill();
+    }
+  });
+}
+
+/** Catch plate: what the catch does, in the cell's diagram language. */
+export function catchPlateTexture(): THREE.CanvasTexture {
+  return canvas(512, 256, (g) => {
+    g.fillStyle = '#d9cfb6';
+    g.fillRect(0, 0, 512, 256);
+    g.strokeStyle = '#2a2420';
+    g.lineWidth = 10;
+    g.strokeRect(8, 8, 496, 240);
+    g.fillStyle = '#2a2420';
+    g.textAlign = 'center';
+    g.font = 'bold 46px "Arial Black", Arial, sans-serif';
+    g.fillText('RAM CATCH', 256, 70);
+    g.font = 'bold 30px Arial, sans-serif';
+    g.fillText('HOLDS THE RAM', 256, 140);
+    g.fillText('WHERE IT STANDS', 256, 184);
+    g.font = 'italic 24px Georgia, serif';
+    g.fillText('release on the deck', 256, 228);
+  });
+}

@@ -53,6 +53,9 @@ const shots = [
   { name: '15-steam-curtain', cp: 'engine-top', pre: () => G(() => window.__GAME.game.level.engine.debugFrame('steam')), steps: 40 },
   { name: '16-breach-piston', cp: 'breach', steps: 60 },
   { name: '17-exit-gantry', cp: 'exit', steps: 60 },
+  // Split-feed puzzle (R8): the junction (CATCH, gauges, FEED) and the caught ram at the breach.
+  { name: '18-feed-junction', cp: 'engine-top', pre: () => G(() => window.__GAME.game.level.engine.debugFrame('junction')), steps: 40 },
+  { name: '19-ram-primed', cp: 'breach', pre: () => G(() => window.__GAME.game.level.engine.debugFrame('ram')), steps: 40 },
   // Character and polish comparisons (matched framings for before/after review).
   // c1 repeats the framing of Codex's probe-character-front.png (restart, camera yaw pi, pitch 0.05).
   { name: 'c1-mara-front-probe', cp: 'cell', pre: () => G(() => window.__GAME.restart()), steps: 30, cam: [Math.PI, 0.05] },
