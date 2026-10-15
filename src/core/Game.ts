@@ -404,7 +404,7 @@ export class Game {
     if (!this.options.test) this.input.requestPointerLock();
   }
 
-  private complete(card?: { title: string; body: string }): void {
+  private complete(card?: { title: string; body: string; reward?: boolean }): void {
     this.progression.complete = true;
     this.state = 'complete';
     this.input.setGameplayActive(false);
@@ -571,7 +571,8 @@ export class Game {
       interacting: this.player.isLocked || !!this.hud.documentOpen,
       forwardInput: moveLen > 0.2 ? this.lastMove.y / moveLen : 0,
     });
-    this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.5, 1.25, this.camera.distance));
+    // Fade only when the camera is right inside Mara's space: partial dithered opacity reads as grain.
+    this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.38, 0.72, this.camera.distance));
     this.dropShadow.update(this.physics, feet, this.player.grounded, this.player.collider, this.camera.inShot || this.camera.distance > 0.8);
     this.level.update(dt, this.time, alpha);
     this.sky.update(this.time, this.camera.camera.position);

@@ -158,6 +158,7 @@ export class HUD {
 
   hideScreen(): void {
     this.screen.classList.add('hidden');
+    this.screen.classList.remove('reward');
   }
 
   get screenVisible(): boolean {
@@ -165,7 +166,7 @@ export class HUD {
   }
 
   showPause(h: PauseHandlers, canRestartCheckpoint: boolean): void {
-    this.screen.classList.remove('hidden');
+    this.screen.classList.remove('hidden', 'reward');
     const s = this.settings;
     this.card.innerHTML = `
       <div class="eyebrow">Paused</div>
@@ -215,14 +216,19 @@ export class HUD {
     });
   }
 
-  showComplete(stats: { time: number; falls: number; title?: string; body?: string }, onRestart: () => void, onContinue: () => void): void {
+  /**
+   * The completion screen. With `reward` it is laid over the current view (the vista the ending
+   * framed) as a title card, with the choices fading in after a moment, rather than a menu.
+   */
+  showComplete(stats: { time: number; falls: number; title?: string; body?: string; reward?: boolean }, onRestart: () => void, onContinue: () => void): void {
     this.screen.classList.remove('hidden');
+    this.screen.classList.toggle('reward', !!stats.reward);
     const mins = Math.floor(stats.time / 60);
     const secs = Math.floor(stats.time % 60)
       .toString()
       .padStart(2, '0');
     this.card.innerHTML = `
-      <div class="eyebrow">Section complete</div>
+      <div class="eyebrow">${stats.reward ? 'Breakwater' : 'Section complete'}</div>
       <h2>${stats.title ?? 'Out of the Quiet Cell'}</h2>
       <p>${
         stats.body ??
@@ -230,7 +236,7 @@ export class HUD {
       }</p>
       <div class="stats"><div><b>${mins}:${secs}</b>time</div><div><b>${stats.falls}</b>falls</div></div>
       <div class="buttons">
-        <button class="primary" data-a="restart">Restart section</button>
+        <button class="primary" data-a="restart">${stats.reward ? 'Play Chapter One again' : 'Restart section'}</button>
         <button data-a="continue">Keep exploring</button>
       </div>`;
     this.card.querySelector('[data-a="restart"]')!.addEventListener('click', onRestart);

@@ -6,6 +6,7 @@ import { Palette } from '../../world/materials';
 import { saltStainTexture } from '../../world/textures';
 import { PressureHatch, OPENING } from '../../world/props/PressureHatch';
 import { hazardStripeTexture } from '../../world/props/Maintenance';
+import { Hangar } from '../../world/props/Hangar';
 import { ServiceLight, WorkLamp } from '../../world/props/Lanterns';
 import { LightShaft, SteamEmitter, Water } from '../../world/Atmosphere';
 import { PressureHatchLogic, enginePulse, LIFT_THRESHOLD } from '../../gameplay/puzzles/PressureHatchLogic';
@@ -167,6 +168,17 @@ export class QuietCellLevel implements Level {
       }
       door.position.set(CELL.x1 - 0.04, cy + 1.05, 30.6);
       door.castShadow = door.receiveShadow = true;
+      // The warden's transfer order, nailed inside the door: why Mara is here, and a pencilled
+      // answer from whoever fixed her pipe.
+      this.orderCanvas = transferOrderCanvas();
+      const orderTex = new THREE.CanvasTexture(this.orderCanvas);
+      orderTex.colorSpace = THREE.SRGBColorSpace;
+      orderTex.anisotropy = 4;
+      const order = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.45), new THREE.MeshStandardMaterial({ map: orderTex, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2 }));
+      order.position.set(CELL.x1 - 0.105, cy + 1.22, 30.48);
+      order.rotation.set(0, -Math.PI / 2, 0.04);
+      root.add(order);
+      this.orderPos.copy(order.position);
       const slot = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.5), m.cellShadow);
       slot.position.set(CELL.x1 - 0.04, cy + 1.65, 30.6);
       root.add(door, slot);
@@ -500,6 +512,15 @@ export class QuietCellLevel implements Level {
 
     // ------------------------------------------------------------ the next increment: the engine route
     this.engine = new EngineRoute(ctx);
+    // Chapter Two's destination, visible through the breach: the seaplane hangar on its rock spur,
+    // about 70 m out and a little left of the view from the exit gantry.
+    {
+      const ex = this.engine.exitCenter;
+      const dir = v3(Math.sin(sideAngle10 + 0.44), 0, Math.cos(sideAngle10 + 0.44));
+      const at = ex.clone().addScaledVector(dir, 72).setY(0);
+      this.hangar = new Hangar(at, Math.atan2(ex.x - at.x, ex.z - at.z));
+      scene.add(this.hangar.group);
+    }
     this.engine.onExit = () => this.finishEngine();
 
     // ------------------------------------------------------------ gameplay wiring
@@ -521,6 +542,9 @@ export class QuietCellLevel implements Level {
   }
 
   private channelSteam: SteamEmitter;
+  private orderCanvas!: HTMLCanvasElement;
+  private readonly orderPos = new THREE.Vector3();
+  private hangar!: Hangar;
   private intercomLamp: THREE.MeshStandardMaterial | null = null;
   private readonly intercomPos = new THREE.Vector3();
 
@@ -565,6 +589,21 @@ export class QuietCellLevel implements Level {
         hud.showDocument('diagram', this.hatch.diagramImage(), 'Scratched beside the hatch');
         const first = progression.set('clue.read');
         if (first) dialogue.say('Mara', 'Two ways for the pressure to go. Out the vent... or up into the piston.', undefined, { story: true, maxWait: 6 });
+        events.emit('sfx', { name: 'paper' });
+      },
+    });
+
+    interactions.add({
+      id: 'order',
+      position: this.orderPos,
+      radius: 1.9,
+      prompt: () => 'Read the notice on the door',
+      interact: () => {
+        player.lockFor(0.4, this.orderPos);
+        hud.showDocument('order', this.orderCanvas.toDataURL(), 'Nailed inside the cell door');
+        if (progression.set('order.read')) {
+          dialogue.say('Mara', 'They carried me in asleep, to make me sign. And someone fixed my pipe before I woke.', undefined, { story: true, maxWait: 6 });
+        }
         events.emit('sfx', { name: 'paper' });
       },
     });
@@ -863,38 +902,54 @@ export class QuietCellLevel implements Level {
     this.timers.push({ t: seconds, run });
   }
 
-  /** Chapter One's ending: out on the gantry in the breach, with the harbour below. */
+  /**
+   * Chapter One's ending: out on the gantry in the breach, the sea wind and the harbour below.
+   * The camera comes round over Mara's shoulder; the intercom points her to the seaplane hangar on
+   * the spur, whose lights come up as it is named; then the completion card lies over that view.
+   */
   private finishEngine(): void {
-    const { progression, dialogue, camera, events, hud } = this.ctx;
+    const { progression, dialogue, camera, events } = this.ctx;
     if (progression.has('engine.finished')) return;
     progression.set('engine.finished');
     progression.setObjective('');
     const ex = this.engine.exitCenter;
     const out = v3(Math.sin(sideAngle10), 0, Math.cos(sideAngle10));
+    const toHangar = this.hangar.focus.clone().sub(ex).setY(0).normalize();
+    const side = v3(toHangar.z, 0, -toHangar.x);
     this.sequence = {
       t: 0,
       steps: [
         { at: 0.2, run: () => this.ctx.setControl(false) },
+        // Over the shoulder, out to sea.
         { at: 0.25, watchOnly: true, run: () => camera.playShot(ex.clone().addScaledVector(out, -3.2).add(v3(1.6, 2.2, 0)), ex.clone().addScaledVector(out, 40).add(v3(0, -6, 0)), 3.0) },
         { at: 1.4, watchOnly: true, run: () => events.emit('sfx', { name: 'intercom', x: ex.x, y: ex.y + 1, z: ex.z }) },
         { at: 1.9, watchOnly: true, run: () => dialogue.say('Intercom', "You made the engine carry you. You're out of the cells, not off the rock.", 3.8) },
         { at: 6.0, watchOnly: true, run: () => dialogue.say('Mara', 'Who are you? Who brought me here?', 2.4, { story: true }) },
-        { at: 8.6, watchOnly: true, run: () => dialogue.say('Intercom', 'Sorn wants your signature, or your silence. The only thing on Breakwater that still flies is in the hangar cell. Get there.', 5.4) },
-        { at: 14.2, watchOnly: true, run: () => dialogue.say('Mara', 'Ivo. It has to be.', 2, { story: true }) },
+        { at: 8.6, watchOnly: true, run: () => dialogue.say('Intercom', "Sorn wants your signature, or your silence. Look left, past the breach. The old hangar on the spur.", 4.6) },
+        // The hangar's work lights come up as it is named; the camera swings to frame it past Mara.
         {
-          at: 16.6,
-          watchOnly: true,
-          run: () => hud.story({ eyebrow: 'End of Chapter One', title: 'The Quiet Cell', text: 'Mara is out of the cell block. Somewhere above her, in the hangar cell, an old aircraft is waiting.' }),
+          at: 10.6,
+          run: () => {
+            this.hangar.setLit(true);
+            events.emit('sfx', { name: 'lampOn', x: ex.x, y: ex.y, z: ex.z, volume: 0.6 });
+          },
         },
         {
-          at: 21.4,
-          run: () => {
-            hud.story(null);
+          at: 10.7,
+          watchOnly: true,
+          // Aim below the hangar so it sits in the upper third, above the completion card.
+          run: () => camera.playShot(ex.clone().addScaledVector(toHangar, -3.4).addScaledVector(side, -1.3).add(v3(0, 2.6, 0)), this.hangar.focus.clone().add(v3(0, -12, 0)), 4.0),
+        },
+        { at: 13.4, watchOnly: true, run: () => dialogue.say('Intercom', "There's a seaplane in there. The only thing on Breakwater that still flies. Get to it before the tide turns.", 5.0) },
+        { at: 18.6, watchOnly: true, run: () => dialogue.say('Mara', 'Ivo. It has to be.', 2, { story: true }) },
+        {
+          at: 21.0,
+          run: () =>
             this.ctx.complete({
               title: 'Chapter One complete',
-              body: 'The machine that held the prison together just carried you out of the cell block. Next: Chapter Two, Wings in a Cage, the hangar cell and the old aircraft. It is in development; this is the end of the current build.',
-            });
-          },
+              body: 'Mara is out of the cell block, and the old seaplane is waiting in the hangar on the spur. Next: Chapter Two, <i>Wings in a Cage</i> (in development).',
+              reward: true,
+            }),
         },
       ],
     };
@@ -1034,6 +1089,7 @@ export class QuietCellLevel implements Level {
   update(dt: number, time: number, alpha: number): void {
     this.ctx.hud.setSkipHint(this.cinematicActive, this.ctx.input.usingGamepad);
     this.engine.update(dt, time, alpha);
+    this.hangar.update(dt);
     this.hatch.update(dt, time, this.logic.pressure);
     this.hall.update(dt, time, this.ctx.camera.camera.position);
     this.landingLight.update(dt, time);
@@ -1077,6 +1133,7 @@ export class QuietCellLevel implements Level {
     this.falling = false;
     this.fadeLevel = 0;
     this.jumpHintAt = this.ropeHintAt = null;
+    this.hangar.setLit(false, true);
     this.startIntro();
   }
 
@@ -1146,4 +1203,81 @@ function buildRoute(): RouteStep[] {
     { kind: 'interact', id: 'lookout-light', standAt: [-0.45, LOOKOUT.y, 13.5], expectFlag: 'lookout.lit' },
     { kind: 'wait', until: 'revealDone', timeout: 20 },
   ];
+}
+
+/** The warden's transfer order (Chapter One's "why am I here"), with Ivo's pencilled reply. */
+function transferOrderCanvas(): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = 600;
+  c.height = 800;
+  const g = c.getContext('2d')!;
+  const rng = mulberry32(417);
+  // Damp, yellowed paper with a torn corner and nail holes.
+  g.fillStyle = '#d8ccb0';
+  g.fillRect(0, 0, 600, 800);
+  for (let i = 0; i < 70; i++) {
+    g.fillStyle = `rgba(110, 86, 52, ${0.03 + rng() * 0.05})`;
+    g.beginPath();
+    g.arc(rng() * 600, rng() * 800, 10 + rng() * 60, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = '#2b2620';
+  for (const [x, y] of [[300, 24], [300, 776]]) {
+    g.beginPath();
+    g.arc(x, y, 6, 0, Math.PI * 2);
+    g.fill();
+  }
+  const type = (text: string, x: number, y: number, size = 24, weight = '') => {
+    g.font = `${weight} ${size}px "Courier New", Courier, monospace`;
+    g.fillStyle = 'rgba(28, 24, 20, 0.88)';
+    g.fillText(text, x, y);
+  };
+  g.textAlign = 'center';
+  type('BREAKWATER', 300, 80, 34, 'bold');
+  type("WARDEN'S OFFICE", 300, 116, 22);
+  g.fillRect(70, 136, 460, 2);
+  type('TRANSFER ORDER  No. 0417', 300, 180, 24, 'bold');
+  g.textAlign = 'left';
+  const lines = [
+    'Prisoner:   M. VENN',
+    'Trade:      tide-engine mechanic,',
+    '            Saltmere municipal works',
+    'Received:   night tide, asleep.',
+    '            No papers. No visitors.',
+    '',
+    'Hold in cell C-4 until she signs',
+    'the diversion certificate.',
+  ];
+  lines.forEach((t, i) => type(t, 70, 240 + i * 36, 22));
+  type('By order,', 70, 560, 22);
+  // Signature.
+  g.strokeStyle = 'rgba(30, 30, 60, 0.85)';
+  g.lineWidth = 3;
+  g.beginPath();
+  g.moveTo(80, 610);
+  g.bezierCurveTo(130, 570, 150, 640, 190, 600);
+  g.bezierCurveTo(220, 575, 240, 625, 300, 598);
+  g.stroke();
+  type('Warden SORN', 80, 640, 20);
+  // A red HOLD stamp, slightly crooked.
+  g.save();
+  g.translate(450, 590);
+  g.rotate(-0.22);
+  g.strokeStyle = 'rgba(160, 40, 30, 0.75)';
+  g.lineWidth = 5;
+  g.strokeRect(-80, -34, 160, 68);
+  g.font = 'bold 44px Georgia, serif';
+  g.fillStyle = 'rgba(160, 40, 30, 0.75)';
+  g.textAlign = 'center';
+  g.fillText('HOLD', 0, 15);
+  g.restore();
+  // Ivo's pencilled reply, squeezed in at the bottom.
+  g.save();
+  g.translate(90, 720);
+  g.rotate(-0.05);
+  g.font = 'italic 26px "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive';
+  g.fillStyle = 'rgba(55, 55, 60, 0.85)';
+  g.fillText("Line's fixed. Read the wall.  - I.", 0, 0);
+  g.restore();
+  return c;
 }

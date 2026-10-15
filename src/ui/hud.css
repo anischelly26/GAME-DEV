@@ -161,6 +161,16 @@ html, body {
   transition: opacity 0.35s;
 }
 .screen.hidden { opacity: 0; pointer-events: none; }
+/* The chapter's end: a title card over the vista, not a menu. */
+.screen.reward { align-items: end; padding-bottom: 4vh; background: linear-gradient(to top, rgba(2, 5, 7, 0.92) 0%, rgba(2, 5, 7, 0.5) 38%, rgba(2, 5, 7, 0) 68%); transition: opacity 1.2s; }
+.screen.reward .card { width: min(660px, 92vw); text-align: center; background: transparent; border: none; box-shadow: none; animation: reward-in 1.6s ease-out both; }
+.screen.reward .card { padding: 14px 24px; }
+.screen.reward .card h2 { font-size: clamp(30px, 4.2vw, 48px); letter-spacing: 0.03em; text-shadow: 0 2px 18px #000; }
+.screen.reward .card p { margin: 6px 0; }
+.screen.reward .card p { color: var(--ink); text-shadow: 0 1px 10px #000; }
+.screen.reward .stats, .screen.reward .buttons { justify-content: center; }
+.screen.reward .buttons { animation: reward-in 0.8s ease-out 2s both; }
+@keyframes reward-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 .card {
   width: min(560px, 92vw);
   max-height: 92vh;

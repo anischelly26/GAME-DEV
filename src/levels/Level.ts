@@ -37,8 +37,8 @@ export interface LevelContext {
   traversal: TraversalSurfaces;
   /** Respawn at the current checkpoint (used by fall recovery). */
   respawn(reason: 'fall' | 'manual'): void;
-  /** Show the completion screen. */
-  complete(card?: { title: string; body: string }): void;
+  /** Show the completion screen (`reward`: laid over the current view rather than a menu). */
+  complete(card?: { title: string; body: string; reward?: boolean }): void;
   /** Hold or release player control (cutscene beats). */
   setControl(enabled: boolean): void;
 }

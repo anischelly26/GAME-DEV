@@ -7,6 +7,7 @@ import { LIFT_THRESHOLD } from '../../gameplay/puzzles/PressureHatchLogic';
 import { clamp, damp, smoothstep } from '../../core/math';
 import { pipeAlong } from './Mechanisms';
 import { SteamEmitter } from '../Atmosphere';
+import { FlowStrip } from './FlowStrip';
 
 /**
  * Layout of the hatch wall in its local frame: the wall's inner face is the XY plane at z = 0,
@@ -160,6 +161,26 @@ export class PressureHatch {
     );
     glassCover.position.copy(GAUGE).setZ(GAUGE.z + 0.04);
     this.group.add(branch, stalk, dialCase, face, this.needle, hub, glassCover);
+    // Where the pressure goes, painted on the pipes: down the vent branch while the bypass is open,
+    // along the branch and up into the piston once it is shut (same language as the engine's feed).
+    const front = (_d: THREE.Vector3) => new THREE.Vector3(0, 0, 1);
+    const zf = PIPE_Z + 0.068;
+    this.ventFlow = new FlowStrip([new THREE.Vector3(-1.75, 1.12, zf), new THREE.Vector3(-1.75, 0.36, zf)], front, { width: 0.07 });
+    this.pistonFlow = new FlowStrip(
+      [
+        new THREE.Vector3(-1.45, 1.2, zf - 0.005),
+        new THREE.Vector3(-1.32, 0.95, zf - 0.005),
+        new THREE.Vector3(-1.2, 0.6, zf - 0.005),
+        new THREE.Vector3(-0.95, 0.42, zf - 0.005),
+        new THREE.Vector3(BARREL.x - 0.13, 0.4, zf - 0.005),
+        new THREE.Vector3(BARREL.x, 0.55, PIPE_Z + BARREL.r + 0.012),
+        new THREE.Vector3(BARREL.x, 1.95, PIPE_Z + BARREL.r + 0.012),
+      ],
+      front,
+      { width: 0.07 },
+    );
+    this.group.add(this.ventFlow.group, this.pistonFlow.group);
+    this.ventFlow.set(true, true);
 
     // --- piston barrel, telescoping rod and crossbar to the hatch
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(BARREL.r, BARREL.r, BARREL.y1 - BARREL.y0, 18), m.brass);
@@ -321,7 +342,12 @@ export class PressureHatch {
   setValve(open: boolean, instant = false): void {
     this.wheelTarget = open ? 0 : Math.PI / 2;
     if (instant) this.wheelAngle = this.wheelTarget;
+    this.ventFlow.set(open, instant);
+    this.pistonFlow.set(!open, instant);
   }
+
+  private readonly ventFlow: FlowStrip;
+  private readonly pistonFlow: FlowStrip;
 
   /** Lever animation. `success` keeps it down; otherwise it springs back. */
   pullLever(success: boolean): void {
@@ -377,6 +403,8 @@ export class PressureHatch {
 
   /** Visual update (render frame). */
   update(dt: number, time: number, pressure: number): void {
+    this.ventFlow.update(dt);
+    this.pistonFlow.update(dt);
     this.wheelAngle = damp(this.wheelAngle, this.wheelTarget, 7, dt);
     this.wheel.rotation.z = this.wheelAngle;
     // Needle settles with a little overshoot and buzz under pressure.

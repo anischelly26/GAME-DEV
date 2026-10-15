@@ -259,12 +259,27 @@ export class ThirdPersonCamera {
       this.focus.y = clamp(this.focus.y, targetY - 1.0, targetY + 1.2);
     }
 
-    // --- spring arm: never through geometry; when squeezed, rise over the shoulder a little
-    const squeeze = clamp((2.2 - this.currentDist) / 1.8, 0, 1) * (this.zoneDist > 2.5 ? 1 : 0);
-    const pitch = Math.min(1.25, this.pitch + squeeze * 0.3);
-    const cp = Math.cos(pitch);
-    const dir = new THREE.Vector3(Math.sin(this.yaw) * cp, Math.sin(pitch), Math.cos(this.yaw) * cp);
-    const free = this.physics.sphereCastDistance(this.focus, dir, this.zoneDist + 0.3, PROBE_RADIUS, this.exclude);
+    // --- spring arm: never through geometry. When the arm is blocked at the player's pitch (a
+    // doorway's lintel, a wall above a ledge), it tries a lower angle and eases to the clearly
+    // freer one, looking under the obstruction instead of collapsing into Mara. Yaw never changes.
+    const reach = this.zoneDist + 0.3;
+    const cast = (p: number) => this.physics.sphereCastDistance(this.focus, this.armDir(p, this.tmpDir), reach, PROBE_RADIUS, this.exclude);
+    let bestOffset = 0;
+    let bestFree = cast(this.pitch);
+    if (bestFree < this.zoneDist * 0.7) {
+      for (const offset of [-0.2, -0.4]) {
+        const p = Math.max(ThirdPersonCamera.PITCH_MIN, this.pitch + offset);
+        const f = cast(p);
+        if (f > bestFree + 0.4) {
+          bestFree = f;
+          bestOffset = p - this.pitch;
+        }
+      }
+    }
+    this.armOffset = this.initialised ? damp(this.armOffset, bestOffset, 5, dt) : bestOffset;
+    const pitch = this.pitch + this.armOffset;
+    const dir = this.armDir(pitch, new THREE.Vector3());
+    const free = cast(pitch);
     const targetDist = clamp(free - 0.1, MIN_ARM, this.zoneDist);
     if (!this.initialised || targetDist < this.currentDist) this.currentDist = targetDist;
     else this.currentDist = damp(this.currentDist, targetDist, 4, dt);
@@ -289,6 +304,16 @@ export class ThirdPersonCamera {
       this.camera.fov = lerp(this.camera.fov, fov, 1 - Math.exp(-6 * dt));
       this.camera.updateProjectionMatrix();
     }
+  }
+
+  private readonly tmpDir = new THREE.Vector3();
+  /** Pitch the arm is lowered by to see under an obstruction (eased; 0 in the open). */
+  private armOffset = 0;
+
+  /** Unit vector from the pivot toward the camera for the current yaw and the given pitch. */
+  private armDir(pitch: number, out: THREE.Vector3): THREE.Vector3 {
+    const cp = Math.cos(pitch);
+    return out.set(Math.sin(this.yaw) * cp, Math.sin(pitch), Math.cos(this.yaw) * cp);
   }
 
   /** Small rotational shake from accumulated trauma (squared, so light hits stay subtle). */

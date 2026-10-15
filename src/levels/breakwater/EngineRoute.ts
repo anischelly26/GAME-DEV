@@ -5,6 +5,7 @@ import { Batcher, prismGeometry, worldBox } from '../../world/geometry';
 import { paintedTextTexture } from '../../world/textures';
 import { ServiceLight, WorkLamp, glowSprite } from '../../world/props/Lanterns';
 import { SteamEmitter } from '../../world/Atmosphere';
+import { FlowStrip } from '../../world/props/FlowStrip';
 import { EngineCollar, PistonPlatform } from '../../world/props/EngineRides';
 import { braceGantry, buildBarrierBeam, buildSparesRack, catchPlateTexture, dialTexture, feedPlateTexture, hazardStripeTexture } from '../../world/props/Maintenance';
 import { SplitFeedLogic } from '../../gameplay/puzzles/SplitFeedLogic';
@@ -399,6 +400,38 @@ export class EngineRoute {
       };
       gauge('VENT', 0.19, () => (this.feed.route === 'vent' ? 0.72 : 0.06));
       gauge('RAM', 0.31, () => (this.feed.route === 'ram' ? (this.feed.straining ? 0.95 : 0.66) : 0.06));
+      // Where the steam goes, readable along the pipework: chevrons light up and run toward the
+      // cracked line (VENT) or along a feed pipe to the ram (RAM), whichever the diverter selects.
+      // In a ring hall "toward the walkway" is toward the centre.
+      const towardCentre = (_d: THREE.Vector3, mid: THREE.Vector3) => v3(-mid.x, 0, -mid.z).normalize();
+      const mainFront = HALL.aWall - 0.47;
+      this.ventStrip = new FlowStrip(
+        [0.27, 0.53].map((f) => sidePos(k, mainFront, uAt(mainFront, f), T3 + 2.7)),
+        towardCentre,
+      );
+      // The ram feed: from the board along the wall, round the corner to side 9, down to the ram.
+      const pa = HALL.aWall - 0.2;
+      const pipeY = T3 + 2.25;
+      const ramFeed = [
+        sidePos(k, ja + 0.1, uAt(ja, 0.31), T3 + 1.95),
+        sidePos(k, pa, uAt(pa, 0.31), pipeY),
+        sidePos(k, pa, uAt(pa, 1), pipeY),
+        sidePos(9, pa, uAt(pa, 0.86), pipeY),
+        sidePos(9, pa, uAt(pa, 0.86), T3 + 0.35),
+        sidePos(9, 11.68, uAt(11.68, 0.86), T3 + 0.35),
+      ];
+      for (let i = 0; i < ramFeed.length - 1; i++) {
+        const d = ramFeed[i + 1].clone().sub(ramFeed[i]);
+        batch.add(
+          new THREE.CylinderGeometry(0.075, 0.075, d.length() + 0.1, 10),
+          m.brass,
+          new THREE.Matrix4().compose(ramFeed[i].clone().add(ramFeed[i + 1]).multiplyScalar(0.5), new THREE.Quaternion().setFromUnitVectors(v3(0, 1, 0), d.normalize()), v3(1, 1, 1)),
+        );
+      }
+      // On the pipe's walkway-facing side (the last, inward run is short and hidden by the ram).
+      const stripPath = ramFeed.slice(1, 5).map((p) => p.clone().add(v3(-p.x, 0, -p.z).normalize().multiplyScalar(0.085)));
+      this.ramStrip = new FlowStrip(stripPath, towardCentre, { width: 0.09 });
+      root.add(this.ventStrip.group, this.ramStrip.group);
       // Hazard band on the deck where the steam starts to push.
       const band = new THREE.Mesh(
         new THREE.PlaneGeometry(HALL.aWall - HALL.aIn - 0.2, 0.22),
@@ -534,7 +567,24 @@ export class EngineRoute {
 
     this.registerInteractions();
     this.registerTriggers();
-    ctx.camera.zones.push({ id: 'hall', contains: (p) => Math.hypot(p.x, p.z) < HALL.aWall + 0.2 && p.y < 14, distance: 6.2, height: 1.7, fov: 60, priority: 1 });
+    ctx.camera.zones.push({ id: 'hall', contains: (p) => Math.hypot(p.x, p.z) < HALL.aWall + 0.2 && p.y < 14, distance: 5.6, height: 1.7, fov: 60, priority: 1 });
+    // Tier three sits 4.6 m under the roof ring: a shorter arm keeps its dark underside out of the frame.
+    ctx.camera.zones.push({ id: 'tier3', contains: (p) => Math.hypot(p.x, p.z) < HALL.aWall + 0.2 && p.y > T3 - 0.6 && p.y < 14, distance: 4.4, height: 1.6, fov: 62, priority: 2 });
+    // On top of the raised gantry (side 4) there is about 2 m of headroom under tier two: a low
+    // pivot and a short arm let the camera sit back over the open edge instead of in the ceiling.
+    const th4 = sideAngle(4);
+    ctx.camera.zones.push({
+      id: 'gantry',
+      contains: (p) => {
+        const r = Math.hypot(p.x, p.z);
+        const da = Math.atan2(Math.sin(Math.atan2(p.x, p.z) - th4), Math.cos(Math.atan2(p.x, p.z) - th4));
+        return p.y > T1 + 1.4 && p.y < T1 + 3.6 && r > 10.4 && r < HALL.aWall + 0.2 && Math.abs(da) < Math.PI / HALL.sides;
+      },
+      distance: 3.0,
+      height: 1.15,
+      fov: 62,
+      priority: 3,
+    });
     // The camera assist never turns the camera near a jump, vault, ledge or moving platform.
     const near = (c: THREE.Vector3, r: number) => (p: THREE.Vector3) => Math.hypot(p.x - c.x, p.z - c.z) < r && Math.abs(p.y - c.y) < 3;
     const at = (k: number, a: number, f: number, y: number) => sidePos(k, a, uAt(a, f), y);
@@ -570,6 +620,8 @@ export class EngineRoute {
   exitCenter = new THREE.Vector3();
   readonly exitLanding = new THREE.Vector3();
   readonly exitTakeoff = new THREE.Vector3();
+  private ventStrip!: FlowStrip;
+  private ramStrip!: FlowStrip;
 
   private registerInteractions(): void {
     const { interactions, dialogue, progression, events, player } = this.ctx;
@@ -920,6 +972,10 @@ export class EngineRoute {
     const sheet = this.curtainSheet.material as THREE.MeshBasicMaterial;
     sheet.opacity += ((this.feed.curtainOn ? 0.05 : 0) - sheet.opacity) * (1 - Math.exp(-dt * 3));
     for (const e of this.curtain) e.rate = this.feed.curtainOn ? 16 : 0;
+    this.ventStrip.set(this.feed.route === 'vent');
+    this.ramStrip.set(this.feed.route === 'ram');
+    this.ventStrip.update(dt);
+    this.ramStrip.update(dt);
     // The pointer bar leans toward the plate's VENT (left) or RAM (right).
     this.feedWheelAngle += ((this.feed.route === 'vent' ? 0.6 : -0.6) - this.feedWheelAngle) * (1 - Math.exp(-dt * 7));
     this.feedWheel.rotation.z = this.feedWheelAngle;

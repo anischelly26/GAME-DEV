@@ -172,6 +172,9 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
       const lintelY = y0 + HALL.cellOpeningH + lintelH / 2;
       batch.add(worldBox(2 * opening + 0.02, lintelH, HALL.wallT, 3), m.stone, sideMatrix(k, 0, lintelY, aMid), { tint: fTint, damp: true });
       physics.box(new THREE.Vector3(...centerOf(k, 0, aMid)).setY(lintelY), new THREE.Vector3(opening, lintelH / 2, HALL.wallT / 2), q);
+      // The bars close the opening for the player and the camera: the dark recess behind is only a
+      // backdrop, with no walls of its own, so a camera that slipped in would see through the hall.
+      physics.box(new THREE.Vector3(...centerOf(k, 0, aMid)).setY(y0 + HALL.cellOpeningH / 2), new THREE.Vector3(opening, HALL.cellOpeningH / 2, HALL.wallT / 2), q);
       // Keystone over the opening.
       batch.add(boxProjectUVs(new RoundedBoxGeometry(0.5, 0.55, 0.16, 1, 0.05)), m.stone, sideMatrix(k, 0, y0 + HALL.cellOpeningH + 0.22, HALL.aWall - 0.06), { tint: tint(1.1) });
 
