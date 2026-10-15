@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { TextureLibrary } from './textures';
+import { applySurface, type SurfaceLibrary } from './surfaces';
 
 /**
  * Art direction palette for Breakwater: cold ocean blue and oxidised teal for the fortress, amber
@@ -69,6 +70,22 @@ export function createMaterials(tex: TextureLibrary): MaterialLibrary {
     ceramic: new THREE.MeshStandardMaterial({ color: '#e9e2d0', roughness: 0.25, metalness: 0 }),
     grate: textured(tex.iron, { roughness: 0.6, metalness: 0.7, color: new THREE.Color('#9aa0a6') }),
   };
+}
+
+/** Swap the procedural stone, floor, iron, grate and wood for the photographed CC0 sets. */
+export function applySurfaces(m: MaterialLibrary, s: SurfaceLibrary): void {
+  applySurface(m.stone, s.stone, { normalScale: 1.2 });
+  applySurface(m.stoneDark, s.stoneDark, { normalScale: 1.2 });
+  m.stoneDark.color.set('#9aa2a2');
+  applySurface(m.floor, s.floor, { normalScale: 1.1 });
+  applySurface(m.grate, s.grate, { metal: true });
+  m.grate.color.set('#b8b2aa');
+  applySurface(m.iron, s.iron, { metal: true });
+  m.iron.color.set('#c4c8cb');
+  // Painted iron (doors, hatch, frames): the plate's relief and wear, but a dielectric paint finish.
+  applySurface(m.ironDark, s.iron, { normalScale: 0.8 });
+  m.ironDark.color.set('#5c666b');
+  applySurface(m.wood, s.wood);
 }
 
 /**

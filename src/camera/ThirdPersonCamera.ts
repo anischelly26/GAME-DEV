@@ -14,7 +14,7 @@ export interface CameraZone {
   priority?: number;
 }
 
-export const CAMERA_DEFAULTS = { distance: 5.6, height: 1.55, fov: 60 };
+export const CAMERA_DEFAULTS = { distance: 4.9, height: 1.5, fov: 60 };
 
 interface Shot {
   fromPos: THREE.Vector3;
@@ -44,6 +44,11 @@ export class ThirdPersonCamera {
   private recenterTarget: number | null = null;
   /** 0..1, how much walls have pulled the camera in (smoothed). */
   private pullIn = 0;
+  /** Seconds since the player last turned the camera (mouse or stick). */
+  private sinceLook = 10;
+  private readonly prevFeet = new THREE.Vector3();
+  private readonly velocity = new THREE.Vector3();
+  private readonly lookAhead = new THREE.Vector3();
   activeZone = 'default';
 
   constructor(
@@ -108,12 +113,31 @@ export class ThirdPersonCamera {
       return;
     }
 
-    if (look.yaw !== 0 || look.pitch !== 0) this.recenterTarget = null;
+    if (look.yaw !== 0 || look.pitch !== 0) {
+      this.recenterTarget = null;
+      this.sinceLook = 0;
+    } else this.sinceLook += dt;
     this.yaw -= look.yaw;
     this.pitch = clamp(this.pitch + look.pitch, ThirdPersonCamera.PITCH_MIN, ThirdPersonCamera.PITCH_MAX);
     if (this.recenterTarget !== null) {
       this.yaw = dampAngle(this.yaw, this.recenterTarget, 10, dt);
       if (Math.abs(this.yaw - this.recenterTarget) < 0.01) this.recenterTarget = null;
+    }
+
+    // Horizontal velocity of the player (from the feet), for lazy follow and look-ahead.
+    if (this.initialised && dt > 0) {
+      this.velocity.set((feet.x - this.prevFeet.x) / dt, 0, (feet.z - this.prevFeet.z) / dt);
+      if (this.velocity.lengthSq() > 400) this.velocity.set(0, 0, 0); // teleports
+    }
+    this.prevFeet.copy(feet);
+    const v = this.velocity.length();
+
+    // Lazy follow: when the player hasn't touched the camera for a moment, drift around behind the
+    // direction of travel, slowly and never when running toward the camera (that would spin it).
+    if (this.recenterTarget === null && this.sinceLook > 1.0 && v > 1.2) {
+      const behind = Math.atan2(-this.velocity.x, -this.velocity.z);
+      const diff = Math.atan2(Math.sin(behind - this.yaw), Math.cos(behind - this.yaw));
+      if (Math.abs(diff) < 2.4) this.yaw = dampAngle(this.yaw, this.yaw + diff, 0.9 * clamp((v - 1.2) / 4, 0, 1) * clamp((this.sinceLook - 1) / 0.8, 0, 1), dt);
     }
 
     // Zone selection (highest priority wins).
@@ -148,13 +172,18 @@ export class ThirdPersonCamera {
     const dir = new THREE.Vector3(Math.sin(this.yaw) * cp, Math.sin(pitch), Math.cos(this.yaw) * cp);
     const free = this.physics.sphereCastDistance(this.focus, dir, this.zoneDist + 0.3, PROBE_RADIUS, this.exclude);
     const targetDist = clamp(free - 0.08, 0.3, this.zoneDist);
-    if (!this.initialised || targetDist < this.currentDist) this.currentDist = targetDist;
+    // Pull in quickly when something blocks the view (no hard snap unless it is very close), ease out.
+    if (!this.initialised || targetDist < this.currentDist - 0.8) this.currentDist = targetDist;
+    else if (targetDist < this.currentDist) this.currentDist = damp(this.currentDist, targetDist, 22, dt);
     else this.currentDist = damp(this.currentDist, targetDist, 3.2, dt);
     this.pullIn = damp(this.pullIn, clamp(1 - this.currentDist / Math.max(0.5, this.zoneDist), 0, 1), 5, dt);
     this.initialised = true;
 
     this.camera.position.copy(this.focus).addScaledVector(dir, this.currentDist);
-    this.lookPoint.copy(this.focus);
+    // Aim a little ahead of the direction of travel so the next landing is in view.
+    const ahead = this.velocity.clone().multiplyScalar(clamp(v / 5, 0, 1) * 0.12);
+    this.lookAhead.lerp(ahead, 1 - Math.exp(-4 * dt));
+    this.lookPoint.copy(this.focus).add(this.lookAhead);
     this.camera.lookAt(this.lookPoint);
 
     const fov = this.zoneFov + clamp(speed / 6, 0, 1) * 3;

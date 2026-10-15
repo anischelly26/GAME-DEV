@@ -4,11 +4,12 @@ import { Input, BASE_RADIANS_PER_PIXEL } from './Input';
 import { Physics, RAPIER } from '../physics/Physics';
 import { RenderPipeline } from '../render/RenderPipeline';
 import { createTextureLibrary, type TextureLibrary } from '../world/textures';
-import { createMaterials, Palette, type MaterialLibrary } from '../world/materials';
+import { applySurfaces, createMaterials, Palette, type MaterialLibrary } from '../world/materials';
+import { loadSurfaces } from '../world/surfaces';
 import { Sky } from '../world/Atmosphere';
 import { PlayerController } from '../player/PlayerController';
 import { PlayerAvatar } from '../player/PlayerAvatar';
-import { buildMara } from '../character/MaraModel';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DropShadow } from '../player/DropShadow';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { Progression, Checkpoints, Triggers } from '../gameplay/Progression';
@@ -78,7 +79,7 @@ export class Game {
   private physicsLines: THREE.LineSegments | null = null;
   private fps = 60;
   /** Character build cost (dev overlay and tests). */
-  characterStats: { triangles: number; lowTriangles: number; rawTriangles: number; millis: number; source: string } | null = null;
+  characterStats: { triangles: number; clips: number; millis: number } | null = null;
   private reachChecks = 0;
   private reachPulse = 0;
 
@@ -102,12 +103,17 @@ export class Game {
   private async init(): Promise<void> {
     this.hud.showLoading('Charging the tide engine…');
     // Mara is sculpted in Web Workers while the rest of the world is built here.
-    const mara = buildMara();
+    // Mara (public/assets/mara/mara.glb) loads while the rest of the world is built here.
+    const maraStart = performance.now();
+    const mara = new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/mara/mara.glb`);
     // Let the loading card paint before the heavy synchronous texture generation.
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+    const surfaces = loadSurfaces(8);
     this.physics = await Physics.create();
     this.textures = createTextureLibrary();
     this.materials = createMaterials(this.textures);
+    const photographed = await surfaces;
+    if (photographed) applySurfaces(this.materials, photographed);
 
     this.scene.background = Palette.skyTop.clone();
     this.scene.fog = new THREE.FogExp2(Palette.fog, 0.024);
@@ -154,9 +160,14 @@ export class Game {
     const forced = this.options.quality ?? (this.options.test ? 'low' : null);
     if (forced) this.setQuality(forced);
 
-    const rig = await mara;
-    this.avatar.attach(rig);
-    this.characterStats = rig.stats;
+    const gltf = await mara;
+    this.avatar.attach(gltf);
+    let triangles = 0;
+    gltf.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) triangles += (m.geometry.index?.count ?? m.geometry.getAttribute('position').count) / 3;
+    });
+    this.characterStats = { triangles, clips: gltf.animations.length, millis: Math.round(performance.now() - maraStart) };
     const startId = this.options.start && this.level.checkpointIds.includes(this.options.start) ? this.options.start : this.level.checkpointIds[0];
     this.teleportToCheckpoint(startId);
     // Compile shaders up front to avoid a hitch on the first frame.
@@ -178,9 +189,9 @@ export class Game {
   }
 
   private setupLights(): void {
-    const hemi = new THREE.HemisphereLight('#3f5f78', '#1b1712', 0.75);
+    const hemi = new THREE.HemisphereLight('#5d7f99', '#2e261d', 1.25);
     this.scene.add(hemi);
-    const moon = new THREE.DirectionalLight(Palette.moon, 1.5);
+    const moon = new THREE.DirectionalLight(Palette.moon, 2.1);
     moon.position.copy(this.moonDir).multiplyScalar(60);
     moon.target.position.set(0, 0, 8);
     moon.castShadow = true;
@@ -218,7 +229,7 @@ export class Game {
     envScene.add(new THREE.Mesh(geo, mat));
     const pmrem = new THREE.PMREMGenerator(this.pipeline.renderer);
     this.scene.environment = pmrem.fromScene(envScene, 0.02).texture;
-    this.scene.environmentIntensity = 0.55;
+    this.scene.environmentIntensity = 0.95;
     pmrem.dispose();
   }
 
@@ -484,6 +495,7 @@ export class Game {
       lookAt: focus ? focus.position : null,
       mode: this.player.mode,
       modeT: this.player.modeT,
+      knockbacks: this.player.knockbacks,
     });
     this.camera.update(dt, this.input.consumeLook(), feet, this.player.grounded, this.player.speed);
     this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.5, 1.25, this.camera.distance));

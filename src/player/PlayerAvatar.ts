@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import type { MaraRig } from '../character/MaraModel';
-import { clamp, damp, dampAngle, lerp, wrapAngle } from '../core/math';
-import { addRimLight, Palette } from '../world/materials';
+import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
+import { clamp, damp, dampAngle, wrapAngle } from '../core/math';
 import type { TextureLibrary } from '../world/textures';
-import { MOVEMENT } from './PlayerController';
+import { MOVEMENT } from './movement';
+import { TRAVERSAL } from './Traversal';
 import { Scarf } from './Scarf';
 
 export interface AvatarState {
@@ -20,133 +20,232 @@ export interface AvatarState {
   /** Traversal mode from the controller, and its progress (seconds for hang, 0..1 otherwise). */
   mode?: 'move' | 'hang' | 'climb' | 'vault';
   modeT?: number;
+  /** Increments each time the controller applies a knockback. */
+  knockbacks?: number;
 }
 
-/** Matches the knit wrap (see maraMaterials): the tails are its loose ends. */
-const SCARF_COLOR = '#cf5e46';
+/** Mara's standing height in metres (to the top of her hair). */
+const HEIGHT = 1.7;
+const SCARF_COLOR = '#c8553a';
+const LOCOMOTION = ['walk', 'jog', 'sprint'] as const;
+type Loco = (typeof LOCOMOTION)[number];
 
-interface Limb {
-  upper: THREE.Bone;
-  lower: THREE.Bone;
-  end: THREE.Bone;
-}
+const UP = new THREE.Vector3(0, 1, 0);
+const qa = new THREE.Quaternion();
+const qb = new THREE.Quaternion();
 
 /**
- * Mara on screen: the sculpted, skinned model from character/MaraModel driven procedurally, so
- * animation always matches the controller state exactly. Arm rotations use the convention of a
- * figure whose arms hang straight down (the bones carry the modelling A-pose as rest rotation).
- *
- * The rig is built in workers while the level loads and attached with `attach()`; until then only
- * the scarf tails and anchors exist.
+ * Mara on screen: the CC0 character assembled by scripts/import-mara.mjs (public/assets/mara/
+ * mara.glb), animated with hand-made clips from Quaternius's Universal Animation Libraries.
+ * Locomotion blends idle, walk, jog and sprint by speed, phase-locked and time-scaled to the
+ * controller's ground speed so the feet don't slide; jumps, landings, climbs, vaults, knockback and
+ * interactions are one-shot clips layered over it; the head turns toward points of interest.
  */
 export class PlayerAvatar {
   readonly root = new THREE.Group();
   readonly carryAnchor = new THREE.Object3D();
   private readonly visual = new THREE.Group();
-  private rig: MaraRig | null = null;
-  private detail: 'high' | 'low' = 'high';
-  private hipsRestY = 0.93;
-  private hips!: THREE.Bone;
-  private spine!: THREE.Bone;
-  private chest!: THREE.Bone;
-  private neck!: THREE.Bone;
-  private head!: THREE.Bone;
-  private bun!: THREE.Bone;
-  private readonly legs: Limb[] = [];
-  private readonly arms: Limb[] = [];
+  private model: THREE.Object3D | null = null;
+  private mixer: THREE.AnimationMixer | null = null;
+  private readonly actions = new Map<string, THREE.AnimationAction>();
+  private readonly naturalSpeed: Record<Loco, number> = { walk: 1.5, jog: 3.9, sprint: 6 };
+  private readonly bones = new Map<string, THREE.Bone>();
   private readonly materials: THREE.Material[] = [];
   private readonly scarves: Scarf[] = [];
   private readonly scarfAnchors: THREE.Object3D[] = [];
+  private readonly scene: THREE.Scene;
+  private readonly tex: TextureLibrary;
 
   private phase = 0;
-  private runBlend = 0;
   private airBlend = 0;
-  private carryBlend = 0;
+  private airTime = 0;
+  private landT = -1;
+  private landWeight = 0;
+  private oneShot: { name: string; weight: number; target: number } | null = null;
+  private lastKnockbacks = 0;
+  private lastMode: AvatarState['mode'] = 'move';
+  private lastReach = 0;
   private lastFacing = 0;
   private turnRate = 0;
-  private stretch = 0;
-  private stretchVel = 0;
+  private lean = 0;
   private headYaw = 0;
   private headPitch = 0;
-  private time = 0;
-  private bunSwing = 0;
-  private bunVel = 0;
   private opacity = 1;
-  private hangBlend = 0;
-  private vaultBlend = 0;
-  private nextBlink = 2;
-  private blinkT = -1;
-  private gazeYaw = 0;
-  private gazePitch = 0;
-  private nextSaccade = 1;
-  private saccadeYaw = 0;
+  private time = 0;
 
   /** Called when a foot plants; used for footstep audio. */
   onFootstep: ((speed: number) => void) | null = null;
 
   constructor(scene: THREE.Scene, tex: TextureLibrary) {
+    this.scene = scene;
+    this.tex = tex;
     this.root.add(this.visual);
-    const scarfMat = new THREE.MeshStandardMaterial({ color: SCARF_COLOR, normalMap: tex.wool.normalMap, roughness: 1 });
-    this.materials.push(scarfMat);
-    // Two loose tails hanging from the knot on her left.
-    for (const [x, y, z, len, width] of [
-      [0.04, 0.078, 0.1, 3, 0.05],
-      [0.062, 0.082, 0.094, 2, 0.044],
-    ]) {
-      const anchor = new THREE.Object3D();
-      anchor.position.set(x, y, z);
-      this.visual.add(anchor);
-      this.scarfAnchors.push(anchor);
-      const scarf = new Scarf(scarfMat, len, width);
-      this.scarves.push(scarf);
-      scene.add(scarf.mesh);
-    }
-    this.carryAnchor.position.set(0, -0.106, 0.316);
+    this.carryAnchor.position.set(0, 1.1, 0.32);
     this.visual.add(this.carryAnchor);
     scene.add(this.root);
   }
 
-  /** Attach the built character. Anchors move onto her chest bone. */
-  attach(rig: MaraRig): void {
-    this.rig = rig;
-    this.visual.add(rig.root);
-    rig.setDetail(this.detail);
-    const bone = (n: string) => rig.bones.get(n)!;
-    this.hips = bone('hips');
-    this.spine = bone('spine');
-    this.chest = bone('chest');
-    this.neck = bone('neck');
-    this.head = bone('head');
-    this.bun = bone('bun');
-    this.hipsRestY = this.hips.position.y;
-    for (const n of ['R', 'L']) {
-      this.legs.push({ upper: bone(`thigh${n}`), lower: bone(`shin${n}`), end: bone(`foot${n}`) });
-      this.arms.push({ upper: bone(`upperArm${n}`), lower: bone(`forearm${n}`), end: bone(`hand${n}`) });
-    }
-    for (const a of [...this.scarfAnchors, this.carryAnchor]) this.chest.add(a);
-    for (const m of Object.values(rig.materials)) {
-      // A faint moonlit rim keeps her readable against dark stone without an outline glow.
-      if (m !== rig.materials.eye && m !== rig.materials.brass && m !== rig.materials.steel) addRimLight(m, Palette.moon, 0.1, 3);
-      this.materials.push(m);
-    }
-  }
-
-  /** Character level of detail follows the graphics quality. */
-  setDetail(level: 'high' | 'low'): void {
-    this.detail = level;
-    this.rig?.setDetail(level);
-  }
-
   get ready(): boolean {
-    return this.rig !== null;
+    return this.model !== null;
+  }
+
+  /** Kept for the quality switch; the character has a single level of detail. */
+  setDetail(_level: 'high' | 'low'): void {}
+
+  /** Attach the loaded character (public/assets/mara/mara.glb). */
+  attach(gltf: GLTF): void {
+    const model = gltf.scene;
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model);
+    const s = HEIGHT / Math.max(0.5, box.max.y - box.min.y);
+    model.scale.setScalar(s);
+    model.position.y = -box.min.y * s;
+    this.visual.add(model);
+    this.model = model;
+    model.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone);
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.frustumCulled = false;
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) this.materials.push(mat);
+    });
+    this.mixer = new THREE.AnimationMixer(model);
+    for (const clip of gltf.animations) {
+      const a = this.mixer.clipAction(clip);
+      a.enabled = true;
+      a.setEffectiveWeight(0);
+      this.actions.set(clip.name, a);
+    }
+    this.root.updateMatrixWorld(true);
+    this.measureLocomotion(gltf.animations);
+    for (const n of ['idle', ...LOCOMOTION, 'jumpLoop', 'land']) this.actions.get(n)?.play();
+    this.actions.get('idle')?.setEffectiveWeight(1);
+    this.mixer.update(0);
+    this.root.updateMatrixWorld(true);
+    this.addScarf();
+  }
+
+  /** Ground speed of each locomotion clip, from how far a planted foot travels per cycle. */
+  private measureLocomotion(clips: THREE.AnimationClip[]): void {
+    const model = this.model!;
+    const foot = this.bones.get('foot_l');
+    const hips = this.bones.get('pelvis');
+    if (!foot || !hips) return;
+    const probe = new THREE.AnimationMixer(model);
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    for (const name of LOCOMOTION) {
+      const clip = clips.find((c) => c.name === name);
+      if (!clip) continue;
+      const act = probe.clipAction(clip);
+      act.play();
+      let min = Infinity;
+      let max = -Infinity;
+      for (let i = 0; i <= 40; i++) {
+        probe.setTime((clip.duration * i) / 40);
+        model.updateMatrixWorld(true);
+        foot.getWorldPosition(a);
+        hips.getWorldPosition(b);
+        const z = a.z - b.z;
+        min = Math.min(min, z);
+        max = Math.max(max, z);
+      }
+      act.stop();
+      // A planted foot sweeps the stride backwards during roughly half the cycle.
+      const v = (2 * (max - min)) / clip.duration;
+      if (v > 0.3 && v < 12) this.naturalSpeed[name] = v;
+    }
+    probe.stopAllAction();
+    probe.uncacheRoot(model);
+  }
+
+  /** Measured ground speed of each locomotion clip (m/s), for tests and tuning. */
+  get locomotionSpeeds(): Record<string, number> {
+    return { ...this.naturalSpeed };
+  }
+
+  /** A coral knit wrap at her neck, with two loose tails. */
+  private addScarf(): void {
+    const neck = this.bones.get('neck_01');
+    const chest = this.bones.get('spine_03');
+    if (!neck || !chest) return;
+    const knit = new THREE.MeshStandardMaterial({ color: SCARF_COLOR, roughness: 1, normalMap: this.tex.wool.normalMap });
+    this.materials.push(knit);
+    const neckPos = neck.getWorldPosition(new THREE.Vector3());
+    const facing = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const wrap = new THREE.Group();
+    for (const [y, r, t, tilt] of [
+      [-0.01, 0.1, 0.036, 0.22],
+      [0.035, 0.088, 0.03, 0.08],
+    ]) {
+      const torus = new THREE.Mesh(new THREE.TorusGeometry(r, t, 10, 28), knit);
+      torus.rotation.x = Math.PI / 2 + tilt;
+      torus.position.set(0, y, 0.008);
+      torus.castShadow = true;
+      wrap.add(torus);
+    }
+    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.036, 14, 10), knit);
+    knot.scale.set(1.1, 0.9, 0.8);
+    knot.position.set(0.045, -0.04, 0.1);
+    wrap.add(knot);
+    wrap.quaternion.copy(facing);
+    wrap.position.copy(neckPos).add(new THREE.Vector3(0, -0.025, 0));
+    this.scene.add(wrap);
+    neck.attach(wrap);
+    const tailMat = new THREE.MeshStandardMaterial({ color: SCARF_COLOR, roughness: 1 });
+    this.materials.push(tailMat);
+    for (const [x, len, width] of [
+      [0.03, 3, 0.05],
+      [0.055, 2, 0.044],
+    ]) {
+      const anchor = new THREE.Object3D();
+      anchor.position.copy(neckPos).add(new THREE.Vector3(x, -0.09, 0.09).applyQuaternion(facing));
+      this.scene.add(anchor);
+      chest.attach(anchor);
+      this.scarfAnchors.push(anchor);
+      const scarf = new Scarf(tailMat, len, width);
+      this.scarves.push(scarf);
+      this.scene.add(scarf.mesh);
+    }
   }
 
   onJump(): void {
-    this.stretchVel += 2.0;
+    this.airTime = 0;
+    this.play('jumpStart', 1.6, 0.25);
   }
 
   onLand(impact: number): void {
-    this.stretchVel -= clamp(impact * 0.18, 0.5, 3.0);
+    if (impact < 3) return;
+    this.landT = 0;
+    this.landWeight = clamp(impact / 10, 0.35, 0.85);
+    const land = this.actions.get('land');
+    if (land) {
+      land.reset();
+      land.time = 0.2;
+      land.setLoop(THREE.LoopOnce, 1);
+      land.clampWhenFinished = true;
+      land.timeScale = 1.4;
+      land.play();
+    }
+  }
+
+  /** Start a full-body one-shot: fades in, holds until it ends (or the mode ends), fades out. */
+  private play(name: string, timeScale = 1, startAt = 0): void {
+    const a = this.actions.get(name);
+    if (!a) return;
+    if (this.oneShot && this.oneShot.name !== name) {
+      this.actions.get(this.oneShot.name)?.stop();
+      this.actions.get(this.oneShot.name)?.setEffectiveWeight(0);
+    }
+    a.reset();
+    a.setLoop(THREE.LoopOnce, 1);
+    a.clampWhenFinished = true;
+    a.timeScale = timeScale;
+    a.time = startAt;
+    a.play();
+    this.oneShot = { name, weight: this.oneShot?.name === name ? this.oneShot.weight : 0, target: 1 };
   }
 
   /** Fade the avatar when the camera gets very close so it never blocks the view. */
@@ -164,192 +263,139 @@ export class PlayerAvatar {
 
   update(dt: number, s: AvatarState): void {
     this.time += dt;
-    this.root.position.set(s.feet.x, s.feet.y - 0.005, s.feet.z);
+    this.root.position.set(s.feet.x, s.feet.y - 0.01, s.feet.z);
     this.root.rotation.y = s.facing;
-    if (!this.rig) {
+    if (!this.mixer || !this.model) {
       this.root.updateMatrixWorld(true);
       return;
     }
-
-    const speedN = clamp(s.speed / MOVEMENT.maxSpeed, 0, 1);
-    this.runBlend = damp(this.runBlend, s.grounded ? speedN : this.runBlend * 0.6, 12, dt);
-    this.airBlend = damp(this.airBlend, s.grounded ? 0 : 1, s.grounded ? 18 : 9, dt);
-    this.carryBlend = damp(this.carryBlend, s.carrying ? 1 : 0, 10, dt);
+    const mode = s.mode ?? 'move';
     this.turnRate = damp(this.turnRate, wrapAngle(s.facing - this.lastFacing) / Math.max(dt, 1e-4), 8, dt);
     this.lastFacing = s.facing;
 
-    // Stride phase advances with distance travelled, so feet don't slide.
-    const prevPhase = this.phase;
-    if (s.grounded) this.phase += (dt * s.speed * Math.PI) / 1.3;
-    if (s.grounded && s.speed > 1 && Math.floor(prevPhase / Math.PI) !== Math.floor(this.phase / Math.PI)) {
-      this.onFootstep?.(s.speed);
+    // --- traversal and event one-shots
+    if (mode !== this.lastMode) {
+      if (mode === 'hang') this.play('climb', 0, 0.02);
+      else if (mode === 'climb') this.play('climb', this.clipDuration('climb') / TRAVERSAL.pullUpTime, 0.02);
+      else if (mode === 'vault') this.play('vault', this.clipDuration('vault') / (TRAVERSAL.vaultTime * 1.6), 0.1);
+      else if (this.oneShot && /climb|vault/.test(this.oneShot.name)) this.oneShot.target = 0;
+      this.lastMode = mode;
+    }
+    if ((s.knockbacks ?? 0) > this.lastKnockbacks) {
+      this.lastKnockbacks = s.knockbacks ?? 0;
+      this.play('knockback', 1.3);
+    }
+    if (s.reach > 0 && this.lastReach <= 0 && mode === 'move' && s.grounded) this.play('interact', 1.7, 0.15);
+    this.lastReach = s.reach;
+
+    // --- one-shot weight: fade in quickly, out when finished or released
+    if (this.oneShot) {
+      const a = this.actions.get(this.oneShot.name)!;
+      const finished = a.time >= a.getClip().duration - 1e-3 && a.timeScale !== 0;
+      if (finished && mode === 'move') this.oneShot.target = 0;
+      if (this.oneShot.name === 'jumpStart' && this.airTime > 0.12 && (s.verticalSpeed < 0 || s.grounded)) this.oneShot.target = 0;
+      this.oneShot.weight = damp(this.oneShot.weight, this.oneShot.target, this.oneShot.target > 0 ? 20 : 9, dt);
+      if (this.oneShot.target === 0 && this.oneShot.weight < 0.02) {
+        a.stop();
+        a.setEffectiveWeight(0);
+        this.oneShot = null;
+      } else a.setEffectiveWeight(this.oneShot.weight);
+    }
+    const shot = this.oneShot?.weight ?? 0;
+
+    // --- air
+    this.airTime = s.grounded ? 0 : this.airTime + dt;
+    const airborne = !s.grounded && mode === 'move' && (this.airTime > 0.1 || s.verticalSpeed > 1);
+    this.airBlend = damp(this.airBlend, airborne ? 1 : 0, airborne ? 12 : 18, dt);
+
+    // --- landing overlay
+    let land = 0;
+    if (this.landT >= 0) {
+      this.landT += dt;
+      land = this.landWeight * Math.max(0, 1 - this.landT / 0.35);
+      if (this.landT > 0.35) this.landT = -1;
     }
 
-    const run = this.runBlend;
-    const A = lerp(0.12, 0.85, run);
-    const sp = Math.sin(this.phase);
-    const cp = Math.cos(this.phase);
-
-    // --- legs: ground pose
-    const ground = [
-      { thigh: -sp * A, knee: 0.06 + Math.max(0, cp) * A * 1.35 },
-      { thigh: sp * A, knee: 0.06 + Math.max(0, -cp) * A * 1.35 },
-    ];
-    // --- legs: air pose (rising tuck vs falling reach for the ground)
-    const rising = clamp(s.verticalSpeed / 6, -1, 1);
-    const air = [
-      { thigh: lerp(-0.35, -1.0, Math.max(0, rising)), knee: lerp(0.5, 1.4, Math.max(0, rising)) },
-      { thigh: lerp(0.15, 0.3, Math.max(0, rising)), knee: lerp(0.3, 0.55, Math.max(0, rising)) },
-    ];
-    const legX: number[] = [];
-    const kneeX: number[] = [];
-    for (let i = 0; i < 2; i++) {
-      legX[i] = lerp(ground[i].thigh, air[i].thigh, this.airBlend);
-      kneeX[i] = lerp(ground[i].knee, air[i].knee, this.airBlend);
+    // --- locomotion: phase-locked blend of walk, jog and sprint by ground speed
+    const v = s.grounded ? s.speed : 0;
+    const ns = this.naturalSpeed;
+    const w: Record<string, number> = { idle: 0, walk: 0, jog: 0, sprint: 0 };
+    if (v < 0.15) w.idle = 1;
+    else if (v < ns.walk) {
+      const t = (v - 0.15) / (ns.walk - 0.15);
+      w.idle = 1 - t;
+      w.walk = t;
+    } else if (v < ns.jog) {
+      const t = (v - ns.walk) / (ns.jog - ns.walk);
+      w.walk = 1 - t;
+      w.jog = t;
+    } else {
+      const t = clamp((v - ns.jog) / Math.max(0.1, ns.sprint - ns.jog), 0, 1);
+      w.jog = 1 - t;
+      w.sprint = t;
     }
-
-    // --- arms
-    const breath = Math.sin(this.time * 2.1);
-    const armX: number[] = [];
-    const armZ: number[] = [];
-    const elbowX: number[] = [];
-    for (let i = 0; i < 2; i++) {
-      const side = i === 0 ? -1 : 1;
-      const swing = (i === 0 ? sp : -sp) * A * 0.8;
-      let sx = swing;
-      let sz = side * (0.1 + run * 0.1 + breath * 0.008);
-      let ex = -(0.18 + run * 0.95);
-      // Air: arms rise and spread for balance.
-      sx = lerp(sx, lerp(-0.25, -0.85, Math.max(0, rising)), this.airBlend);
-      sz = lerp(sz, side * lerp(0.95, 0.45, Math.max(0, rising)), this.airBlend);
-      ex = lerp(ex, -0.35, this.airBlend);
-      sx = lerp(sx, -1.05, this.carryBlend);
-      sz = lerp(sz, side * -0.18, this.carryBlend);
-      ex = lerp(ex, -0.75, this.carryBlend);
-      // Reach (left arm) for interactions.
-      if (i === 1 && s.reach > 0) {
-        const r = Math.sin(s.reach * Math.PI);
-        sx = lerp(sx, -1.35, r);
-        ex = lerp(ex, -0.15, r);
-      }
-      armX[i] = sx;
-      armZ[i] = sz;
-      elbowX[i] = ex;
-    }
-
-    // --- traversal poses: hanging, pulling up, vaulting
-    const mode = s.mode ?? 'move';
-    const mt = s.modeT ?? 0;
-    this.hangBlend = damp(this.hangBlend, mode === 'hang' || mode === 'climb' ? 1 : 0, 18, dt);
-    this.vaultBlend = damp(this.vaultBlend, mode === 'vault' ? 1 : 0, 24, dt);
-    if (this.hangBlend > 0.01) {
-      const pull = mode === 'climb' ? Math.min(1, mt * 1.6) : 0;
-      const sway = mode === 'hang' ? Math.sin(this.time * 2.4) * 0.05 : 0;
-      for (let i = 0; i < 2; i++) {
-        const side = i === 0 ? -1 : 1;
-        armX[i] = lerp(armX[i], lerp(-2.85, -0.7, pull), this.hangBlend);
-        armZ[i] = lerp(armZ[i], side * lerp(0.2, 0.35, pull), this.hangBlend);
-        elbowX[i] = lerp(elbowX[i], lerp(-0.2, -1.5, pull), this.hangBlend);
-        const kick = mode === 'climb' ? Math.sin(Math.min(1, mt) * Math.PI) : 0;
-        legX[i] = lerp(legX[i], 0.08 + sway - kick * (i === 0 ? 1.3 : 0.4), this.hangBlend);
-        kneeX[i] = lerp(kneeX[i], 0.25 + kick * (i === 0 ? 1.4 : 0.6), this.hangBlend);
-      }
-    }
-    if (this.vaultBlend > 0.01) {
-      const tuck = Math.sin(Math.min(1, mt) * Math.PI);
-      for (let i = 0; i < 2; i++) {
-        const side = i === 0 ? -1 : 1;
-        // Right hand plants on the rail; left arm swings out for balance.
-        armX[i] = lerp(armX[i], i === 0 ? -0.5 : -1.1, this.vaultBlend);
-        armZ[i] = lerp(armZ[i], side * (i === 0 ? 0.5 : 1.0), this.vaultBlend);
-        elbowX[i] = lerp(elbowX[i], -0.2, this.vaultBlend);
-        legX[i] = lerp(legX[i], -1.0 * tuck - 0.2, this.vaultBlend);
-        kneeX[i] = lerp(kneeX[i], 1.4 * tuck + 0.2, this.vaultBlend);
+    let rate = 0;
+    for (const n of LOCOMOTION) rate += (w[n] * clamp(v / ns[n], 0.6, 1.4)) / this.clipDuration(n);
+    const moving = w.walk + w.jog + w.sprint;
+    if (moving > 0) rate /= moving;
+    const prev = this.phase;
+    this.phase = (this.phase + dt * rate) % 1;
+    if (s.grounded && v > 1 && Math.floor(prev * 2) !== Math.floor(this.phase * 2)) this.onFootstep?.(v);
+    const groundShare = (1 - this.airBlend) * (1 - shot) * (1 - land);
+    for (const n of ['idle', ...LOCOMOTION]) {
+      const a = this.actions.get(n);
+      if (!a) continue;
+      a.setEffectiveWeight(w[n] * groundShare);
+      if (n !== 'idle') {
+        a.timeScale = 0;
+        a.time = this.phase * this.clipDuration(n);
       }
     }
+    this.actions.get('jumpLoop')?.setEffectiveWeight(this.airBlend * (1 - shot));
+    this.actions.get('land')?.setEffectiveWeight(land * (1 - shot));
 
-    for (let i = 0; i < 2; i++) {
-      const leg = this.legs[i];
-      leg.upper.rotation.set(legX[i], 0, 0);
-      leg.lower.rotation.set(kneeX[i], 0, 0);
-      leg.end.rotation.set(-(legX[i] + kneeX[i]) * 0.7, 0, 0);
-      const arm = this.arms[i];
-      arm.upper.rotation.set(armX[i], 0, armZ[i]);
-      arm.lower.rotation.set(elbowX[i], 0, 0);
-      // Wrists: relaxed curl on the ground, palms toward the ledge when hanging.
-      arm.end.rotation.set(lerp(-0.12, 0.35, this.hangBlend), 0, 0);
-    }
+    this.mixer.update(dt);
 
-    // --- body
-    const bob = (Math.abs(sp) * 0.05 - 0.02) * run;
-    this.hips.position.y = this.hipsRestY + bob * (1 - this.airBlend) - run * 0.02;
-    this.hips.rotation.y = -sp * 0.12 * run;
-    this.spine.rotation.set(run * 0.06, sp * 0.2 * run, 0);
-    this.chest.rotation.x = -breath * 0.012 * (1 - run);
-    const lean = run * 0.12 * (1 - this.hangBlend) + this.carryBlend * -0.05 + this.vaultBlend * 0.25;
-    this.visual.rotation.x = damp(this.visual.rotation.x, lean, 8, dt);
-    const roll = clamp(-this.turnRate * 0.035, -0.22, 0.22) * run * (1 - this.vaultBlend) - this.vaultBlend * 0.35;
-    this.visual.rotation.z = damp(this.visual.rotation.z, roll, 10, dt);
+    // --- body lean with speed and into turns (subtle on a realistic figure)
+    this.lean = damp(this.lean, clamp(v / MOVEMENT.maxSpeed, 0, 1) * 0.06 * (1 - shot), 6, dt);
+    this.visual.rotation.x = this.lean;
+    this.visual.rotation.z = damp(this.visual.rotation.z, clamp(-this.turnRate * 0.02, -0.12, 0.12) * clamp(v / 4, 0, 1), 8, dt);
 
-    // Squash and stretch (critically damped spring around 0), kept subtle on a realistic figure.
-    const k = 160;
-    const c = 2 * Math.sqrt(k) * 0.55;
-    this.stretchVel += (-k * this.stretch - c * this.stretchVel) * dt;
-    this.stretch = clamp(this.stretch + this.stretchVel * dt, -0.12, 0.1);
-    this.visual.scale.set(1 - this.stretch * 0.4, 1 + this.stretch, 1 - this.stretch * 0.4);
-
-    // --- head and eyes: glance at points of interest, otherwise idle look-around
-    let targetYaw = Math.sin(this.time * 0.37) * 0.22 * (1 - run);
-    let targetPitch = -0.05;
-    let looking = false;
-    if (s.lookAt) {
+    // --- head: glance at points of interest, otherwise a slow idle look-around
+    let targetYaw = Math.sin(this.time * 0.37) * 0.18 * (v < 0.5 ? 1 : 0);
+    let targetPitch = 0;
+    if (s.lookAt && mode === 'move') {
       const dx = s.lookAt.x - s.feet.x;
       const dz = s.lookAt.z - s.feet.z;
       const yaw = wrapAngle(Math.atan2(dx, dz) - s.facing);
       if (Math.abs(yaw) < 1.6) {
-        targetYaw = clamp(yaw, -0.9, 0.9);
-        targetPitch = clamp(-Math.atan2(s.lookAt.y - (s.feet.y + 1.5), Math.hypot(dx, dz)), -0.5, 0.5);
-        looking = true;
+        targetYaw = clamp(yaw, -0.8, 0.8);
+        targetPitch = clamp(Math.atan2(s.lookAt.y - (s.feet.y + 1.55), Math.hypot(dx, dz)), -0.45, 0.45);
       }
     }
     this.headYaw = dampAngle(this.headYaw, targetYaw, 6, dt);
     this.headPitch = damp(this.headPitch, targetPitch, 6, dt);
-    const twist = this.headYaw - this.spine.rotation.y;
-    this.neck.rotation.set(this.headPitch * 0.35, twist * 0.35, 0);
-    this.head.rotation.set(this.headPitch * 0.65, twist * 0.65, 0);
-
-    // Eyes lead the head toward targets, with small saccades while idle.
-    this.nextSaccade -= dt;
-    if (this.nextSaccade <= 0) {
-      this.nextSaccade = 0.6 + Math.random() * 1.8;
-      this.saccadeYaw = (Math.random() - 0.5) * 0.3;
-    }
-    const eyeYaw = looking ? clamp(targetYaw - this.headYaw, -0.35, 0.35) : this.saccadeYaw * (1 - run);
-    const eyePitch = looking ? clamp(targetPitch - this.headPitch, -0.25, 0.25) : 0;
-    this.gazeYaw = damp(this.gazeYaw, eyeYaw, 25, dt);
-    this.gazePitch = damp(this.gazePitch, eyePitch, 25, dt);
-    this.rig.setGaze(this.gazeYaw, this.gazePitch);
-    // Blink every few seconds (and on landing hard).
-    this.nextBlink -= dt;
-    if (this.nextBlink <= 0 && this.blinkT < 0) {
-      this.blinkT = 0;
-      this.nextBlink = 2 + Math.random() * 3.5;
-    }
-    let blink = 0;
-    if (this.blinkT >= 0) {
-      this.blinkT += dt;
-      blink = Math.sin(Math.min(1, this.blinkT / 0.14) * Math.PI);
-      if (this.blinkT >= 0.14) this.blinkT = -1;
-    }
-    this.rig.setBlink(blink);
-
-    // Hair bun bobs on a spring with vertical motion and turns.
-    const bunTarget = clamp(-s.verticalSpeed * 0.03, -0.25, 0.3) + run * 0.1;
-    this.bunVel += ((bunTarget - this.bunSwing) * 120 - this.bunVel * 10) * dt;
-    this.bunSwing += this.bunVel * dt;
-    this.bun.rotation.set(this.bunSwing, 0, clamp(this.turnRate * 0.02, -0.25, 0.25));
+    this.root.updateMatrixWorld(true);
+    this.turnBone('neck_01', this.headYaw * 0.4, this.headPitch * 0.4);
+    this.turnBone('Head', this.headYaw * 0.6, this.headPitch * 0.6);
 
     this.root.updateMatrixWorld(true);
     this.scarves.forEach((scarf, i) => scarf.update(dt, this.scarfAnchors[i], this.root, s.speed));
+  }
+
+  private clipDuration(name: string): number {
+    return this.actions.get(name)?.getClip().duration ?? 1;
+  }
+
+  /** Turn a bone by yaw (about world up) and pitch (about the character's right axis), in world space. */
+  private turnBone(name: string, yaw: number, pitch: number): void {
+    const b = this.bones.get(name);
+    if (!b || !b.parent || (yaw === 0 && pitch === 0)) return;
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.root.getWorldQuaternion(qa));
+    const delta = qb.setFromAxisAngle(UP, yaw).multiply(new THREE.Quaternion().setFromAxisAngle(right, -pitch));
+    const world = b.getWorldQuaternion(new THREE.Quaternion());
+    const parentInv = b.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+    b.quaternion.copy(parentInv.multiply(delta.multiply(world)));
+    b.updateMatrixWorld(true);
   }
 }

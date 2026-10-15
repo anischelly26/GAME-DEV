@@ -27,7 +27,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: `node scripts/bake-mara.mjs --if-stale && npx vite --port ${port} --strictPort`,
+    command: `npx vite --port ${port} --strictPort`,
     url: `http://localhost:${port}`,
     reuseExistingServer: true,
     timeout: 120_000,

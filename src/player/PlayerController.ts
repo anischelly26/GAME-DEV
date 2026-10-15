@@ -37,6 +37,8 @@ export class PlayerController {
   carrying = false;
   /** Cutscenes freeze the player completely. */
   frozen = false;
+  /** Number of knockbacks so far (the avatar plays a stagger for each). */
+  knockbacks = 0;
   /** Seconds of movement lock (interaction animations). */
   private lockTimer = 0;
   private faceTarget: number | null = null;
@@ -111,6 +113,7 @@ export class PlayerController {
   /** Push the player (steam, impacts). Never damage; briefly removes control. */
   knockback(v: THREE.Vector3, lockSeconds: number): void {
     if (this.mode !== 'move') return;
+    this.knockbacks++;
     this.velocity.copy(v);
     this.lockTimer = Math.max(this.lockTimer, lockSeconds);
   }
