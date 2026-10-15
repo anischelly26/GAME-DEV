@@ -2,9 +2,14 @@
 export const MOVEMENT = {
   maxSpeed: 5.5,
   carrySpeedFactor: 0.85,
-  groundAccel: 32,
-  groundDecel: 36,
-  /** Acceleration when the stick points against the current velocity (snappy reversals). */
+  /** Acceleration from a standstill up to `launchFraction` of top speed: a lively first step. */
+  launchAccel: 52,
+  launchFraction: 0.45,
+  /** Acceleration above that, up to top speed: smooth rather than snappy. */
+  groundAccel: 30,
+  /** Braking with no input: about 0.12 s and 0.35 m from full speed, no skating. */
+  groundDecel: 44,
+  /** Acceleration when the stick points more than 60 degrees away from the current velocity. */
   turnAccel: 62,
   airAccel: 18,
   gravity: 26,

@@ -2,25 +2,50 @@ import './hud.css';
 import type { Line } from '../gameplay/Dialogue';
 
 export interface Settings {
-  sensitivity: number; // 0.2 .. 3, multiplies the base mouse sensitivity
+  /** Horizontal and vertical look sensitivity, 1-100 (25 = 0.0022 rad per mouse pixel). */
+  lookX: number;
+  lookY: number;
+  invertX: boolean;
   invertY: boolean;
+  /** Horizontal field of view in degrees at 16:9, 70-110. */
+  fov: number;
+  cameraShake: boolean;
+  /** How much the camera follows on its own: never in the air, climbing or interacting. */
+  cameraAssist: 'off' | 'weak' | 'strong';
   volume: number; // 0..1
   /** 'auto' picks Low on integrated and mobile GPUs, High otherwise (see RenderPipeline). */
   quality: 'auto' | 'high' | 'low';
   version?: number;
 }
 
-const SETTINGS_VERSION = 2;
-export const DEFAULT_SETTINGS: Settings = { sensitivity: 1, invertY: false, volume: 0.8, quality: 'auto', version: SETTINGS_VERSION };
+const SETTINGS_VERSION = 3;
+export const DEFAULT_SETTINGS: Settings = {
+  lookX: 25,
+  lookY: 25,
+  invertX: false,
+  invertY: false,
+  fov: 90,
+  cameraShake: true,
+  cameraAssist: 'weak',
+  volume: 0.8,
+  quality: 'auto',
+  version: SETTINGS_VERSION,
+};
 const SETTINGS_KEY = 'it-takes-one.settings';
 
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) {
-      const stored = JSON.parse(raw) as Partial<Settings>;
+      const stored = JSON.parse(raw) as Partial<Settings> & { sensitivity?: number };
+      const version = stored.version ?? 1;
       // Version 1 saved 'high' as the default whenever any setting changed; there was no 'auto'.
-      if ((stored.version ?? 1) < SETTINGS_VERSION) stored.quality = 'auto';
+      if (version < 2) stored.quality = 'auto';
+      // Version 2 had one mouse sensitivity multiplier (0.2-3, default 1).
+      if (version < 3 && typeof stored.sensitivity === 'number') {
+        stored.lookX = stored.lookY = Math.round(Math.min(100, Math.max(1, stored.sensitivity * 25)));
+      }
+      delete stored.sensitivity;
       return { ...DEFAULT_SETTINGS, ...stored, version: SETTINGS_VERSION };
     }
   } catch {
@@ -45,7 +70,7 @@ const CONTROLS_HTML = `
     <dt>Mouse</dt><dd>Look (click the game to capture the mouse; drag also works)</dd>
     <dt>Space</dt><dd>Jump (hold for higher)</dd>
     <dt>E / F</dt><dd>Interact</dd>
-    <dt>C / Middle mouse</dt><dd>Recenter camera</dd>
+    <dt>C / Middle mouse</dt><dd>Recenter camera behind Mara</dd>
     <dt>Esc / P</dt><dd>Pause</dd>
     <dt>Gamepad</dt><dd>Left stick move, right stick look, A jump, X interact, R3 recenter, Start pause</dd>
   </dl>`;
@@ -152,8 +177,15 @@ export class HUD {
         <button data-a="restart">Restart section</button>
       </div>
       <div class="settings">
-        <label>Mouse sensitivity <input type="range" min="0.2" max="3" step="0.05" value="${s.sensitivity}" data-s="sensitivity"></label>
+        <div class="group">Camera</div>
+        <label>Horizontal sensitivity <span class="value" data-v="lookX">${s.lookX}</span><input type="range" min="1" max="100" step="1" value="${s.lookX}" data-s="lookX"></label>
+        <label>Vertical sensitivity <span class="value" data-v="lookY">${s.lookY}</span><input type="range" min="1" max="100" step="1" value="${s.lookY}" data-s="lookY"></label>
+        <label>Invert horizontal look <input type="checkbox" ${s.invertX ? 'checked' : ''} data-s="invertX"></label>
         <label>Invert vertical look <input type="checkbox" ${s.invertY ? 'checked' : ''} data-s="invertY"></label>
+        <label>Field of view <span class="value" data-v="fov">${s.fov}°</span><input type="range" min="70" max="110" step="1" value="${s.fov}" data-s="fov"></label>
+        <label>Camera assist <select data-s="cameraAssist"><option value="off" ${s.cameraAssist === 'off' ? 'selected' : ''}>Off</option><option value="weak" ${s.cameraAssist === 'weak' ? 'selected' : ''}>Weak</option><option value="strong" ${s.cameraAssist === 'strong' ? 'selected' : ''}>Strong</option></select></label>
+        <label>Camera shake <input type="checkbox" ${s.cameraShake ? 'checked' : ''} data-s="cameraShake"></label>
+        <div class="group">Sound and graphics</div>
         <label>Volume <input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-s="volume"></label>
         <label>Graphics <select data-s="quality"><option value="auto" ${s.quality === 'auto' ? 'selected' : ''}>Auto (${this.autoQualityLabel})</option><option value="high" ${s.quality === 'high' ? 'selected' : ''}>High (dedicated graphics card)</option><option value="low" ${s.quality === 'low' ? 'selected' : ''}>Low (faster)</option></select></label>
       </div>
@@ -175,6 +207,8 @@ export class HUD {
         else if (input instanceof HTMLInputElement) next[key] = Number(input.value);
         else next[key] = input.value;
         this.settings = next as unknown as Settings;
+        const shown = this.card.querySelector(`[data-v="${key}"]`);
+        if (shown) shown.textContent = key === 'fov' ? `${input.value}°` : input.value;
         saveSettings(this.settings);
         h.settingsChanged(this.settings);
       });

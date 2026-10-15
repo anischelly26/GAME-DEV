@@ -5,6 +5,7 @@ import { Batcher, boxProjectUVs, worldBox } from '../../world/geometry';
 import { Palette } from '../../world/materials';
 import { saltStainTexture } from '../../world/textures';
 import { PressureHatch, OPENING } from '../../world/props/PressureHatch';
+import { hazardStripeTexture } from '../../world/props/Maintenance';
 import { ServiceLight, WorkLamp } from '../../world/props/Lanterns';
 import { LightShaft, SteamEmitter, Water } from '../../world/Atmosphere';
 import { PressureHatchLogic, enginePulse, LIFT_THRESHOLD } from '../../gameplay/puzzles/PressureHatchLogic';
@@ -352,7 +353,35 @@ export class QuietCellLevel implements Level {
           root.add(rivet);
         }
       }
-      physics.box(v3(0, gy, g.z), v3((S.x1 - S.x0) / 2, g.height / 2, g.depth / 2));
+      // At a run, Space vaults it; from a walk it is a small jump.
+      ctx.traversal.markVaultable(physics.box(v3(0, gy, g.z), v3((S.x1 - S.x0) / 2, g.height / 2, g.depth / 2)));
+    }
+    // Railing along the channel's near lip, open only at the broken catwalk (S.crossing).
+    {
+      const z = S.gapNear + 0.14;
+      const x0 = S.x0 + 0.05;
+      const x1 = S.crossing.x0;
+      const top = S.floorY + 1.05;
+      const len = x1 - x0;
+      batch.add(new THREE.BoxGeometry(len, 0.06, 0.06), m.iron, new THREE.Matrix4().makeTranslation((x0 + x1) / 2, top, z));
+      batch.add(new THREE.BoxGeometry(len, 0.04, 0.04), m.iron, new THREE.Matrix4().makeTranslation((x0 + x1) / 2, S.floorY + 0.55, z));
+      const posts = Math.ceil(len / 0.95);
+      for (let i = 0; i <= posts; i++) {
+        const x = x0 + (len * i) / posts;
+        batch.add(new THREE.BoxGeometry(0.07, 1.05, 0.07), m.ironDark, new THREE.Matrix4().makeTranslation(x, S.floorY + 0.525, z));
+      }
+      // The torn end of the rail, bent toward the gap where the catwalk used to join it.
+      const torn = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.06), m.iron);
+      torn.position.set(x1 + 0.2, top - 0.12, z - 0.05);
+      torn.rotation.set(0.2, 0.35, -0.45);
+      torn.castShadow = true;
+      root.add(torn);
+      physics.box(v3((x0 + x1) / 2, S.floorY + 0.55, z), v3(len / 2, 0.55, 0.05), undefined, { blocksCamera: false });
+      // Hazard paint on the lip where the jump is made.
+      const stripe = new THREE.Mesh(new THREE.PlaneGeometry(S.crossing.x1 - S.crossing.x0 - 0.1, 0.22), new THREE.MeshStandardMaterial({ map: (() => { const t = hazardStripeTexture().clone(); t.wrapS = THREE.RepeatWrapping; t.repeat.set(4, 1); t.needsUpdate = true; return t; })(), roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 }));
+      stripe.rotation.x = -Math.PI / 2;
+      stripe.position.set((S.crossing.x0 + S.crossing.x1) / 2, S.floorY + 0.012, S.gapNear + 0.16);
+      root.add(stripe);
     }
     // Broken catwalk stubs over the channel (dressing, bent downward).
     for (const [z, dir] of [
@@ -371,7 +400,7 @@ export class QuietCellLevel implements Level {
         post.rotation.x = dir * 0.5;
         stub.add(post);
       }
-      stub.position.set(0.6, S.floorY - 0.06, z);
+      stub.position.set((S.crossing.x0 + S.crossing.x1) / 2, S.floorY - 0.06, z);
       stub.rotation.x = dir * 0.55;
       stub.traverse((o) => (o.castShadow = true));
       root.add(stub);
@@ -404,8 +433,10 @@ export class QuietCellLevel implements Level {
     // Shaft lights: the far landing is warm and inviting; a cold lamp over the hatch.
     const farLamp = new WorkLamp(m, v3(S.x1 - 0.01, S.floorY + 2.4, 19.6), v3(-1, 0, 0), { light: true, intensity: 8, distance: 9 });
     const hatchLamp = new WorkLamp(m, v3(-1.2, S.floorY + 2.7, S.z1 - 0.01), v3(0, 0, -1), { light: true, intensity: 4, distance: 7 });
-    this.lamps.push(farLamp, hatchLamp);
-    scene.add(farLamp.group, hatchLamp.group);
+    // A lamp over the broken catwalk marks the crossing (glow and a light pool, no extra light).
+    const crossingLamp = new WorkLamp(m, v3(S.x1 - 0.01, S.floorY + 2.3, S.gapNear + 0.9), v3(-1, 0, 0), { light: false, pool: true, poolOpacity: 0.12 });
+    this.lamps.push(farLamp, hatchLamp, crossingLamp);
+    scene.add(farLamp.group, hatchLamp.group, crossingLamp.group);
     this.landingLight = new ServiceLight(m, v3(-2.6, S.floorY, 25.7), Math.PI / 2);
     scene.add(this.landingLight.group);
 
@@ -533,7 +564,7 @@ export class QuietCellLevel implements Level {
         player.lockFor(0.4, a.diagram);
         hud.showDocument('diagram', this.hatch.diagramImage(), 'Scratched beside the hatch');
         const first = progression.set('clue.read');
-        if (first) dialogue.say('Mara', 'Two ways for the pressure to go. Out the vent... or up into the piston.');
+        if (first) dialogue.say('Mara', 'Two ways for the pressure to go. Out the vent... or up into the piston.', undefined, { story: true, maxWait: 6 });
         events.emit('sfx', { name: 'paper' });
       },
     });
@@ -551,9 +582,9 @@ export class QuietCellLevel implements Level {
         this.hintTimer = 0;
         if (!open) {
           progression.set('valve.closed');
-          if (this.logic.hatch === 'closed') this.later(1.4, () => dialogue.sayOnce('valve-closed', 'Mara', "Vent's quiet. The needle's climbing."));
+          if (this.logic.hatch === 'closed') this.later(1.4, () => dialogue.sayOnce('valve-closed', 'Mara', "Vent's quiet. The needle's climbing.", undefined, { story: true, maxWait: 6 }));
         } else if (this.logic.hatch === 'latched') {
-          dialogue.sayOnce('valve-reopen', 'Mara', 'The latch holds it now.');
+          dialogue.sayOnce('valve-reopen', 'Mara', 'The latch holds it now.', undefined, { story: true, maxWait: 6 });
         }
       },
     });
@@ -573,7 +604,7 @@ export class QuietCellLevel implements Level {
           this.hatch.sealSteam.burst = 0.5;
           events.emit('sfx', { name: 'hiss', x: a.pistonSeal.x, y: a.pistonSeal.y, z: a.pistonSeal.z });
           const lines = ["All hiss, no lift. The pressure's going somewhere else.", 'Still bleeding off.', 'Not enough behind it.'];
-          dialogue.say('Mara', lines[Math.min(hissLines++, lines.length - 1)]);
+          dialogue.say('Mara', lines[Math.min(hissLines++, lines.length - 1)], undefined, { story: true, maxWait: 6 });
           progression.set('lever.tried');
         } else if (result === 'lift') {
           this.hatch.pullLever(true);
@@ -593,7 +624,7 @@ export class QuietCellLevel implements Level {
   }
 
   private registerTriggers(): void {
-    const { triggers, progression, dialogue, hud, checkpoints, events } = this.ctx;
+    const { triggers, progression, dialogue, checkpoints, events } = this.ctx;
     const S = SHAFT;
     // Stepping through the hatch: light the landing's service light (checkpoint after the puzzle).
     triggers.add({
@@ -603,15 +634,18 @@ export class QuietCellLevel implements Level {
         if (checkpoints.reach('landing')) {
           this.landingLight.ignite();
           events.emit('sfx', { name: 'ignite', x: this.landingLight.lampWorld.x, y: this.landingLight.lampWorld.y, z: this.landingLight.lampWorld.z });
-          hud.tip('Lit service lights mark where you return after a fall.');
           progression.setObjective('Cross the maintenance shaft');
         }
       },
     });
+    // No tutorial text: the girder is low and lit. Only a player who stands at it for a while
+    // without jumping gets the button, once.
     triggers.add({
       id: 'jump-tip',
+      once: false,
       contains: boxVolume(v3(S.x0, S.floorY - 0.5, S.girder.z + 0.3), v3(S.x1, S.floorY + 3, S.girder.z + 1.4)),
-      onEnter: () => hud.tip(this.ctx.input.usingGamepad ? 'Press A to jump.' : 'Press Space to jump.', 'jump'),
+      onEnter: () => (this.jumpHintAt = this.time + 7),
+      onExit: () => (this.jumpHintAt = null),
     });
     triggers.add({
       id: 'far-landing',
@@ -636,6 +670,8 @@ export class QuietCellLevel implements Level {
     const zones = this.ctx.camera.zones;
     zones.push({ id: 'cell', contains: boxVolume(v3(CELL.x0, CELL.y - 1, CELL.z0 - 0.2), v3(CELL.x1, CELL.y + 4, CELL.z1)), distance: 3.4, height: 1.5, fov: 62, priority: 2 });
     zones.push({ id: 'shaft', contains: boxVolume(v3(SHAFT.x0, -2, SHAFT.z0), v3(SHAFT.x1, 14, SHAFT.z1)), distance: 5.0, height: 1.6, fov: 60, priority: 1 });
+    // No camera assist across the shaft's girder and gap.
+    this.ctx.camera.precision.push(boxVolume(v3(SHAFT.x0, SHAFT.floorY - 2, SHAFT.gapFar - 1.2), v3(SHAFT.x1, SHAFT.floorY + 3, SHAFT.girder.z + 1.6)));
     zones.push({ id: 'lookout', contains: boxVolume(v3(LOOKOUT.x0, LOOKOUT.y - 1, HALL.aWall - 0.5), v3(LOOKOUT.x1, LOOKOUT.y + 4, LOOKOUT.z1 + 0.3)), distance: 3.8, height: 1.6, fov: 60, priority: 2 });
   }
 
@@ -701,7 +737,7 @@ export class QuietCellLevel implements Level {
           camera.playShot(at(1.3, 1.6, 27.85), at(-0.4, 0.95, 29.75), 2.6);
         },
       },
-      { at: 18.9, watchOnly: true, run: () => dialogue.say('Mara', "Where... This isn't my workshop.", 2.4) },
+      { at: 18.9, watchOnly: true, run: () => dialogue.say('Mara', "Where... This isn't my workshop.", 2.4, { story: true }) },
       {
         at: 19.3,
         watchOnly: true,
@@ -711,7 +747,7 @@ export class QuietCellLevel implements Level {
           camera.playShot(at(0.25, 1.6, 27.95), at(-0.35, 1.45, 29.7), 1.6);
         },
       },
-      { at: 21.6, watchOnly: true, run: () => dialogue.say('Mara', 'Salt on the walls. That engine thump... I know this place. Breakwater.', 3.6) },
+      { at: 21.6, watchOnly: true, run: () => dialogue.say('Mara', 'Salt on the walls. That engine thump... I know this place. Breakwater.', 3.6, { story: true }) },
       { at: 22.6, watchOnly: true, run: () => camera.playShot(at(1.85, 3.3, 27.4), at(-0.3, 0.7, 30.4), 5.0) },
       {
         at: 25.2,
@@ -784,16 +820,19 @@ export class QuietCellLevel implements Level {
           this.engine.openRoute();
           events.emit('sfx', { name: 'lever', x: 1.4, y: LOOKOUT.y + 1, z: HALL.aWall - 0.1 });
           progression.setObjective('Follow the service lights down into the hall');
-          this.ctx.hud.tip('The rope at the right of the railing has dropped. Short drops are safe.', 'route-open');
+          this.ropeHintAt = this.time + 16;
         },
       },
-      { at: tLights + 4.0, run: () => dialogue.say('Mara', 'Who is this?', 1.8) },
+      { at: tLights + 4.0, run: () => dialogue.say('Mara', 'Who is this?', 1.8, { story: true }) },
       { at: tLights + 5.6, run: () => events.emit('sfx', { name: 'static' }) },
     );
     this.sequence = { t: 0, steps };
   }
 
   private intercomBlink = 0;
+  /** Hesitation hints: shown only if the player has not moved on by then. */
+  private jumpHintAt: number | null = null;
+  private ropeHintAt: number | null = null;
   private timers: Array<{ t: number; run: () => void }> = [];
 
   /** Whether a cinematic currently holds control (and can be skipped). */
@@ -839,9 +878,9 @@ export class QuietCellLevel implements Level {
         { at: 0.25, watchOnly: true, run: () => camera.playShot(ex.clone().addScaledVector(out, -3.2).add(v3(1.6, 2.2, 0)), ex.clone().addScaledVector(out, 40).add(v3(0, -6, 0)), 3.0) },
         { at: 1.4, watchOnly: true, run: () => events.emit('sfx', { name: 'intercom', x: ex.x, y: ex.y + 1, z: ex.z }) },
         { at: 1.9, watchOnly: true, run: () => dialogue.say('Intercom', "You made the engine carry you. You're out of the cells, not off the rock.", 3.8) },
-        { at: 6.0, watchOnly: true, run: () => dialogue.say('Mara', 'Who are you? Who brought me here?', 2.4) },
+        { at: 6.0, watchOnly: true, run: () => dialogue.say('Mara', 'Who are you? Who brought me here?', 2.4, { story: true }) },
         { at: 8.6, watchOnly: true, run: () => dialogue.say('Intercom', 'Sorn wants your signature, or your silence. The only thing on Breakwater that still flies is in the hangar cell. Get there.', 5.4) },
-        { at: 14.2, watchOnly: true, run: () => dialogue.say('Mara', 'Ivo. It has to be.', 2) },
+        { at: 14.2, watchOnly: true, run: () => dialogue.say('Mara', 'Ivo. It has to be.', 2, { story: true }) },
         {
           at: 16.6,
           watchOnly: true,
@@ -889,11 +928,11 @@ export class QuietCellLevel implements Level {
       hud.pulseObjective();
     } else if (tier === 'evidence') {
       dialogue.interrupt();
-      dialogue.say('Mara', 'Someone scratched a diagram next to the hatch.');
+      dialogue.say('Mara', 'Someone scratched a diagram next to the hatch.', undefined, { story: true });
       this.hatch.pulseHighlight();
     } else {
       dialogue.interrupt();
-      dialogue.say('Mara', 'The bypass is dumping it all into the vent. Shut the bypass, wait for the needle, then the lever.', 5);
+      dialogue.say('Mara', 'The bypass is dumping it all into the vent. Shut the bypass, wait for the needle, then the lever.', 5, { story: true });
     }
   }
 
@@ -903,6 +942,18 @@ export class QuietCellLevel implements Level {
     this.time = time;
     const { progression, player, dialogue, events } = this.ctx;
     this.engine.fixedUpdate(dt);
+
+    // Hesitation hints.
+    if (this.jumpHintAt !== null && this.time > this.jumpHintAt && player.grounded && !player.frozen) {
+      this.jumpHintAt = null;
+      this.ctx.hud.tip(this.ctx.input.usingGamepad ? 'Jump: A (hold for higher)' : 'Jump: Space (hold for higher)', 'jump');
+    }
+    if (this.ropeHintAt !== null && this.time > this.ropeHintAt) {
+      this.ropeHintAt = null;
+      if (this.ctx.checkpoints.current?.id === 'lookout' && player.feet.y > LOOKOUT.y - 0.5) {
+        dialogue.say('Mara', "The rope gate's down. There's a scaffold just below the railing.");
+      }
+    }
 
     // Timers and scripted sequence (fixed step keeps them deterministic for tests).
     for (const t of this.timers) t.t -= dt;
@@ -1025,6 +1076,7 @@ export class QuietCellLevel implements Level {
     this.requestedEngineHint = 0;
     this.falling = false;
     this.fadeLevel = 0;
+    this.jumpHintAt = this.ropeHintAt = null;
     this.startIntro();
   }
 
@@ -1086,8 +1138,9 @@ function buildRoute(): RouteStep[] {
     { kind: 'move', to: [1.05, y, 27.6], precise: true },
     { kind: 'move', to: [1.05, S.floorY, 26.0], precise: true },
     { kind: 'jump', from: [1.0, S.floorY, S.girder.z + 0.75], to: [0.9, S.floorY, S.girder.z - 0.9] },
-    { kind: 'move', to: [0.7, S.floorY, S.gapNear + 1.3], precise: true },
-    { kind: 'jump', from: [0.6, S.floorY, S.gapNear + 0.25], to: [0.5, S.floorY, S.gapFar - 1.0] },
+    { kind: 'move', to: [2.5, S.floorY, S.gapNear + 1.3], precise: true },
+    { kind: 'jump', from: [2.5, S.floorY, S.gapNear + 0.25], to: [2.4, S.floorY, S.gapFar - 1.0] },
+    { kind: 'move', to: [0.5, S.floorY, S.z0 + 0.6], precise: true },
     { kind: 'move', to: [0.0, LOOKOUT.y, 17.9], precise: true },
     { kind: 'move', to: [-0.3, LOOKOUT.y, 14.6], precise: true },
     { kind: 'interact', id: 'lookout-light', standAt: [-0.45, LOOKOUT.y, 13.5], expectFlag: 'lookout.lit' },

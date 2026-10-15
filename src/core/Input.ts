@@ -50,15 +50,21 @@ const ACTION_CODES: Record<Action, string[]> = {
   interact: ['KeyE', 'KeyF', 'Enter'],
 };
 
-/** Base mouse look rate: radians of camera rotation per pixel at sensitivity 1. */
+/** Base mouse look rate: radians of camera rotation per pixel at the default sensitivity (25). */
 export const BASE_RADIANS_PER_PIXEL = 0.0022;
+/** The sensitivity sliders run 1-100; 25 is the base rate, 50 twice it, 100 four times. */
+export const DEFAULT_LOOK_SENSITIVITY = 25;
 const STICK_DEADZONE = 0.18;
 
 export class Input {
-  /** Radians per mouse pixel. Set from the sensitivity setting (base × setting). */
+  /** Radians per mouse pixel at a horizontal/vertical scale of 1. */
   mouseRadiansPerPixel = BASE_RADIANS_PER_PIXEL;
   /** Look speed at full stick deflection, radians per second (response is squared for precision). */
   stickRadiansPerSecond = 2.8;
+  /** Horizontal and vertical look scales from the sensitivity settings (setting / 25). */
+  lookScaleX = 1;
+  lookScaleY = 1;
+  invertX = false;
   invertY = false;
   /** True when the most recent input came from a gamepad; used for prompt glyphs. */
   usingGamepad = false;
@@ -152,8 +158,8 @@ export class Input {
     this.padMove.y = -ly;
     if (this.lookAllowed && (rx !== 0 || ry !== 0)) {
       const k = this.stickRadiansPerSecond * dt;
-      this.lookYaw += rx * Math.abs(rx) * k;
-      this.lookPitch += ry * Math.abs(ry) * k;
+      this.lookYaw += rx * Math.abs(rx) * k * this.lookScaleX;
+      this.lookPitch += ry * Math.abs(ry) * k * this.lookScaleY;
     }
     const buttons = pad.buttons.map((b) => b.pressed);
     const edge = (i: number) => buttons[i] && !this.padButtonsPrev[i];
@@ -168,7 +174,7 @@ export class Input {
 
   /** Look motion since the last call, in radians (sensitivity and invert already applied). */
   consumeLook(): LookDelta {
-    const out = { yaw: this.lookYaw, pitch: this.lookPitch * (this.invertY ? -1 : 1) };
+    const out = { yaw: this.lookYaw * (this.invertX ? -1 : 1), pitch: this.lookPitch * (this.invertY ? -1 : 1) };
     this.lookYaw = this.lookPitch = 0;
     if (!this.lookAllowed) out.yaw = out.pitch = 0;
     return out;
@@ -273,8 +279,8 @@ export class Input {
 
   private handleMouseMove = (e: MouseEvent): void => {
     if (!this.lookAllowed || !(this.pointerLocked || this.dragging)) return;
-    this.lookYaw += e.movementX * this.mouseRadiansPerPixel;
-    this.lookPitch += e.movementY * this.mouseRadiansPerPixel;
+    this.lookYaw += e.movementX * this.mouseRadiansPerPixel * this.lookScaleX;
+    this.lookPitch += e.movementY * this.mouseRadiansPerPixel * this.lookScaleY;
   };
 
   private handlePointerLockChange = (): void => {

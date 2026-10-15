@@ -535,6 +535,16 @@ export class EngineRoute {
     this.registerInteractions();
     this.registerTriggers();
     ctx.camera.zones.push({ id: 'hall', contains: (p) => Math.hypot(p.x, p.z) < HALL.aWall + 0.2 && p.y < 14, distance: 6.2, height: 1.7, fov: 60, priority: 1 });
+    // The camera assist never turns the camera near a jump, vault, ledge or moving platform.
+    const near = (c: THREE.Vector3, r: number) => (p: THREE.Vector3) => Math.hypot(p.x - c.x, p.z - c.z) < r && Math.abs(p.y - c.y) < 3;
+    const at = (k: number, a: number, f: number, y: number) => sidePos(k, a, uAt(a, f), y);
+    ctx.camera.precision.push(
+      near(at(2, 10.6, 0.58, T1), 3.2),
+      near(at(3, 10.6, 0.5, T1), 2.8),
+      near(at(4, 11.5, 0.12, T1), 3.0),
+      near(this.shuttle.base.clone().setY(T1), 3.4),
+      near(this.exitTakeoff, 3.6),
+    );
     this.route = buildEngineRoute(this);
     const from = this.route.findIndex((st) => st.kind === 'interact' && st.id === 'ram-catch');
     this.feedRoute = [{ kind: 'move', to: this.debugPoint(8, 10.6, 0.05, T3) as [number, number, number], precise: true }, ...this.route.slice(from)];
@@ -628,14 +638,14 @@ export class EngineRoute {
           progression.set('steam.redirected');
           if (this.feed.caught && this.feed.ram === 0) {
             progression.set('ram.primed');
-            dialogue.sayOnce('ram-primed', 'Mara', "The catch is holding it down. It'll go the moment I let it.");
+            dialogue.sayOnce('ram-primed', 'Mara', "The catch is holding it down. It'll go the moment I let it.", undefined, { story: true, maxWait: 6 });
             progression.setObjective('Stand on the ram and release the catch');
           } else {
-            dialogue.sayOnce('feed-ram', 'Mara', "Steam's off the walkway. The feed is going to that ram now.");
+            dialogue.sayOnce('feed-ram', 'Mara', "Steam's off the walkway. The feed is going to that ram now.", undefined, { story: true, maxWait: 6 });
             progression.setObjective('Get the ram to carry you up to the breach gantry');
           }
         } else {
-          dialogue.sayOnce('feed-vent', 'Mara', 'Back to the vent. The ram comes down, the steam comes back.');
+          dialogue.sayOnce('feed-vent', 'Mara', 'Back to the vent. The ram comes down, the steam comes back.', undefined, { story: true, maxWait: 6 });
         }
       },
     });
@@ -652,8 +662,8 @@ export class EngineRoute {
         events.emit('sfx', { name: 'lever', x: this.catchPos.x, y: this.catchPos.y, z: this.catchPos.z });
         if (caught) {
           progression.set('ram.caught');
-          if (this.feed.ram === 0) dialogue.sayOnce('catch-down', 'Mara', 'Catch is on. That holds the ram right where it stands.');
-          else dialogue.sayOnce('catch-up', 'Mara', "Caught it... up there. Where I can't reach it.");
+          if (this.feed.ram === 0) dialogue.sayOnce('catch-down', 'Mara', 'Catch is on. That holds the ram right where it stands.', undefined, { story: true, maxWait: 6 });
+          else dialogue.sayOnce('catch-up', 'Mara', "Caught it... up there. Where I can't reach it.", undefined, { story: true, maxWait: 6 });
           if (this.feed.primed) progression.set('ram.primed');
         }
       },
@@ -727,7 +737,7 @@ export class EngineRoute {
       onEnter: () => {
         player.knockback(back.clone().multiplyScalar(7).setY(3.5), 0.35);
         events.emit('sfx', { name: 'hiss', x: centre.x, y: centre.y + 1, z: centre.z });
-        dialogue.sayOnce('steam', 'Mara', 'Too hot to push through. Something up here is feeding that line.');
+        dialogue.sayOnce('steam', 'Mara', 'Too hot to push through. Something up here is feeding that line.', undefined, { story: true, maxWait: 6 });
       },
     });
     triggers.add({
@@ -865,7 +875,7 @@ export class EngineRoute {
     this.breachPiston.fixedUpdate(dt);
     if (this.feed.emptyRises > this.lastEmptyRises) {
       this.lastEmptyRises = this.feed.emptyRises;
-      this.ctx.dialogue.sayOnce('ram-empty', 'Mara', '...and up it goes. Without me.');
+      this.ctx.dialogue.sayOnce('ram-empty', 'Mara', '...and up it goes. Without me.', undefined, { story: true, maxWait: 6 });
     }
   }
 

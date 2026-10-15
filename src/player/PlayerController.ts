@@ -45,6 +45,9 @@ export class PlayerController {
 
   private timeSinceGrounded = 0;
   private jumpBufferTimer = 0;
+  /** Camera yaw the movement stick is read against (see `readInputYaw`). */
+  private inputYaw = 0;
+  private airStick: { x: number; y: number } | null = null;
   private jumping = false;
   private lastJumpTime = -1;
   private time = 0;
@@ -139,6 +142,31 @@ export class PlayerController {
     this.faceTarget = null;
   }
 
+  /**
+   * The camera yaw to read the stick against. On the ground it is the live camera. In the air a
+   * held direction keeps the yaw it had at takeoff, so turning the camera mid-jump does not bend
+   * the jump; releasing the stick or pushing a clearly different direction (over 35 degrees) reads
+   * the live camera again.
+   */
+  private readInputYaw(onGround: boolean, input: InputFrame, cameraYaw: number): number {
+    const len = Math.hypot(input.moveX, input.moveY);
+    if (onGround || this.isLocked) {
+      this.airStick = null;
+      this.inputYaw = cameraYaw;
+      return cameraYaw;
+    }
+    if (len < 0.25) {
+      this.airStick = null;
+      this.inputYaw = cameraYaw;
+    } else if (!this.airStick) {
+      this.airStick = { x: input.moveX / len, y: input.moveY / len };
+    } else if (this.airStick.x * input.moveX + this.airStick.y * input.moveY < Math.cos((35 * Math.PI) / 180) * len) {
+      this.airStick = { x: input.moveX / len, y: input.moveY / len };
+      this.inputYaw = cameraYaw;
+    }
+    return this.inputYaw;
+  }
+
   /** Runs once per fixed step, before `physics.step()`. */
   fixedUpdate(dt: number, input: InputFrame, cameraYaw: number): void {
     this.time += dt;
@@ -162,10 +190,11 @@ export class PlayerController {
     this.lockTimer = Math.max(0, this.lockTimer - dt);
 
     // --- horizontal intent, relative to the camera
-    const fx = -Math.sin(cameraYaw);
-    const fz = -Math.cos(cameraYaw);
-    const rx = Math.cos(cameraYaw);
-    const rz = -Math.sin(cameraYaw);
+    const yaw = this.readInputYaw(onGround, input, cameraYaw);
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    const rx = Math.cos(yaw);
+    const rz = -Math.sin(yaw);
     this.wish.set(fx * input.moveY + rx * input.moveX, 0, fz * input.moveY + rz * input.moveX);
     if (this.isLocked) this.wish.set(0, 0, 0);
     const wishLen = Math.min(1, this.wish.length());
@@ -175,8 +204,13 @@ export class PlayerController {
 
     let accel: number;
     if (onGround) {
-      const reversing = this.velocity.x * targetVX + this.velocity.z * targetVZ < 0;
-      accel = wishLen < 0.05 ? MOVEMENT.groundDecel : reversing ? MOVEMENT.turnAccel : MOVEMENT.groundAccel;
+      const speed = Math.hypot(this.velocity.x, this.velocity.z);
+      const targetSpeed = Math.hypot(targetVX, targetVZ);
+      // Turning sharply: the angle between where Mara is going and where the stick points.
+      const cos = speed > 0.5 && targetSpeed > 0.5 ? (this.velocity.x * targetVX + this.velocity.z * targetVZ) / (speed * targetSpeed) : 1;
+      if (wishLen < 0.05) accel = MOVEMENT.groundDecel;
+      else if (cos < 0.5) accel = MOVEMENT.turnAccel;
+      else accel = speed < MOVEMENT.maxSpeed * MOVEMENT.launchFraction ? MOVEMENT.launchAccel : MOVEMENT.groundAccel;
     } else {
       accel = MOVEMENT.airAccel;
     }

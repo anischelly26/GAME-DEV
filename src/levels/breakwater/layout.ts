@@ -74,8 +74,14 @@ export const SHAFT = {
   channelBottom: 0.2,
   waterY: 1.2,
   topY: 13.5,
-  /** Fallen girder used as the safe practice jump. */
+  /** Fallen girder used as the safe practice jump (or vault, at a run). */
   girder: { z: 24.7, depth: 0.42, height: 0.6 },
+  /**
+   * A railing guards the channel's near lip except here, where the old catwalk broke away. A
+   * running jump over the girder lands only about 2 m short of the channel, so the railing stops a
+   * player who keeps running; the crossing is a deliberate second step, lit from the far side.
+   */
+  crossing: { x0: 1.4, x1: 3.6 },
 };
 
 /** Ruined tier-2 cell used as the sheltered lookout over the turbine hall (side k = 0). */
