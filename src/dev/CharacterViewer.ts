@@ -144,5 +144,5 @@ export async function startCharacterViewer(container: HTMLElement): Promise<void
     place();
     renderer.render(scene, camera);
   });
-  console.info(`Mara: ${rig.stats.triangles} triangles (from ${rig.stats.rawTriangles}), built in ${rig.stats.millis} ms`);
+  console.info(`Mara: ${rig.stats.triangles} triangles, ${rig.stats.source}, ready in ${rig.stats.millis} ms`);
 }

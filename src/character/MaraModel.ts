@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildAllParts } from './maraBuild';
+import { decodeBake, type BakedMesh } from './bakeFormat';
 import { bonePos, boneDefs, EYE, SIDES, type MaterialKey } from './maraParts';
 import type { MeshData } from './mesher';
 
@@ -45,22 +46,43 @@ export interface MaraRig {
   setBlink(t: number): void;
   /** Turn both eyes (radians, relative to the head). */
   setGaze(yaw: number, pitch: number): void;
-  stats: { triangles: number; rawTriangles: number; millis: number; parts: Record<string, string> };
+  stats: { triangles: number; rawTriangles: number; millis: number; source: 'baked' | 'workers' | 'main'; parts: Record<string, string> };
 }
 
-function toGeometry(m: MeshData): THREE.BufferGeometry {
+function toGeometry(m: MeshData | BakedMesh): THREE.BufferGeometry {
   const g = new THREE.BufferGeometry();
+  // Baked meshes are quantised (int8 normals, uint8 colours and weights); normalised attributes
+  // read back as the same 0..1 / -1..1 values in the shaders.
+  const quantised = m.normal instanceof Int8Array;
   g.setAttribute('position', new THREE.BufferAttribute(m.position, 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(m.normal, 3));
-  g.setAttribute('color', new THREE.BufferAttribute(m.color, 3));
-  g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(m.skinIndex, 4));
-  g.setAttribute('skinWeight', new THREE.BufferAttribute(m.skinWeight, 4));
+  g.setAttribute('normal', new THREE.BufferAttribute(m.normal, 3, quantised));
+  g.setAttribute('color', new THREE.BufferAttribute(m.color, 3, quantised));
+  g.setAttribute('skinIndex', new THREE.BufferAttribute(m.skinIndex, 4));
+  g.setAttribute('skinWeight', new THREE.BufferAttribute(m.skinWeight, 4, quantised));
   g.setIndex(new THREE.BufferAttribute(m.index, 1));
   return g;
 }
 
+/** The pre-built parts from public/mara/mara.bin, if present and baked from this exact source. */
+async function loadBaked(): Promise<Array<{ name: string; material: MaterialKey; mesh: BakedMesh }> | null> {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}mara/mara.bin`);
+    if (!res.ok) return null;
+    const bake = decodeBake(await res.arrayBuffer());
+    if (!bake) return null;
+    const expected = typeof __MARA_BAKE_HASH__ === 'string' ? __MARA_BAKE_HASH__ : '';
+    if (bake.hash !== expected) {
+      console.info(`Mara: mara.bin is stale (${bake.hash}, source ${expected}); building at load time. Run npm run bake:mara.`);
+      return null;
+    }
+    return bake.parts;
+  } catch {
+    return null;
+  }
+}
+
 /** Build Mara. The sculpting runs in Web Workers; await this while loading. */
-export async function buildMara(opts: { workers?: boolean } = {}): Promise<MaraRig> {
+export async function buildMara(opts: { workers?: boolean; baked?: boolean } = {}): Promise<MaraRig> {
   const t0 = performance.now();
   const defs = boneDefs();
   const bones = new Map<string, THREE.Bone>();
@@ -96,13 +118,16 @@ export async function buildMara(opts: { workers?: boolean } = {}): Promise<MaraR
   const skeleton = new THREE.Skeleton(order);
   const materials = maraMaterials();
 
-  const built = await buildAllParts(index, opts.workers ?? true);
   const byMaterial = new Map<MaterialKey, THREE.BufferGeometry[]>();
   const parts: Record<string, string> = {};
   let rawTriangles = 0;
-  for (const p of built) {
-    parts[p.name] = `${p.millis}+${p.simplifyMillis}ms ${p.rawTriangles}->${p.mesh.index.length / 3}`;
-    rawTriangles += p.rawTriangles;
+  const baked = opts.baked === false ? null : await loadBaked();
+  const source: MaraRig['stats']['source'] = baked ? 'baked' : opts.workers === false ? 'main' : 'workers';
+  for (const p of baked ?? (await buildAllParts(index, opts.workers ?? true))) {
+    if ('millis' in p) {
+      parts[p.name] = `${p.millis}+${p.simplifyMillis}ms ${p.rawTriangles}->${p.mesh.index.length / 3}`;
+      rawTriangles += p.rawTriangles;
+    }
     const list = byMaterial.get(p.material) ?? [];
     list.push(toGeometry(p.mesh));
     byMaterial.set(p.material, list);
@@ -170,7 +195,7 @@ export async function buildMara(opts: { workers?: boolean } = {}): Promise<MaraR
     materials,
     setBlink,
     setGaze,
-    stats: { triangles, rawTriangles, millis: Math.round(performance.now() - t0), parts },
+    stats: { triangles, rawTriangles, millis: Math.round(performance.now() - t0), source, parts },
   };
 }
 
