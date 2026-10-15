@@ -3,7 +3,7 @@
  * Screenshots of Chapter One's opening (Mara wakes up in the cell) at fixed story times.
  *
  *   npm run dev            (in another terminal)
- *   node scripts/capture-opening.mjs [--url http://localhost:5173] [--channel msedge] [--size 1600x900] [--out artifacts/opening]
+ *   node scripts/capture-opening.mjs [--url http://localhost:5173] [--channel msedge] [--size 1600x900] [--out artifacts/opening] [--format jpg]
  *
  * Steps the simulation deterministically with rendering on every step (`__GAME.step`), so the
  * character animation advances at game speed. Console errors make the script exit non-zero.
@@ -51,7 +51,7 @@ for (const [at, name] of shots) {
   for (let left = n; left > 0; left -= 60) await page.evaluate((k) => window.__GAME.step(k), Math.min(60, left));
   t = at;
   await page.waitForTimeout(150);
-  await page.screenshot({ path: join(out, `${name}.png`) });
+  await page.screenshot(args.format === 'jpg' ? { path: join(out, `${name}.jpg`), quality: 82 } : { path: join(out, `${name}.png`) });
   console.log(`${name} at ${at}s`);
 }
 await browser.close();

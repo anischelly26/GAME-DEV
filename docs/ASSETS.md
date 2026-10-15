@@ -16,7 +16,7 @@ There is no paid or restricted-licence content.
 | Universal Base Characters (Standard): Superhero Female head, face, eyes and brows; Buns hairstyle | [quaternius.itch.io/universal-base-characters](https://quaternius.itch.io/universal-base-characters), downloaded 2026-10-15 | Quaternius | CC0 1.0 (stated on the itch.io page) | `public/assets/mara/mara.glb` |
 | Modular Character Outfits – Fantasy (Standard): Female Ranger outfit (without hood and pauldrons, recoloured from green to ochre) | [quaternius.itch.io/modular-character-outfits-fantasy](https://quaternius.itch.io/modular-character-outfits-fantasy), downloaded 2026-10-15 | Quaternius | CC0 1.0 (stated on the itch.io page) | `public/assets/mara/mara.glb` |
 | Universal Animation Library (Standard): idle, walk, jog, sprint, jump start/loop/land, interact, roll, push | [opengameart.org/content/universal-animation-library](https://opengameart.org/content/universal-animation-library) | Quaternius | CC0 1.0 (`License.txt` in the pack) | Retargeted into `mara.glb` |
-| Universal Animation Library 2 (Standard): climb up, ninja jump (vault), knockback, rail idle | [opengameart.org/content/universal-animation-library-2](https://opengameart.org/content/universal-animation-library-2) | Quaternius | CC0 1.0 (`License.txt` in the pack) | Retargeted into `mara.glb` |
+| Universal Animation Library 2 (Standard): climb up, ninja jump (vault), knockback, rail idle, lying down to standing, shaking the head (Chapter One opening) | [opengameart.org/content/universal-animation-library-2](https://opengameart.org/content/universal-animation-library-2) | Quaternius | CC0 1.0 (`License.txt` in the pack) | Retargeted into `mara.glb` |
 | Castle Wall Slates | [polyhaven.com/a/castle_wall_slates](https://polyhaven.com/a/castle_wall_slates) | Rob Tuytel | CC0 | Walls (`stone`) |
 | Old Stone Wall | [polyhaven.com/a/old_stone_wall](https://polyhaven.com/a/old_stone_wall) | Charlotte Baglioni | CC0 | Dark structural stone (`stoneDark`) |
 | Cobblestone Floor 04 | [polyhaven.com/a/cobblestone_floor_04](https://polyhaven.com/a/cobblestone_floor_04) | Rob Tuytel | CC0 | Floors |
@@ -44,10 +44,10 @@ The assembly runs in the browser (`tools/maraAssemble.ts`):
 4. **Skeleton.** Everything is bound to one skeleton.
 5. **Clips.** Each animation clip is retargeted with world-space rotation deltas
    (`tools/retarget.ts`), because the first library uses Blender/Rigify bone names and different
-   bone axes. Clips that move the hips through space are held in place, because the game's
-   controller moves Mara.
+   bone axes. Horizontal hip travel is removed, because the game's controller moves Mara;
+   vertical motion (lying down, getting up, climbing) is kept.
 6. **Export.** Textures are re-encoded as 1024 px JPEG and exported as one binary glTF: about
-   6.3 MB, 32k triangles, 15 clips.
+   6.8 MB, 32k triangles, 17 clips.
 
 `node scripts/capture-character.mjs` renders turntable views from the dev viewer
 (`/?viewer=mara`).
