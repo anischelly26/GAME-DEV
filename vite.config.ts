@@ -7,4 +7,6 @@ export default defineConfig({
   preview: { port: 4173, strictPort: true },
   // Rapier ships its WASM inlined in JS (~3 MB), so the main chunk is large by design for now.
   build: { target: 'es2022', chunkSizeWarningLimit: 5500 },
+  // The character sculpting worker imports ES modules (and meshoptimizer's inlined WASM).
+  worker: { format: 'es' },
 });

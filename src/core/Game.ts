@@ -8,6 +8,7 @@ import { createMaterials, Palette, type MaterialLibrary } from '../world/materia
 import { Sky } from '../world/Atmosphere';
 import { PlayerController } from '../player/PlayerController';
 import { PlayerAvatar } from '../player/PlayerAvatar';
+import { buildMara } from '../character/MaraModel';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { Progression, Checkpoints, Triggers } from '../gameplay/Progression';
 import { InteractionSystem } from '../gameplay/Interaction';
@@ -74,6 +75,8 @@ export class Game {
   private debugVisible = false;
   private physicsLines: THREE.LineSegments | null = null;
   private fps = 60;
+  /** Character build cost (dev overlay and tests). */
+  characterStats: { triangles: number; rawTriangles: number; millis: number } | null = null;
   private reachChecks = 0;
   private reachPulse = 0;
 
@@ -96,6 +99,8 @@ export class Game {
 
   private async init(): Promise<void> {
     this.hud.showLoading('Charging the tide engine…');
+    // Mara is sculpted in Web Workers while the rest of the world is built here.
+    const mara = buildMara();
     // Let the loading card paint before the heavy synchronous texture generation.
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
     this.physics = await Physics.create();
@@ -146,6 +151,9 @@ export class Game {
     const forced = this.options.quality ?? (this.options.test ? 'low' : null);
     if (forced) this.setQuality(forced);
 
+    const rig = await mara;
+    this.avatar.attach(rig);
+    this.characterStats = rig.stats;
     const startId = this.options.start && this.level.checkpointIds.includes(this.options.start) ? this.options.start : this.level.checkpointIds[0];
     this.teleportToCheckpoint(startId);
     // Compile shaders up front to avoid a hitch on the first frame.
