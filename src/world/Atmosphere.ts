@@ -145,7 +145,8 @@ export class Water {
           float fres = 0.04 + 0.96 * pow(1.0 - max(dot(n, V), 0.0), 4.0);
           vec3 R = reflect(-V, n);
           vec3 refl = mix(sky * 0.7, sky * 1.4, clamp(R.y, 0.0, 1.0));
-          float spec = pow(max(dot(R, moonDir), 0.0), 120.0) * 2.5 + pow(max(dot(R, moonDir), 0.0), 900.0) * 6.0;
+          // Moon glint: kept near the bloom threshold so it sparkles without washing over the deck.
+          float spec = pow(max(dot(R, moonDir), 0.0), 120.0) * 0.9 + pow(max(dot(R, moonDir), 0.0), 900.0) * 1.8;
           vec3 col = mix(deep, refl, fres) + moonColor * spec;
           float r = length(p);
           float foam = smoothstep(foamRadius - 1.2, foamRadius, r) * (0.5 + 0.5 * vnoise(p * 2.0 + time * 0.6));
@@ -319,6 +320,8 @@ export class SteamEmitter {
   private static texture: THREE.Texture | null = null;
   /** Bursts are periodic so the engine feels like it "breathes". */
   burst = 0;
+  /** Peak opacity of one puff; dense emitters use less so overlapping puffs stay see-through. */
+  peakOpacity = 0.22;
 
   constructor(
     private readonly origin: THREE.Vector3,
@@ -360,7 +363,7 @@ export class SteamEmitter {
       p.vel.y += dt * 0.3;
       const s = 0.4 + t * 2.2;
       p.sprite.scale.set(s, s, s);
-      (p.sprite.material as THREE.SpriteMaterial).opacity = Math.sin(t * Math.PI) * 0.22;
+      (p.sprite.material as THREE.SpriteMaterial).opacity = Math.sin(t * Math.PI) * this.peakOpacity;
       if (p.life <= 0) p.sprite.visible = false;
     }
   }

@@ -6,6 +6,7 @@ import { valvePlateTexture, paintedTextTexture } from '../../world/textures';
 import { ServiceLight, glowSprite } from '../../world/props/Lanterns';
 import { SteamEmitter } from '../../world/Atmosphere';
 import { EngineCollar, PistonPlatform } from '../../world/props/EngineRides';
+import { braceGantry, buildBarrierBeam, buildSparesRack } from '../../world/props/Maintenance';
 import { mulberry32 } from '../../core/math';
 import { HALL, sideAngle, sideFraction, halfSide } from './layout';
 
@@ -166,8 +167,10 @@ export class EngineRoute {
       const u = uAt(10.7, 0.5);
       const center = sidePos(k, (HALL.aIn + HALL.aWall) / 2, u, T1 + 0.42);
       const q = sideQuat(k).clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2));
-      const c = solidBox(center, v3(HALL.aWall - HALL.aIn - 0.1, 0.84, 0.26), q, m.iron, { blocksCamera: false });
+      const railLen = HALL.aWall - HALL.aIn - 0.1;
+      const c = physics.box(center, v3(railLen / 2, 0.42, 0.13), q, { blocksCamera: false });
       traversal.markVaultable(c);
+      buildBarrierBeam(batch, m, new THREE.Matrix4().compose(center.clone().setY(T1), q, v3(1, 1, 1)), railLen, 0.84, 0.26, root);
       const sign = new THREE.Mesh(
         new THREE.PlaneGeometry(0.9, 0.3),
         new THREE.MeshStandardMaterial({ map: paintedTextTexture('NO ACCESS', { w: 512, h: 160, color: 'rgba(30,24,20,0.95)', bg: 'rgba(214,180,90,1)', seed: 8 }), roughness: 0.8, side: THREE.DoubleSide }),
@@ -178,22 +181,18 @@ export class EngineRoute {
       root.add(sign);
     }
 
-    // ------------------------------------------------------------ k = 4: rubble + raised gantry (ledge catch)
+    // ------------------------------------------------------------ k = 4: spares rack + raised gantry (ledge catch)
     {
       const k = 4;
       const q = sideQuat(k);
-      for (let i = 0; i < 9; i++) {
-        const f = 0.3 + (i / 8) * 0.4;
-        const a = HALL.aIn + 0.3 + rng() * 1.4;
-        const h = 1.4 + rng() * 1.6;
-        const p = sidePos(k, a, uAt(a, f), T1 + h / 2);
-        const blk = new RoundedBoxGeometry(0.9 + rng() * 0.5, h, 0.9 + rng() * 0.4, 1, 0.1);
-        batch.add(blk, m.stone, new THREE.Matrix4().compose(p, new THREE.Quaternion().setFromEuler(new THREE.Euler(rng() * 0.3, rng() * 3, rng() * 0.3)), new THREE.Vector3(1, 1, 1)), { damp: true });
-      }
-      // Blockers matching the rubble heap: tall on the hall side, and low under the gantry so the
-      // only way past is over it.
+      // A loaded spares rack blocks the hall side of the walkway; crates fill the space under the
+      // gantry, so the only way past is to catch the gantry edge and climb. The rack fills its
+      // collider exactly.
+      const rackHalf = v3(halfSide(10) * 0.4 + 0.2, 1.6, (11.0 - HALL.aIn) / 2);
       const heap = sidePos(k, (HALL.aIn + 11.0) / 2, uAt(10, 0.5), T1 + 1.6);
-      physics.box(heap, v3(halfSide(10) * 0.4 + 0.2, 1.6, (11.0 - HALL.aIn) / 2), q);
+      physics.box(heap, rackHalf, q);
+      const rackFrame = new THREE.Matrix4().compose(heap.clone().setY(T1), q, v3(1, 1, 1));
+      buildSparesRack(batch, m, rackFrame, rackHalf.clone().multiplyScalar(2), root);
       const under = sidePos(k, (11.0 + HALL.aWall) / 2, uAt(11.7, 0.5), T1 + 0.8);
       physics.box(under, v3(halfSide(11.7) * 0.4 + 0.2, 0.8, (HALL.aWall - 11.0) / 2), q);
       for (let i = 0; i < 4; i++) {
@@ -213,6 +212,7 @@ export class EngineRoute {
         const leg = sidePos(k, 11.15, u, T1 + 0.9);
         batch.add(new THREE.BoxGeometry(0.12, 1.8, 0.12), m.iron, new THREE.Matrix4().compose(leg, q, new THREE.Vector3(1, 1, 1)));
       }
+      braceGantry(batch, m, new THREE.Matrix4().compose(sidePos(k, 11.7, (ua + ub) / 2, T1), q, v3(1, 1, 1)), ub - ua, 1.35, 2.0, 11.15 - 11.7);
       // Worn handhold paint on the catch edge.
       const edge = sidePos(k, 11.7, ua - 0.005, T1 + 1.96);
       const mark = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 1.3), new THREE.MeshStandardMaterial({ color: '#d0a24a', roughness: 0.7 }));
@@ -290,14 +290,16 @@ export class EngineRoute {
         const a = HALL.aWall - 0.1;
         const p = sidePos(k, a, uAt(a, fCurtain) + ((i % 2) - 0.5) * 0.3, T3 + 0.25 + (i >> 1) * 0.6);
         const dir = v3(-Math.sin(sideAngle(k)), 0.12, -Math.cos(sideAngle(k)));
-        const e = new SteamEmitter(p, dir.multiplyScalar(4.5), 16, new THREE.Color('#e4ecee'));
+        // Cooler grey and thinner puffs: the curtain reads as a hazard without hiding the walkway.
+        const e = new SteamEmitter(p, dir.multiplyScalar(4.5), 16, new THREE.Color('#a9b9be'));
+        e.peakOpacity = 0.11;
         this.curtain.push(e);
         root.add(e.group);
       }
       const sheetGeo = new THREE.PlaneGeometry(HALL.aWall - HALL.aIn, 2.6);
       this.curtainSheet = new THREE.Mesh(
         sheetGeo,
-        new THREE.MeshBasicMaterial({ color: '#cfdfe3', map: glowSprite(), transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide }),
+        new THREE.MeshBasicMaterial({ color: '#b4c3c7', map: glowSprite(), transparent: true, opacity: 0.05, depthWrite: false, side: THREE.DoubleSide }),
       );
       this.curtainSheet.position.copy(sidePos(k, (HALL.aIn + HALL.aWall) / 2, uAt(10.7, fCurtain), T3 + 1.3));
       this.curtainSheet.quaternion.copy(sideQuat(k)).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2));
@@ -624,7 +626,7 @@ export class EngineRoute {
     }
     // Steam curtain fades out once redirected.
     const sheet = this.curtainSheet.material as THREE.MeshBasicMaterial;
-    sheet.opacity += ((this.steamOn ? 0.1 : 0) - sheet.opacity) * (1 - Math.exp(-dt * 3));
+    sheet.opacity += ((this.steamOn ? 0.05 : 0) - sheet.opacity) * (1 - Math.exp(-dt * 3));
     for (const e of this.curtain) e.rate = this.steamOn ? 16 : 0;
     this.steamWheelAngle += ((this.steamOn ? 0 : Math.PI / 2) - this.steamWheelAngle) * (1 - Math.exp(-dt * 7));
     this.steamValveWheel.rotation.z = this.steamWheelAngle;

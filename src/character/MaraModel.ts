@@ -21,7 +21,7 @@ export function maraMaterials(): MaraMaterials {
     lid: m('#cf9677', 0.6),
     eye: new THREE.MeshStandardMaterial({ map: eyeTexture(), roughness: 0.12 }),
     shirt: m('#d2ccbe', 0.92),
-    jacket: m('#9a6f3e', 0.8),
+    jacket: m('#8d673c', 0.8),
     trousers: m('#465166', 0.9),
     patch: m('#7d6d55', 0.95),
     leather: m('#5a3a23', 0.45),
