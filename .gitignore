@@ -21,3 +21,6 @@ Thumbs.db
 
 # Local screenshots and probe output
 artifacts/
+
+# Downloaded third-party source packs (see docs/ASSETS.md for sources and licences)
+import-cache/

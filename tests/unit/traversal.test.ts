@@ -12,16 +12,21 @@ let player: RAPIER.Collider;
 let surfaces: TraversalSurfaces;
 let ledgeCollider: RAPIER.Collider;
 let plainWall: RAPIER.Collider;
+let cornerLedge: RAPIER.Collider;
 
 beforeAll(async () => {
   physics = await Physics.create();
   physics.box(new THREE.Vector3(0, -0.25, 0), new THREE.Vector3(30, 0.25, 30)); // floor
   ledgeCollider = physics.box(new THREE.Vector3(0, 1.0, -3), new THREE.Vector3(1.5, 1.0, 1.0)); // top at 2.0, face at z=-2
   plainWall = physics.box(new THREE.Vector3(-6, 1.0, -3), new THREE.Vector3(1.5, 1.0, 1.0)); // same, not registered
+  // A ledge whose right end meets a tall wall (like the tier-one gantry against the hall wall).
+  cornerLedge = physics.box(new THREE.Vector3(14, 1.0, -3), new THREE.Vector3(1.5, 1.0, 1.0)); // x 12.5..15.5, face at z=-2
+  physics.box(new THREE.Vector3(15.75, 2.0, -2), new THREE.Vector3(0.25, 2.0, 2.0)); // wall from x = 15.5
   const rail = physics.box(new THREE.Vector3(5, 0.42, 0), new THREE.Vector3(0.13, 0.42, 1.5)); // 0.84 tall, 0.26 deep
   const tall = physics.box(new THREE.Vector3(5, 0.7, 6), new THREE.Vector3(0.13, 0.7, 1.5)); // 1.4 tall: too high to vault
   surfaces = new TraversalSurfaces();
   surfaces.markClimbable(ledgeCollider);
+  surfaces.markClimbable(cornerLedge);
   surfaces.markVaultable(rail);
   surfaces.markVaultable(tall);
   const body = physics.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, 50, 0));
@@ -53,6 +58,16 @@ describe('ledge catch', () => {
     expect(findLedge(physics, surfaces, new THREE.Vector3(0, 0, -1.5), toward, player)).not.toBeNull();
     // Feet far below: out of reach.
     expect(findLedge(physics, surfaces, new THREE.Vector3(0, 2.0 - TRAVERSAL.ledgeMax - 0.5, -1.5), toward, player)).toBeNull();
+  });
+
+  it('an angled catch beside a wall slides along the edge to a spot with room', () => {
+    // Heading 35 degrees toward the wall: the ray meets the face 0.15 m from the wall, where a
+    // standing capsule would not fit. The catch still succeeds, shifted along the edge.
+    const dir = new THREE.Vector3(Math.sin(0.61), 0, -Math.cos(0.61));
+    const ledge = findLedge(physics, surfaces, new THREE.Vector3(15.0, 0.6, -1.5), dir, player);
+    expect(ledge).not.toBeNull();
+    expect(ledge!.standFeet.x).toBeLessThanOrEqual(15.5 - 0.3 + 1e-6);
+    expect(ledge!.hangFeet.z).toBeGreaterThan(-2);
   });
 
   it('does not catch from too far away', () => {

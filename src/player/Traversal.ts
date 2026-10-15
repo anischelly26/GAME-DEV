@@ -92,21 +92,31 @@ export function findLedge(physics: Physics, surfaces: TraversalSurfaces, feet: T
     const n = wall.normal.clone().setY(0);
     if (n.lengthSq() < 0.5) continue; // not a wall
     n.normalize();
-    const wallPoint = origin.clone().addScaledVector(d, wall.distance);
-    // Find the top surface just behind the wall face.
-    const above = new THREE.Vector3(wallPoint.x - n.x * 0.22, feet.y + TRAVERSAL.ledgeMax + 0.4, wallPoint.z - n.z * 0.22);
-    const top = physics.raycast(above, DOWN, TRAVERSAL.ledgeMax + 0.4 - TRAVERSAL.ledgeMin + 0.3, GROUND_QUERY_GROUPS, exclude);
-    if (!top || top.normal.y < 0.8 || top.collider.handle !== wall.collider.handle) continue;
-    const topY = above.y - top.distance;
-    const rel = topY - feet.y;
-    if (rel < TRAVERSAL.ledgeMin || rel > TRAVERSAL.ledgeMax) continue;
-    const hangFeet = new THREE.Vector3(wallPoint.x + n.x * (MOVEMENT.capsuleRadius + 0.06), topY - TRAVERSAL.hangDrop, wallPoint.z + n.z * (MOVEMENT.capsuleRadius + 0.06));
-    const standFeet = new THREE.Vector3(wallPoint.x - n.x * (MOVEMENT.capsuleRadius + 0.25), topY + 0.02, wallPoint.z - n.z * (MOVEMENT.capsuleRadius + 0.25));
-    if (!capsuleFree(physics, hangFeet, exclude) || !capsuleFree(physics, standFeet, exclude)) continue;
-    return { collider: wall.collider.handle, normal: n, topY, hangFeet, standFeet };
+    const hit = origin.clone().addScaledVector(d, wall.distance);
+    // An angled approach can meet the face right beside an obstruction (the hall wall at a
+    // gantry's end, say). Slide along the same edge to the nearest spot with room to hang and to
+    // stand, so a catch at an imperfect angle behaves like a square one.
+    const alongFace = new THREE.Vector3(-n.z, 0, n.x);
+    for (const slide of LEDGE_SLIDE) {
+      const wallPoint = hit.clone().addScaledVector(alongFace, slide);
+      // Find the top surface just behind the wall face.
+      const above = new THREE.Vector3(wallPoint.x - n.x * 0.22, feet.y + TRAVERSAL.ledgeMax + 0.4, wallPoint.z - n.z * 0.22);
+      const top = physics.raycast(above, DOWN, TRAVERSAL.ledgeMax + 0.4 - TRAVERSAL.ledgeMin + 0.3, GROUND_QUERY_GROUPS, exclude);
+      if (!top || top.normal.y < 0.8 || top.collider.handle !== wall.collider.handle) continue;
+      const topY = above.y - top.distance;
+      const rel = topY - feet.y;
+      if (rel < TRAVERSAL.ledgeMin || rel > TRAVERSAL.ledgeMax) continue;
+      const hangFeet = new THREE.Vector3(wallPoint.x + n.x * (MOVEMENT.capsuleRadius + 0.06), topY - TRAVERSAL.hangDrop, wallPoint.z + n.z * (MOVEMENT.capsuleRadius + 0.06));
+      const standFeet = new THREE.Vector3(wallPoint.x - n.x * (MOVEMENT.capsuleRadius + 0.25), topY + 0.02, wallPoint.z - n.z * (MOVEMENT.capsuleRadius + 0.25));
+      if (!capsuleFree(physics, hangFeet, exclude) || !capsuleFree(physics, standFeet, exclude)) continue;
+      return { collider: wall.collider.handle, normal: n, topY, hangFeet, standFeet };
+    }
   }
   return null;
 }
+
+/** Offsets (metres along the ledge) tried when the point Mara reached has no room to hang or stand. */
+const LEDGE_SLIDE = [0, -0.15, 0.15, -0.3, 0.3, -0.45, 0.45];
 
 /**
  * Look for a low vaultable obstacle ahead. Rules: vaultable collider; top between `vaultMin` and

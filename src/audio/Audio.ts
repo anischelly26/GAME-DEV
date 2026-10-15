@@ -253,6 +253,12 @@ export class AudioSystem {
         this.burst('bandpass', 2200, 2, 0.35, 0.12, o());
         this.tone('square', 880, 880, 0.12, 0.04, o(), 0.002, 0.35);
         break;
+      case 'horn':
+        // The prison's pressure horn: a low, slightly detuned two-note blast.
+        this.tone('sawtooth', 92, 88, 2.6, 0.07, o(), 0.3);
+        this.tone('sawtooth', 138, 133, 2.6, 0.045, o(), 0.3);
+        this.burst('lowpass', 260, 0.7, 2.4, 0.05, o(), 0.3);
+        break;
       case 'static':
         this.burst('bandpass', 3000, 1.5, 0.5, 0.08, o(), 0.01);
         break;

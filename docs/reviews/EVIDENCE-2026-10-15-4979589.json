@@ -1,0 +1,298 @@
+{
+  "errors": [],
+  "measurements": {
+    "mouseOnePixel": {
+      "before": {
+        "yaw": 6.283185307179586,
+        "pitch": 0.32
+      },
+      "after": {
+        "yaw": 5.283185307179586,
+        "pitch": 1.2
+      },
+      "yawDelta": -1,
+      "pitchDelta": 0.8799999999999999
+    },
+    "sensitivity": [
+      {
+        "setting": 0.2,
+        "yawDelta": -1
+      },
+      {
+        "setting": 3,
+        "yawDelta": -1
+      }
+    ],
+    "keyboardMovement": {
+      "before": {
+        "gameState": "playing",
+        "feet": [
+          -0.35,
+          4.62,
+          29.7
+        ],
+        "velocity": [
+          0,
+          -2,
+          0
+        ],
+        "grounded": true,
+        "mode": "move",
+        "facing": 3.141592653589793,
+        "flags": [],
+        "objective": "Open the service hatch",
+        "checkpoint": "cell",
+        "falls": 0,
+        "complete": false,
+        "focused": null,
+        "prompt": null,
+        "cameraZone": "cell",
+        "cameraDistance": 2.238,
+        "level": {
+          "bypassOpen": true,
+          "pressure": 0.17,
+          "liftBand": false,
+          "hatch": "closed",
+          "failedPulls": 0,
+          "hintTier": 0
+        },
+        "autopilot": null,
+        "time": 1.5
+      },
+      "after": {
+        "gameState": "playing",
+        "feet": [
+          -0.35,
+          4.62,
+          27.962
+        ],
+        "velocity": [
+          0,
+          -2,
+          -6
+        ],
+        "grounded": true,
+        "mode": "move",
+        "facing": 3.141592653589793,
+        "flags": [],
+        "objective": "Open the service hatch",
+        "checkpoint": "cell",
+        "falls": 0,
+        "complete": false,
+        "focused": "diagram",
+        "prompt": "Inspect diagram",
+        "cameraZone": "cell",
+        "cameraDistance": 2.604,
+        "level": {
+          "bypassOpen": true,
+          "pressure": 0.12,
+          "liftBand": false,
+          "hatch": "closed",
+          "failedPulls": 0,
+          "hintTier": 0
+        },
+        "autopilot": null,
+        "time": 1.833
+      }
+    },
+    "hints": {
+      "start": 1.8333333333333317,
+      "lines": [
+        {
+          "time": 3.016666666666661,
+          "speaker": "Horn",
+          "text": "Pressure cycle in progress. All cells remain sealed."
+        },
+        {
+          "time": 7.483333333333312,
+          "speaker": "Mara",
+          "text": "Fresh copper on that line. Who repairs a pipe in a cell?"
+        },
+        {
+          "time": 91.84999999999607,
+          "speaker": "Mara",
+          "text": "Someone scratched a diagram next to the hatch."
+        },
+        {
+          "time": 151.86666666667966,
+          "speaker": "Mara",
+          "text": "The bypass is dumping it all into the vent. Shut the bypass, wait for the needle, then the lever."
+        },
+        {
+          "time": 211.8833333333941,
+          "speaker": "Mara",
+          "text": "The bypass is dumping it all into the vent. Shut the bypass, wait for the needle, then the lever."
+        },
+        {
+          "time": 271.9000000000814,
+          "speaker": "Mara",
+          "text": "The bypass is dumping it all into the vent. Shut the bypass, wait for the needle, then the lever."
+        }
+      ],
+      "state": {
+        "gameState": "playing",
+        "feet": [
+          -0.35,
+          4.62,
+          29.7
+        ],
+        "velocity": [
+          0,
+          -2,
+          0
+        ],
+        "grounded": true,
+        "mode": "move",
+        "facing": 3.141592653589793,
+        "flags": [],
+        "objective": "Open the service hatch",
+        "checkpoint": "cell",
+        "falls": 0,
+        "complete": false,
+        "focused": null,
+        "prompt": null,
+        "cameraZone": "cell",
+        "cameraDistance": 2.207,
+        "level": {
+          "bypassOpen": true,
+          "pressure": 0.1,
+          "liftBand": false,
+          "hatch": "closed",
+          "failedPulls": 0,
+          "hintTier": 2
+        },
+        "autopilot": null,
+        "time": 281.833
+      }
+    },
+    "pauseInput": {
+      "before": {
+        "gameState": "playing",
+        "feet": [
+          -0.35,
+          4.62,
+          29.7
+        ],
+        "velocity": [
+          0,
+          -2,
+          0
+        ],
+        "grounded": true,
+        "mode": "move",
+        "facing": 3.141592653589793,
+        "flags": [],
+        "objective": "Open the service hatch",
+        "checkpoint": "cell",
+        "falls": 0,
+        "complete": false,
+        "focused": null,
+        "prompt": null,
+        "cameraZone": "cell",
+        "cameraDistance": 2.225,
+        "level": {
+          "bypassOpen": true,
+          "pressure": 0.16,
+          "liftBand": false,
+          "hatch": "closed",
+          "failedPulls": 0,
+          "hintTier": 0
+        },
+        "autopilot": null,
+        "time": 282.333
+      },
+      "after": {
+        "gameState": "playing",
+        "feet": [
+          -0.35,
+          5.061,
+          29.7
+        ],
+        "velocity": [
+          0,
+          -1.5,
+          0
+        ],
+        "grounded": false,
+        "mode": "move",
+        "facing": 3.141592653589793,
+        "flags": [],
+        "objective": "Open the service hatch",
+        "checkpoint": "cell",
+        "falls": 0,
+        "complete": false,
+        "focused": null,
+        "prompt": null,
+        "cameraZone": "cell",
+        "cameraDistance": 2.228,
+        "level": {
+          "bypassOpen": true,
+          "pressure": 0.19,
+          "liftBand": false,
+          "hatch": "closed",
+          "failedPulls": 0,
+          "hintTier": 0
+        },
+        "autopilot": null,
+        "time": 282.5
+      }
+    },
+    "revealLock": {
+      "lockedSeconds": 12,
+      "state": {
+        "gameState": "playing",
+        "feet": [
+          0.2,
+          4.62,
+          15.6
+        ],
+        "velocity": [
+          0,
+          -2,
+          0
+        ],
+        "grounded": true,
+        "mode": "move",
+        "facing": 3.505994872754869,
+        "flags": [
+          "hatch.open",
+          "gap.crossed",
+          "lookout.lit",
+          "lookout.reached",
+          "reveal.done"
+        ],
+        "objective": "Follow the service lights down into the hall",
+        "checkpoint": "lookout",
+        "falls": 0,
+        "complete": false,
+        "focused": null,
+        "prompt": null,
+        "cameraZone": "cell",
+        "cameraDistance": 2.23,
+        "level": {
+          "bypassOpen": false,
+          "pressure": 0.88,
+          "liftBand": true,
+          "hatch": "latched",
+          "failedPulls": 0,
+          "hintTier": 0
+        },
+        "autopilot": null,
+        "time": 294.8
+      }
+    },
+    "normalModeMouse": {
+      "before": {
+        "yaw": -160.7168146928204,
+        "state": "playing",
+        "locked": true
+      },
+      "after": {
+        "yaw": -161.7168146928204,
+        "state": "playing"
+      }
+    }
+  },
+  "browser": "155.0.4283.45",
+  "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x000046A3) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+}

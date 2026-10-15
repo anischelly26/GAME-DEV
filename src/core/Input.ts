@@ -1,9 +1,16 @@
 /**
  * Keyboard, mouse and gamepad input mapped to game actions.
  *
- * Button presses are queued and consumed by the fixed-step simulation, so a press is never lost
- * or counted twice regardless of how render frames and physics steps line up.
- * Movement keys use `KeyboardEvent.code` (physical position), so WASD works on AZERTY as ZQSD.
+ * - Button presses are queued and consumed by the fixed-step simulation, so a press is never lost
+ *   or counted twice regardless of how render frames and physics steps line up.
+ * - Look input is converted to radians once, at the source: mouse pixels × `mouseRadiansPerPixel`,
+ *   stick deflection × `stickRadiansPerSecond` × dt. The camera consumes radians and applies no
+ *   further scaling.
+ * - Two independent gates: `gameplayActive` (menus, title and completion screens own input when it
+ *   is false) and `enabled` (a cinematic holds control when it is false). Crossing the menu boundary
+ *   discards everything queued, so a press made in a menu can never fire in gameplay. While a
+ *   cinematic holds control, Jump/Interact become skip requests instead of actions.
+ * - Movement keys use `KeyboardEvent.code` (physical position), so WASD works on AZERTY as ZQSD.
  */
 
 export interface InputFrame {
@@ -13,6 +20,14 @@ export interface InputFrame {
   jumpHeld: boolean;
   jumpPressed: boolean;
   interactPressed: boolean;
+  /** Jump/Interact pressed while a cinematic holds control. */
+  skipPressed: boolean;
+}
+
+/** Look delta in radians since the last read. Positive yaw = turn right, positive pitch = look down. */
+export interface LookDelta {
+  yaw: number;
+  pitch: number;
 }
 
 /** Scripted input used by the dev autopilot and automated tests. Goes through the same code path. */
@@ -35,31 +50,37 @@ const ACTION_CODES: Record<Action, string[]> = {
   interact: ['KeyE', 'KeyF', 'Enter'],
 };
 
+/** Base mouse look rate: radians of camera rotation per pixel at sensitivity 1. */
+export const BASE_RADIANS_PER_PIXEL = 0.0022;
 const STICK_DEADZONE = 0.18;
 
 export class Input {
-  mouseSensitivity = 0.0022;
-  stickLookSpeed = 2.8;
+  /** Radians per mouse pixel. Set from the sensitivity setting (base × setting). */
+  mouseRadiansPerPixel = BASE_RADIANS_PER_PIXEL;
+  /** Look speed at full stick deflection, radians per second (response is squared for precision). */
+  stickRadiansPerSecond = 2.8;
   invertY = false;
   /** True when the most recent input came from a gamepad; used for prompt glyphs. */
   usingGamepad = false;
   pointerLocked = false;
-  /** When false (menus, cutscenes) gameplay input reads as neutral. */
+  /** False while a cinematic holds control. Owned by `Game.setControl`; menus never change it. */
   enabled = true;
 
   virtual: VirtualInput | null = null;
   private virtualPresses: Action[] = [];
 
+  private gameplay = false;
   private keys = new Set<string>();
   private pending: Record<Action, number> = { jump: 0, interact: 0 };
-  private lookDX = 0;
-  private lookDY = 0;
+  private skipPending = 0;
+  private lookYaw = 0;
+  private lookPitch = 0;
   private dragging = false;
   private padButtonsPrev: boolean[] = [];
   private padMove = { x: 0, y: 0 };
   private padJumpHeld = false;
 
-  /** Called for Escape / gamepad Start. */
+  /** Called for Escape / P / gamepad Start. */
   onPauseRequest: (() => void) | null = null;
   /** Called for C, middle mouse or a stick click: swing the camera behind the player. */
   onRecenter: (() => void) | null = null;
@@ -75,6 +96,30 @@ export class Input {
     window.addEventListener('mousemove', this.handleMouseMove);
     element.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', this.handlePointerLockChange);
+  }
+
+  /** Whether gameplay (rather than a menu or screen) currently owns input. */
+  get gameplayActive(): boolean {
+    return this.gameplay;
+  }
+
+  /**
+   * Move the menu boundary. Crossing it in either direction discards queued presses, skip
+   * requests and look motion: nothing pressed in a menu leaks into play, or vice versa.
+   */
+  setGameplayActive(active: boolean): void {
+    if (active === this.gameplay) return;
+    this.gameplay = active;
+    this.discardQueued();
+  }
+
+  /** Drop queued presses and look motion, keeping which keys are physically held. */
+  discardQueued(): void {
+    this.pending.jump = this.pending.interact = 0;
+    this.skipPending = 0;
+    this.virtualPresses.length = 0;
+    this.lookYaw = this.lookPitch = 0;
+    this.dragging = false;
   }
 
   requestPointerLock(): void {
@@ -105,11 +150,10 @@ export class Input {
     const [rx, ry] = radialDeadzone(pad.axes[2] ?? 0, pad.axes[3] ?? 0);
     this.padMove.x = lx;
     this.padMove.y = -ly;
-    if (this.enabled && (rx !== 0 || ry !== 0)) {
-      // Convert stick deflection to the same units as mouse pixels.
-      const scale = (this.stickLookSpeed * dt) / this.mouseSensitivity;
-      this.lookDX += rx * Math.abs(rx) * scale;
-      this.lookDY += ry * Math.abs(ry) * scale;
+    if (this.lookAllowed && (rx !== 0 || ry !== 0)) {
+      const k = this.stickRadiansPerSecond * dt;
+      this.lookYaw += rx * Math.abs(rx) * k;
+      this.lookPitch += ry * Math.abs(ry) * k;
     }
     const buttons = pad.buttons.map((b) => b.pressed);
     const edge = (i: number) => buttons[i] && !this.padButtonsPrev[i];
@@ -117,22 +161,22 @@ export class Input {
     if (edge(0)) this.queue('jump');
     if (edge(2) || edge(1)) this.queue('interact');
     if (edge(9)) this.onPauseRequest?.();
-    if (edge(10) || edge(11)) this.onRecenter?.();
+    if ((edge(10) || edge(11)) && this.lookAllowed) this.onRecenter?.();
     this.padJumpHeld = !!buttons[0];
     this.padButtonsPrev = buttons;
   }
 
-  /** Mouse/stick look delta accumulated since the last call, in mouse-pixel units. */
-  consumeLook(): { dx: number; dy: number } {
-    const out = { dx: this.lookDX, dy: this.lookDY * (this.invertY ? -1 : 1) };
-    this.lookDX = this.lookDY = 0;
-    if (!this.enabled) out.dx = out.dy = 0;
+  /** Look motion since the last call, in radians (sensitivity and invert already applied). */
+  consumeLook(): LookDelta {
+    const out = { yaw: this.lookYaw, pitch: this.lookPitch * (this.invertY ? -1 : 1) };
+    this.lookYaw = this.lookPitch = 0;
+    if (!this.lookAllowed) out.yaw = out.pitch = 0;
     return out;
   }
 
   /** Sampled once per fixed simulation step. Consumes queued presses. */
   sampleFixed(): InputFrame {
-    const frame: InputFrame = { moveX: 0, moveY: 0, jumpHeld: false, jumpPressed: false, interactPressed: false };
+    const frame: InputFrame = { moveX: 0, moveY: 0, jumpHeld: false, jumpPressed: false, interactPressed: false, skipPressed: false };
     if (this.virtual) {
       frame.moveX = this.virtual.moveX;
       frame.moveY = this.virtual.moveY;
@@ -153,31 +197,40 @@ export class Input {
       frame.moveY = y;
       frame.jumpHeld = k(ACTION_CODES.jump) || this.padJumpHeld;
     }
-    for (const a of this.virtualPresses) this.pending[a]++;
+    for (const a of this.virtualPresses) this.queue(a);
     this.virtualPresses.length = 0;
     frame.jumpPressed = this.pending.jump > 0;
     frame.interactPressed = this.pending.interact > 0;
+    frame.skipPressed = this.skipPending > 0;
     this.pending.jump = this.pending.interact = 0;
-    if (!this.enabled) {
+    this.skipPending = 0;
+    if (!this.enabled || !this.gameplay) {
       frame.moveX = frame.moveY = 0;
       frame.jumpHeld = frame.jumpPressed = frame.interactPressed = false;
     }
+    if (!this.gameplay) frame.skipPressed = false;
     return frame;
   }
 
-  /** Inject a button press (autopilot / tests). */
+  /** Inject a button press (autopilot / tests). Subject to the same gates as real input. */
   press(action: Action): void {
     this.virtualPresses.push(action);
   }
 
+  /** Forget held keys too (window lost focus: key-up events would be missed). */
   clear = (): void => {
     this.keys.clear();
-    this.pending.jump = this.pending.interact = 0;
-    this.dragging = false;
+    this.discardQueued();
   };
 
+  private get lookAllowed(): boolean {
+    return this.gameplay && this.enabled;
+  }
+
   private queue(action: Action): void {
+    if (!this.gameplay) return; // menu-owned: never becomes a gameplay action
     if (this.enabled) this.pending[action]++;
+    else this.skipPending++;
   }
 
   private handleKeyDown = (e: KeyboardEvent): void => {
@@ -189,11 +242,12 @@ export class Input {
       if (!e.repeat) this.onDevKey(e.code);
       if (e.code.startsWith('F')) e.preventDefault();
     }
-    if (e.code === 'KeyC' && !e.repeat && this.enabled) this.onRecenter?.();
-    if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+    // Let menus handle Space/arrows natively; only gameplay swallows them.
+    if (this.gameplay && (e.code === 'Space' || e.code.startsWith('Arrow'))) e.preventDefault();
     this.usingGamepad = false;
     if (e.repeat) return;
     this.keys.add(e.code);
+    if (e.code === 'KeyC' && this.lookAllowed) this.onRecenter?.();
     for (const action of Object.keys(ACTION_CODES) as Action[]) {
       if (ACTION_CODES[action].includes(e.code)) this.queue(action);
     }
@@ -207,10 +261,10 @@ export class Input {
     this.usingGamepad = false;
     if (e.button === 1) {
       e.preventDefault();
-      if (this.enabled) this.onRecenter?.();
+      if (this.lookAllowed) this.onRecenter?.();
       return;
     }
-    if (!this.pointerLocked) this.dragging = e.button === 0 || e.button === 2;
+    if (!this.pointerLocked) this.dragging = this.gameplay && (e.button === 0 || e.button === 2);
   };
 
   private handleMouseUp = (): void => {
@@ -218,10 +272,9 @@ export class Input {
   };
 
   private handleMouseMove = (e: MouseEvent): void => {
-    if (this.pointerLocked || this.dragging) {
-      this.lookDX += e.movementX;
-      this.lookDY += e.movementY;
-    }
+    if (!this.lookAllowed || !(this.pointerLocked || this.dragging)) return;
+    this.lookYaw += e.movementX * this.mouseRadiansPerPixel;
+    this.lookPitch += e.movementY * this.mouseRadiansPerPixel;
   };
 
   private handlePointerLockChange = (): void => {

@@ -20,6 +20,10 @@ jailers do.
 - **Uncertain ally:** Ivo, a maintenance prisoner who leaves repairs, route marks ("IV") and
   occasional intercom messages. He never plays for Mara or solves puzzles remotely.
 - **Opening question:** why has someone freshly repaired the pipe connected to Mara's cell?
+- **How the game opens** (owner's direction, 2026-10-15): the player meets Mara the night before.
+  She refused to sign the diversion, went back to her workshop in Saltmere to prove the plan wrong,
+  and fell asleep over the drawings. She wakes up on the floor of a cell in Breakwater. Who brought
+  her there, and why, is the thread that carries into Chapter Two.
 
 ## Pillars
 
@@ -40,16 +44,24 @@ jailers do.
 Stylised maritime-industrial fantasy: rounded, chipped stone; heavy iron silhouettes; verdigris
 brass; amber practical lamps against cold ocean blue and oxidised teal. Mara's ochre jacket and
 coral scarf are the only other warm accents, which keeps her readable. Mechanisms have honest
-motion: needles settle, latches kick, steam vents with the engine's 4.2-second "breath". Every
-effect is a procedural placeholder for now (see [ASSETS.md](ASSETS.md)).
+motion: needles settle, latches kick, steam vents with the engine's 4.2-second "breath". Mara and
+the stone, metal and wood surfaces are CC0 assets; sound and effects are still procedural
+placeholders (see [ASSETS.md](ASSETS.md)).
 
 ## Campaign outline (production proposal, not a promise)
 
-Cell block → maintenance spine → turbine hall → archive workshop → flooded cistern → freight
-harbour → cliff stormworks → beacon crown → outer tidal channel. Each region gets a safe
-introduction, a developed problem and one signature challenge. The full mission list, with later
-mechanics (stealth, swimming, the skiff, gliding), is in the prompt packs. They enter production
-only through the gates in [STATUS.md](STATUS.md).
+- **Chapter One, *The Quiet Cell*** (built): Mara wakes up in the cell and escapes the cell block
+  through the turbine hall and the Breathing Engine. Detailed below.
+- **Chapter Two, *Wings in a Cage*** (owner's direction, 2026-10-15; not built): the hangar cell
+  and an old aircraft; a flight; a simulation in which Mara is in another world; a crash into an
+  original voxel world. Before it starts, the camera gets It Takes Two–style options: separate
+  horizontal and vertical sensitivity, invert X and Y, chase assist (none, weak, strong), a camera
+  shake toggle, and FOV. Third-party models are used only where their licence allows, with credit.
+- **Later regions** from the prompt packs: archive workshop → flooded cistern → freight harbour →
+  cliff stormworks → beacon crown → outer tidal channel. Each region gets a safe introduction, a
+  developed problem and one signature challenge. The full mission list, with later mechanics
+  (stealth, swimming, the skiff, gliding), is in the prompt packs. They enter production only
+  through the gates in [STATUS.md](STATUS.md).
 
 ## Movement capabilities (measured)
 
@@ -58,22 +70,45 @@ Measured by the automated test `measure jump capability` at the tested revision.
 
 | Quantity | Value |
 | --- | --- |
-| Run speed | 6.0 m/s, reached in about 0.1 s |
+| Run speed | 5.5 m/s, reached in about 0.17 s |
 | Jump apex (held) | 1.38–1.45 m (released early: noticeably lower) |
-| Running jump, same height | 3.66 m |
-| Coyote time / jump buffer | 0.12 s / 0.14 s |
+| Running jump, same height | 3.39 m |
+| Coyote time / jump buffer | 0.15 s / 0.16 s |
 | Auto-step | 0.32 m |
 | Ledge assist | lifts the player onto ledges up to 0.42 m above the feet after a jump falls just short |
 | Capsule | 1.5 m tall, 0.3 m radius (the visual figure is about 1.68 m) |
 
-Rule for level design: required jumps stay at or below 60% of the running range (≈2.2 m),
+Rule for level design: required jumps stay at or below 60% of the running range (≈2.0 m),
 preceded by a safe practice. Near-limit jumps are reserved for clearly marked optional routes.
+The 2.0 m gap in the drainage channel sits at that limit since the run speed was lowered. The
+autopilot clears it in every full-route test, and the 1.9 m tier-one gap is also cleared from 20°
+and 30° approaches with one fixed input. Whether it feels fair to a person is untested.
 
-## Chapter 1, first playable section: *The Quiet Cell* (implemented)
+**Camera.** Third person, about 4.9 m behind. With no mouse or stick input for a second, it drifts
+behind the direction of travel, but only on the ground: never in the air, hanging or climbing,
+because movement is camera-relative.
+
+## Chapter One, *The Quiet Cell* (implemented)
+
+### Opening (skippable, about 30 s)
+
+1. Three cards over black: Saltmere, the night before (Mara keeps the tide engines running and
+   was ordered to sign off a diversion that would drown her own district); she refused and fell
+   asleep over the drawings; she woke up somewhere else.
+2. The cell, by moonlight: Mara asleep on the floor. The Warden's horn: "Pressure cycle in
+   progress. All cells remain sealed."
+3. She gets up. "Where... This isn't my workshop." She looks around. "Salt on the walls. That
+   engine thump... I know this place. Breakwater."
+4. Title: *Chapter One, The Quiet Cell*: "The prison runs on the tide. So will her way out."
+5. Control, and the objective "Open the service hatch". Mara notices the fresh copper.
+
+Space, E or A skips to step 5 in the same state.
+
+### Beats
 
 | Beat | Space | Player does | Recovery |
 | --- | --- | --- | --- |
-| Wake | Mara's cell (4.6 × 5 × 4.4 m) | Hears the Warden's horn; sees the hatch wall | — |
+| Wake | Mara's cell (4.6 × 5 × 4.4 m) | Gets up (opening); sees the hatch wall | — |
 | Puzzle | Hatch wall | Reads the diagram, tries the lever, shuts the bypass, raises the hatch | Nothing can be lost |
 | Practice | Maintenance landing | Jumps a fallen girder (0.6 m, safe) | Landing service light lit automatically |
 | Gap | Drainage channel | Jumps a 2.0 m gap to a lit landing | Falling recovers at the landing in under a second |
@@ -108,9 +143,10 @@ preceded by a safe practice. Near-limit jumps are reserved for clearly marked op
 
 ## Increment 2: parkour practice route + The Breathing Engine (implemented, unreviewed)
 
-Built at the owner's request after the first slice. The reveal no longer ends the section: when
-the intercom line finishes, the rope at the right of the lookout railing drops and the objective
-becomes "Follow the service lights down into the hall".
+Built at the owner's request after the first slice. The reveal no longer ends the section. It
+holds control for about 3.2 s (skippable with Space, E or the gamepad's A); then the rope at the
+right of the lookout railing drops and the objective becomes "Follow the service lights down into
+the hall", while the intercom exchange plays on under player control.
 
 ### Traversal vocabulary (new)
 
@@ -118,7 +154,7 @@ becomes "Follow the service lights down into the hall".
 | --- | --- | --- |
 | Short safe drop | walk off an edge | none: drops under ~2.6 m are part of the route |
 | Low vault | Space while running (> 2.2 m/s) at the obstacle | collider registered **vaultable**; top 0.42–1.15 m above the feet; depth ≤ 0.9 m; ground and capsule room beyond |
-| Ledge catch | jump at the ledge while pushing toward it | collider registered **climbable**; walkable top 0.45–2.2 m above the feet; room to hang and to stand on top; intent toward the wall required |
+| Ledge catch | jump at the ledge while pushing toward it | collider registered **climbable**; walkable top 1.15–2.2 m above the feet; room to hang and to stand on top (an angled approach that reaches the edge beside an obstruction slides up to 0.45 m along the edge to find room); intent toward the wall required |
 | Pull-up / mantle | Space or push toward the wall while hanging (automatic for low ledges) | as above; 0.55 s |
 | Let go | pull away from the wall while hanging | the same ledge can't be re-caught for 0.6 s |
 | Moving-platform ride | stand on it | carried by the controller (horizontal and vertical) |
@@ -133,10 +169,13 @@ and a service light sits next to each risky move.
 
 1. **Drops.** Lookout → scaffold (2.0 m) → tier-1 walkway (2.6 m).
 2. **Gap.** A 1.9 m collapse in the walkway (service light "Tier one" before it).
-3. **Vault.** A 0.84 m "NO ACCESS" maintenance rail across the walkway. Jumping over it also works.
-4. **Ledge catch.** A rubble heap blocks the walkway. The way on is a raised gantry along the wall
-   whose edge (2.0 m, marked with worn paint) must be caught and pulled up onto, followed by a drop
-   back down beyond the rubble.
+3. **Vault.** A 0.84 m "NO ACCESS" steel barrier beam across the walkway; its top cap is painted
+   in worn amber-and-black stripes where the hand lands. Jumping over it also works. Tested from
+   square, 25° and 40° approaches.
+4. **Ledge catch.** A loaded spares rack (pipes, a piston sleeve, crates, a spare gear) blocks the
+   hall side of the walkway, and crates fill the space under a raised gantry along the wall. The
+   way on is the gantry's end edge (2.0 m, worn handhold paint), caught and pulled up onto, then a
+   drop back down beyond the rack. Tested from square, 20°, 35° and 45° approaches.
 5. **Ride.** A horizontal piston shuttle carries Mara across a 5 m collapse. It rests 2.6 s at
    each end, so no timing is needed (service light "Collapse" before it).
 
@@ -152,24 +191,67 @@ engine collar, a railed ring deck around the column, heaves ±2.6 m with the eng
 3. **Ride.** The deck lever (RIDE) sends it to the top stop (tier 3), where it latches. Both levers
    are reversible: the gantry lever calls the collar down from the top, and the deck lever rides it
    down. No state needs a second person, and none can strand the player.
-4. **Steam curtain.** On tier 3 a cracked main sprays across the walkway and pushes Mara back,
-   without harming her. The bypass valve before it (same plate and pointer language as the cell)
-   redirects the pressure. The curtain stops, and the redirected pressure starts a piston at the
-   breach.
-5. **Combination.** Ride the breach piston up 2.4 m (it rests 2.8 s at the top) and make a broad
-   jump of about 2 m onto the exit gantry. Missing it costs about 5 seconds: recovery is at the
-   "Breach" service light.
-6. **Ending.** Ivo on the intercom: "You made the engine carry you. The archive is past the
-   harbour crane." Mara: "Ivo. It has to be." Then the completion card.
+4. **Steam curtain.** On tier 3 a cracked line sprays across the walkway and pushes Mara back,
+   without harming her. A painted hazard band marks where the push starts.
+5. **The split feed (puzzle).** See the specification below. Mara works out how to make the
+   breach ram carry her up 2.4 m, then makes a broad jump of about 2 m onto the exit gantry.
+   Missing the jump costs a few seconds: recovery is at the "Breach" service light with the ram
+   waiting primed again.
+6. **Ending of Chapter One.** Ivo on the intercom: "You made the engine carry you. You're out of
+   the cells, not off the rock." Mara: "Who are you? Who brought me here?" Intercom: "Sorn wants
+   your signature, or your silence. The only thing on Breakwater that still flies is in the
+   hangar cell. Get there." Mara: "Ivo. It has to be." Then an "End of Chapter One" card and the
+   completion screen "Chapter One complete".
+
+### Puzzle specification: the split feed
+
+The rule the cell taught (pressure goes where the valves send it) now drives a choice that has a
+consequence. It uses only existing systems: a diverter in the cell's plate-and-pointer language, a
+lever, gauges, and a vertical platform.
+
+- **Goal:** get past the steam and up to the exit gantry, 2.4 m above the walkway, at the breach.
+- **Machine.** One steam main feeds a junction before the curtain, mounted on a lit control board:
+  - **FEED diverter** (wheel with a pointer bar; plate: VENT ← → RAM). VENT sends the steam into the
+    cracked line, which is the curtain. RAM sends it to the breach ram, which then rises to the
+    exit gantry and holds there while fed.
+  - **RAM CATCH lever** (plate: "holds the ram where it stands; release on the deck"). A rod runs
+    along the wall to a toothed rack post beside the ram; a brass pawl on the deck swings into it.
+  - **Gauges** VENT and RAM show where the pressure goes. RAM sits in the red and the ram shudders,
+    with a relief valve hissing at its base, while the catch holds it against the feed.
+  - **RELEASE lever** on the ram deck frees the catch.
+- **Initial state:** feed VENT (curtain on), catch free, ram down.
+- **Natural first try:** feed the RAM. The steam stops, but the ram rises empty and holds out of
+  reach. Mara: "...and up it goes. Without me."
+- **Solution:** with the ram down, set the CATCH; feed the RAM (the curtain stops; the ram strains
+  but waits); cross; stand on the deck; RELEASE. The ram carries her up.
+- **Other states:** a catch set at the top holds the ram up even when venting; freeing it lets the
+  ram follow the feed again. A catch set mid-travel stops the ram where it is.
+- **Recovery.** Everything is reversible from the junction alone. No step needs two places at
+  once, no timing, and no waiting longer than the 2.4 s ram travel.
+- **Hints (optional, pause menu, escalating, never automatic):** (1) the objective plus "the feed
+  goes one way or the other"; (2) what the catch does; (3) the full order.
+- **Rules in code:** `src/gameplay/puzzles/SplitFeedLogic.ts`, unit-tested in
+  `tests/unit/splitFeed.test.ts` and played in the browser in `tests/e2e/engine.spec.ts`.
+
+Whether a first-time player can explain the cause and effect after solving it, and whether it is
+enjoyable, has **not** been tested with a person yet.
 
 ### Recovery rules
 
 Every checkpoint has an explicit recovery height (`recoverBelowY`). Falling below it fades out and
 respawns there. Puzzle and machine states never revert on respawn: the collar stays latched at the
-top, the steam stays off. "Restart section" restores everything.
+top, and the feed stays where Mara set it. One deliberate exception: after the ram has carried
+her up once, a fall at the breach recovers with the ram primed again, so a missed jump never costs
+the puzzle twice. "Restart section" restores everything.
 
 ## Deviations from the prompt packs (flagged for the owner)
 
+- **The opening.** The prompt packs start in the cell. At the owner's request the game now opens
+  the night before, with Mara falling asleep in her workshop and waking up in prison. Her home
+  town is named **Saltmere**; the packs leave it unnamed.
+- **Chapter Two direction.** The owner set it as the hangar cell, an aircraft, a simulation in
+  another world and a crash into a voxel world. This replaces the packs' archive workshop as the
+  next destination; the ending now points to the hangar.
 - **Lookout location.** The lookout is a ruined tier-2 cell opening into the turbine hall,
   reached through a breach behind the maintenance shaft. It reveals the hall and the harbour beacon
   (through a collapsed section of the far wall) in one view.
@@ -183,5 +265,6 @@ top, the steam stays off. "Restart section" restores everything.
   normal running. Sprint can come back with the optional express route.
 - **Express route and timed side route** (parkour pack §3 and §4) are not built yet. The main
   path exists, with generous rests on every moving platform.
-- **The Breathing Engine's final section** uses a second, pressure-driven piston at the breach
+- **The Breathing Engine's final section** uses a second, pressure-driven ram at the breach
   rather than the collar itself, so the last jump stays broad and well framed against the harbour.
+  Following Codex's review (R8), the single bypass valve there became the split-feed puzzle above.

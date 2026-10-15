@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 import { EventBus, type GameEvents } from './Events';
-import { Input } from './Input';
+import { Input, BASE_RADIANS_PER_PIXEL } from './Input';
 import { Physics, RAPIER } from '../physics/Physics';
 import { RenderPipeline } from '../render/RenderPipeline';
 import { createTextureLibrary, type TextureLibrary } from '../world/textures';
-import { createMaterials, Palette, type MaterialLibrary } from '../world/materials';
+import { applySurfaces, createMaterials, Palette, type MaterialLibrary } from '../world/materials';
+import { loadSurfaces } from '../world/surfaces';
 import { Sky } from '../world/Atmosphere';
 import { PlayerController } from '../player/PlayerController';
 import { PlayerAvatar } from '../player/PlayerAvatar';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DropShadow } from '../player/DropShadow';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import { Progression, Checkpoints, Triggers } from '../gameplay/Progression';
 import { InteractionSystem } from '../gameplay/Interaction';
@@ -21,7 +24,6 @@ import { TraversalSurfaces } from '../player/Traversal';
 import { smoothstep } from './math';
 
 export const FIXED_DT = 1 / 60;
-const BASE_MOUSE_SENSITIVITY = 0.0022;
 
 export interface GameOptions {
   /** Dev hotkeys, debug overlay, test API. */
@@ -31,6 +33,8 @@ export interface GameOptions {
   /** In test mode, also run the simulation in real time. */
   realtime: boolean;
   autoplay: boolean;
+  /** Play the story opening (Mara waking in the cell). */
+  intro?: boolean;
   start: string | null;
   quality: 'high' | 'low' | null;
 }
@@ -58,6 +62,7 @@ export class Game {
   pipeline!: RenderPipeline;
   player!: PlayerController;
   avatar!: PlayerAvatar;
+  dropShadow!: DropShadow;
   camera!: ThirdPersonCamera;
   level!: Level;
   autopilot: Autopilot | null = null;
@@ -75,6 +80,8 @@ export class Game {
   private debugVisible = false;
   private physicsLines: THREE.LineSegments | null = null;
   private fps = 60;
+  /** Character build cost (dev overlay and tests). */
+  characterStats: { triangles: number; clips: number; millis: number } | null = null;
   private reachChecks = 0;
   private reachPulse = 0;
 
@@ -97,11 +104,18 @@ export class Game {
 
   private async init(): Promise<void> {
     this.hud.showLoading('Charging the tide engine…');
+    // Mara is sculpted in Web Workers while the rest of the world is built here.
+    // Mara (public/assets/mara/mara.glb) loads while the rest of the world is built here.
+    const maraStart = performance.now();
+    const mara = new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/mara/mara.glb`);
     // Let the loading card paint before the heavy synchronous texture generation.
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+    const surfaces = loadSurfaces(8);
     this.physics = await Physics.create();
     this.textures = createTextureLibrary();
     this.materials = createMaterials(this.textures);
+    const photographed = await surfaces;
+    if (photographed) applySurfaces(this.materials, photographed);
 
     this.scene.background = Palette.skyTop.clone();
     this.scene.fog = new THREE.FogExp2(Palette.fog, 0.024);
@@ -113,12 +127,14 @@ export class Game {
     this.player = new PlayerController(this.physics, this.events, spawn, 0);
     this.player.traversal = this.traversal;
     this.avatar = new PlayerAvatar(this.scene, this.textures);
+    this.dropShadow = new DropShadow(this.scene);
     this.camera = new ThirdPersonCamera(this.physics, this.player.collider);
     this.pipeline = new RenderPipeline(this.container, this.scene, this.camera.camera);
     this.container.insertBefore(this.pipeline.canvas, this.hud.root);
     this.environmentMap();
 
     const ctx: LevelContext = {
+      intro: (this.options.intro ?? !this.options.test) && !this.options.start,
       scene: this.scene,
       physics: this.physics,
       materials: this.materials,
@@ -142,11 +158,20 @@ export class Game {
     };
     this.level = new QuietCellLevel(ctx);
     this.wireEvents();
+    this.hud.autoQualityLabel = this.pipeline.recommendedQuality === 'low' ? 'Low on this GPU' : 'High on this GPU';
     this.applySettings(this.hud.settings);
     // Automated runs default to Low: software rendering in CI sandboxes is slow and memory-bound.
     const forced = this.options.quality ?? (this.options.test ? 'low' : null);
     if (forced) this.setQuality(forced);
 
+    const gltf = await mara;
+    this.avatar.attach(gltf);
+    let triangles = 0;
+    gltf.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) triangles += (m.geometry.index?.count ?? m.geometry.getAttribute('position').count) / 3;
+    });
+    this.characterStats = { triangles, clips: gltf.animations.length, millis: Math.round(performance.now() - maraStart) };
     const startId = this.options.start && this.level.checkpointIds.includes(this.options.start) ? this.options.start : this.level.checkpointIds[0];
     this.teleportToCheckpoint(startId);
     // Compile shaders up front to avoid a hitch on the first frame.
@@ -159,6 +184,7 @@ export class Game {
     if (this.options.test) {
       this.hud.hideScreen();
       this.state = 'playing';
+      this.input.setGameplayActive(true);
       if (this.options.autoplay) this.startAutopilot();
     } else {
       this.state = 'title';
@@ -167,9 +193,9 @@ export class Game {
   }
 
   private setupLights(): void {
-    const hemi = new THREE.HemisphereLight('#3f5f78', '#1b1712', 0.75);
+    const hemi = new THREE.HemisphereLight('#5d7f99', '#2e261d', 1.25);
     this.scene.add(hemi);
-    const moon = new THREE.DirectionalLight(Palette.moon, 1.5);
+    const moon = new THREE.DirectionalLight(Palette.moon, 2.1);
     moon.position.copy(this.moonDir).multiplyScalar(60);
     moon.target.position.set(0, 0, 8);
     moon.castShadow = true;
@@ -207,7 +233,7 @@ export class Game {
     envScene.add(new THREE.Mesh(geo, mat));
     const pmrem = new THREE.PMREMGenerator(this.pipeline.renderer);
     this.scene.environment = pmrem.fromScene(envScene, 0.02).texture;
-    this.scene.environmentIntensity = 0.55;
+    this.scene.environmentIntensity = 0.95;
     pmrem.dispose();
   }
 
@@ -251,6 +277,7 @@ export class Game {
     this.audio.unlock();
     this.audio.setVolume(this.hud.settings.volume);
     this.state = 'playing';
+    this.input.setGameplayActive(true);
     this.input.requestPointerLock();
     if (this.options.autoplay) this.startAutopilot();
   }
@@ -258,7 +285,9 @@ export class Game {
   pause(): void {
     if (this.state !== 'playing') return;
     this.state = 'paused';
-    this.input.clear();
+    // The menu owns input now; anything pressed while paused is discarded on resume. The
+    // cinematic lock (input.enabled) is deliberately left untouched.
+    this.input.setGameplayActive(false);
     this.input.exitPointerLock();
     this.audio.suspend(true);
     this.hud.showPause(
@@ -280,20 +309,23 @@ export class Game {
     if (this.state !== 'paused') return;
     this.hud.hideScreen();
     this.state = 'playing';
+    this.input.setGameplayActive(true);
     this.audio.suspend(false);
-    this.input.requestPointerLock();
+    // Automation keeps the mouse free (drag-look), like restart and "keep exploring".
+    if (!this.options.test) this.input.requestPointerLock();
   }
 
   private applySettings(s: Settings): void {
-    this.input.mouseSensitivity = BASE_MOUSE_SENSITIVITY * s.sensitivity;
+    this.input.mouseRadiansPerPixel = BASE_RADIANS_PER_PIXEL * s.sensitivity;
     this.input.invertY = s.invertY;
     this.audio.setVolume(s.volume);
-    if (!this.options.quality && !this.options.test) this.setQuality(s.quality);
+    if (!this.options.quality && !this.options.test) this.setQuality(s.quality === 'auto' ? this.pipeline.recommendedQuality : s.quality);
   }
 
   /** Low: lower resolution, no bloom, smaller moon shadow map, no lamp shadows. */
   setQuality(level: 'high' | 'low'): void {
     this.pipeline.setQuality(level);
+    this.avatar?.setDetail(level);
     this.scene.traverse((o) => {
       const light = o as THREE.Light & { shadow?: THREE.LightShadow };
       if (!light.isLight || !light.shadow) return;
@@ -314,7 +346,8 @@ export class Game {
   setControl(enabled: boolean): void {
     this.input.enabled = enabled;
     this.player.frozen = !enabled;
-    if (!enabled) this.input.clear();
+    // Keep physically held keys (so a held W works the moment control returns); drop queued presses.
+    this.input.discardQueued();
   }
 
   respawn(reason: 'fall' | 'manual'): void {
@@ -324,6 +357,7 @@ export class Game {
     this.camera.clearShot();
     this.camera.snapBehind(cp.feet, cp.facing, 0.32, cp.cameraYaw);
     this.triggers.resetPresence();
+    this.level.onRespawn?.(cp.id);
     this.respawnFade = 1;
     if (reason === 'fall') this.audio.play('respawn');
   }
@@ -344,6 +378,7 @@ export class Game {
     this.respawnFade = 1;
     this.hud.hideScreen();
     this.state = 'playing';
+    this.input.setGameplayActive(true);
     this.audio.suspend(false);
     if (!this.options.test) this.input.requestPointerLock();
   }
@@ -351,6 +386,7 @@ export class Game {
   private complete(card?: { title: string; body: string }): void {
     this.progression.complete = true;
     this.state = 'complete';
+    this.input.setGameplayActive(false);
     this.input.exitPointerLock();
     this.events.emit('complete', { timeSeconds: this.progression.elapsed, falls: this.progression.falls });
     this.hud.showComplete(
@@ -361,6 +397,7 @@ export class Game {
         this.camera.clearShot();
         this.setControl(true);
         this.state = 'playing';
+        this.input.setGameplayActive(true);
         if (!this.options.test) this.input.requestPointerLock();
       },
     );
@@ -414,7 +451,43 @@ export class Game {
       if (steps === 6) this.accumulator = 0;
     }
     this.renderFrame(dt, this.options.test && !this.options.realtime ? 1 : this.accumulator / FIXED_DT);
+    this.probeAutoQuality(now);
   };
+
+  /** Frame times sampled on the title screen while 'Auto' has chosen High. */
+  private autoProbe: number[] | null = null;
+  private autoProbeLast = 0;
+  private autoProbeDone = false;
+
+  /**
+   * 'Auto' starts from the GPU name (RenderPipeline.recommendedQuality), then checks it: while the
+   * title screen is up, if High's median frame takes longer than 20 ms, switch to Low there, before
+   * play starts. Switching recompiles shaders, which can hitch for a few seconds on an integrated
+   * GPU, so it never happens during play.
+   */
+  private probeAutoQuality(now: number): void {
+    if (this.autoProbeDone || this.state !== 'title' || this.hud.settings.quality !== 'auto' || this.pipeline.getQuality() !== 'high' || this.options.quality) {
+      this.autoProbe = null;
+      return;
+    }
+    if (!this.autoProbe) {
+      this.autoProbe = [];
+      this.autoProbeLast = now;
+      return;
+    }
+    this.autoProbe.push(now - this.autoProbeLast);
+    this.autoProbeLast = now;
+    if (this.autoProbe.length < 90) return;
+    const sorted = this.autoProbe.slice(30).sort((a, b) => a - b);
+    const median = sorted[sorted.length >> 1];
+    if (median > 20) {
+      this.setQuality('low');
+      this.hud.autoQualityLabel = 'Low on this GPU';
+      this.pipeline.renderer.compile(this.scene, this.camera.camera);
+    }
+    this.autoProbe = null;
+    this.autoProbeDone = true;
+  }
 
   /** One deterministic simulation step. */
   fixedStep(): void {
@@ -425,6 +498,7 @@ export class Game {
       this.hud.hideDocument();
       frame.interactPressed = false;
     }
+    if (frame.skipPressed) this.level.skipCinematic?.();
     this.level.fixedUpdate(dt, this.time);
     this.player.fixedUpdate(dt, frame, this.camera.yaw);
     this.level.afterPlayer?.(dt);
@@ -461,10 +535,11 @@ export class Game {
       lookAt: focus ? focus.position : null,
       mode: this.player.mode,
       modeT: this.player.modeT,
+      knockbacks: this.player.knockbacks,
     });
-    const look = this.state === 'playing' ? this.input.consumeLook() : (this.input.consumeLook(), { dx: 0, dy: 0 });
-    this.camera.update(dt, look, 1, feet, this.player.grounded, this.player.speed);
+    this.camera.update(dt, this.input.consumeLook(), feet, this.player.grounded, this.player.speed);
     this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.5, 1.25, this.camera.distance));
+    this.dropShadow.update(this.physics, feet, this.player.grounded, this.player.collider, this.camera.inShot || this.camera.distance > 0.8);
     this.level.update(dt, this.time, alpha);
     this.sky.update(this.time, this.camera.camera.position);
     this.audio.setListener(this.camera.camera);

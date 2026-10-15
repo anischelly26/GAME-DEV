@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { clamp, damp, dampAngle, lerp, wrapAngle } from '../core/math';
-import { addRimLight, Palette } from '../world/materials';
+import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
+import { clamp, damp, dampAngle, wrapAngle } from '../core/math';
 import type { TextureLibrary } from '../world/textures';
-import { MOVEMENT } from './PlayerController';
+import { MOVEMENT } from './movement';
+import { TRAVERSAL } from './Traversal';
 import { Scarf } from './Scarf';
 
 export interface AvatarState {
@@ -20,310 +20,258 @@ export interface AvatarState {
   /** Traversal mode from the controller, and its progress (seconds for hang, 0..1 otherwise). */
   mode?: 'move' | 'hang' | 'climb' | 'vault';
   modeT?: number;
+  /** Increments each time the controller applies a knockback. */
+  knockbacks?: number;
 }
 
-/** Mara Venn's palette: warm ochre jacket and coral scarf against the cold blue fortress. */
-const COLORS = {
-  skin: '#d39a78',
-  shirt: '#c8c2b3',
-  jacket: '#9a7444',
-  trousers: '#2d3440',
-  boots: '#43301f',
-  sole: '#1c1612',
-  hair: '#5a3424',
-  leather: '#5b3d26',
-};
+/** Mara's standing height in metres (to the top of her hair). */
+const HEIGHT = 1.7;
+const SCARF_COLOR = '#c8553a';
+const LOCOMOTION = ['walk', 'jog', 'sprint'] as const;
+type Loco = (typeof LOCOMOTION)[number];
 
-/** Overall figure scale: built at natural proportions, scaled to ~1.68 m. */
-const FIGURE_SCALE = 0.93;
-const HIP_Y = 0.94;
-
-function capsule(radius: number, length: number, mat: THREE.Material): THREE.Mesh {
-  const g = new THREE.CapsuleGeometry(radius, length, 6, 12);
-  g.translate(0, -length / 2 - radius * 0.5, 0);
-  const m = new THREE.Mesh(g, mat);
-  m.castShadow = true;
-  return m;
-}
+const UP = new THREE.Vector3(0, 1, 0);
+const qa = new THREE.Quaternion();
+const qb = new THREE.Quaternion();
 
 /**
- * Mara: a procedurally built and animated character (no skeletal assets yet). Joints are groups
- * driven by code, so animation always matches the controller state exactly. This is a stylised
- * proxy model, not final character art.
+ * Mara on screen: the CC0 character assembled by scripts/import-mara.mjs (public/assets/mara/
+ * mara.glb), animated with hand-made clips from Quaternius's Universal Animation Libraries.
+ * Locomotion blends idle, walk, jog and sprint by speed, phase-locked and time-scaled to the
+ * controller's ground speed so the feet don't slide; jumps, landings, climbs, vaults, knockback and
+ * interactions are one-shot clips layered over it; the head turns toward points of interest.
  */
 export class PlayerAvatar {
   readonly root = new THREE.Group();
   readonly carryAnchor = new THREE.Object3D();
   private readonly visual = new THREE.Group();
-  private readonly figure = new THREE.Group();
-  private readonly hips = new THREE.Group();
-  private readonly spine = new THREE.Group();
-  private readonly head = new THREE.Group();
-  private readonly legs: Array<{ thigh: THREE.Group; knee: THREE.Group; foot: THREE.Group }> = [];
-  private readonly arms: Array<{ shoulder: THREE.Group; elbow: THREE.Group }> = [];
-  private readonly bun = new THREE.Group();
-  private readonly materials: THREE.MeshStandardMaterial[] = [];
+  private model: THREE.Object3D | null = null;
+  private mixer: THREE.AnimationMixer | null = null;
+  private readonly actions = new Map<string, THREE.AnimationAction>();
+  private readonly naturalSpeed: Record<Loco, number> = { walk: 1.5, jog: 3.9, sprint: 6 };
+  private readonly bones = new Map<string, THREE.Bone>();
+  private readonly materials: THREE.Material[] = [];
   private readonly scarves: Scarf[] = [];
   private readonly scarfAnchors: THREE.Object3D[] = [];
+  private readonly scene: THREE.Scene;
+  private readonly tex: TextureLibrary;
 
   private phase = 0;
-  private runBlend = 0;
   private airBlend = 0;
-  private carryBlend = 0;
+  private airTime = 0;
+  private landT = -1;
+  private landWeight = 0;
+  private oneShot: { name: string; weight: number; target: number } | null = null;
+  private lastKnockbacks = 0;
+  private lastMode: AvatarState['mode'] = 'move';
+  private lastReach = 0;
   private lastFacing = 0;
   private turnRate = 0;
-  private stretch = 0;
-  private stretchVel = 0;
+  private lean = 0;
   private headYaw = 0;
   private headPitch = 0;
-  private time = 0;
-  private bunSwing = 0;
-  private bunVel = 0;
   private opacity = 1;
-  private hangBlend = 0;
-  private vaultBlend = 0;
+  private time = 0;
 
   /** Called when a foot plants; used for footstep audio. */
   onFootstep: ((speed: number) => void) | null = null;
 
   constructor(scene: THREE.Scene, tex: TextureLibrary) {
-    const mat = (color: string, params: THREE.MeshStandardMaterialParameters = {}, rim = 0.35) => {
-      const m = new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...params });
-      addRimLight(m, Palette.moon, rim, 3);
-      this.materials.push(m);
-      return m;
-    };
-    const skin = mat(COLORS.skin, { roughness: 0.65 });
-    const shirt = mat(COLORS.shirt, { map: tex.smock.map });
-    const jacket = mat(COLORS.jacket, { map: tex.smock.map, normalMap: tex.smock.normalMap, side: THREE.DoubleSide });
-    const trousers = mat(COLORS.trousers, { map: tex.smock.map });
-    const boots = mat(COLORS.boots, { roughness: 0.55 });
-    const sole = mat(COLORS.sole, { roughness: 0.9 });
-    const hair = mat(COLORS.hair, { roughness: 0.55 }, 0.2);
-    const scarfMat = mat(Palette.scarf.getStyle(), { map: tex.wool.map, normalMap: tex.wool.normalMap, roughness: 1, emissive: Palette.scarf, emissiveIntensity: 0.12 }, 0.5);
-    const dark = mat('#161212', { roughness: 0.3 });
-    const leather = mat(COLORS.leather, { roughness: 0.55 });
-    const brass = mat('#b8924f', { roughness: 0.35, metalness: 0.85 });
-    const steel = mat('#9aa3a8', { roughness: 0.3, metalness: 0.9 });
-
+    this.scene = scene;
+    this.tex = tex;
     this.root.add(this.visual);
-    this.visual.add(this.figure);
-    this.figure.scale.setScalar(FIGURE_SCALE);
-    this.figure.add(this.hips);
-    this.hips.position.y = HIP_Y;
-
-    // ---- torso: shirt, cropped open jacket, collar, tool belt
-    const lathe = (points: Array<[number, number]>, m: THREE.Material, phiStart = 0, phiLength = Math.PI * 2, depth = 0.74) => {
-      const g = new THREE.LatheGeometry(
-        points.map(([r, y]) => new THREE.Vector2(r, y)),
-        22,
-        phiStart,
-        phiLength,
-      );
-      g.scale(1, 1, depth);
-      const mesh = new THREE.Mesh(g, m);
-      mesh.castShadow = true;
-      return mesh;
-    };
-    this.hips.add(this.spine);
-    this.spine.position.y = 0.04;
-    const torsoPts: Array<[number, number]> = [
-      [0.165, -0.13],
-      [0.172, -0.03],
-      [0.158, 0.1],
-      [0.172, 0.24],
-      [0.19, 0.36],
-      [0.17, 0.44],
-      [0.085, 0.5],
-      [0.0, 0.51],
-    ];
-    this.spine.add(lathe(torsoPts, shirt));
-    // The jacket opens at the front (phi = 0 faces +Z) and stops at the waist: "cropped".
-    const jacketPts: Array<[number, number]> = [
-      [0.183, 0.04],
-      [0.178, 0.12],
-      [0.19, 0.24],
-      [0.207, 0.36],
-      [0.188, 0.445],
-      [0.11, 0.49],
-    ];
-    this.spine.add(lathe(jacketPts, jacket, 0.42, Math.PI * 2 - 0.84, 0.78));
-    for (const side of [-1, 1]) {
-      const collar = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.09, 0.03, 1, 0.012), jacket);
-      collar.position.set(side * 0.07, 0.49, 0.1);
-      collar.rotation.set(-0.5, side * 0.35, side * -0.25);
-      this.spine.add(collar);
-    }
-    const belt = new THREE.Mesh(new THREE.TorusGeometry(0.168, 0.026, 6, 24), leather);
-    belt.rotation.x = Math.PI / 2;
-    belt.scale.set(1, 0.76, 1);
-    belt.position.y = 0.0;
-    const buckle = new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.05, 0.02, 1, 0.006), brass);
-    buckle.position.set(0, 0.0, 0.13);
-    this.spine.add(belt, buckle);
-    // Pouches and a wrench on the tool belt.
-    for (const [x, z, ry] of [
-      [0.15, 0.04, 0.5],
-      [-0.14, -0.06, -0.7],
-      [0.05, -0.13, Math.PI],
-    ]) {
-      const pouch = new THREE.Mesh(new RoundedBoxGeometry(0.08, 0.1, 0.05, 2, 0.015), leather);
-      pouch.position.set(x, -0.045, z);
-      pouch.rotation.y = ry;
-      pouch.castShadow = true;
-      this.spine.add(pouch);
-    }
-    const wrench = new THREE.Group();
-    const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.16, 0.01), steel);
-    shaft.position.y = -0.08;
-    const jaw = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.009, 4, 10, Math.PI * 1.5), steel);
-    jaw.position.y = -0.17;
-    wrench.add(shaft, jaw);
-    wrench.position.set(-0.17, -0.01, 0.07);
-    wrench.rotation.set(0.1, 0.6, 0.12);
-    this.spine.add(wrench);
-
-    // ---- legs
-    for (const side of [-1, 1]) {
-      const thigh = new THREE.Group();
-      thigh.position.set(side * 0.095, -0.03, 0);
-      this.hips.add(thigh);
-      thigh.add(capsule(0.085, 0.29, trousers));
-      const knee = new THREE.Group();
-      knee.position.y = -0.42;
-      thigh.add(knee);
-      knee.add(capsule(0.07, 0.3, trousers));
-      const foot = new THREE.Group();
-      foot.position.y = -0.41;
-      knee.add(foot);
-      const boot = new THREE.Mesh(new RoundedBoxGeometry(0.125, 0.12, 0.26, 2, 0.045), boots);
-      boot.position.set(0, -0.03, 0.04);
-      boot.castShadow = true;
-      const soleMesh = new THREE.Mesh(new RoundedBoxGeometry(0.13, 0.03, 0.27, 1, 0.01), sole);
-      soleMesh.position.set(0, -0.085, 0.04);
-      const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.082, 0.09, 12), boots);
-      cuff.position.y = 0.04;
-      foot.add(boot, soleMesh, cuff);
-      this.legs.push({ thigh, knee, foot });
-    }
-
-    // ---- arms: jacket sleeves pushed up, bare forearms
-    for (const side of [-1, 1]) {
-      const shoulder = new THREE.Group();
-      shoulder.position.set(side * 0.205, 0.42, 0);
-      this.spine.add(shoulder);
-      const pad = new THREE.Mesh(new THREE.SphereGeometry(0.072, 12, 10), jacket);
-      pad.scale.set(1, 0.85, 1);
-      shoulder.add(pad, capsule(0.062, 0.19, jacket));
-      const elbow = new THREE.Group();
-      elbow.position.y = -0.28;
-      shoulder.add(elbow);
-      const cuffRing = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.026, 6, 14), jacket);
-      cuffRing.rotation.x = Math.PI / 2;
-      cuffRing.position.y = 0.0;
-      elbow.add(cuffRing);
-      elbow.add(capsule(0.048, 0.16, skin));
-      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 10), skin);
-      hand.scale.set(0.85, 1.15, 0.95);
-      hand.position.y = -0.25;
-      hand.castShadow = true;
-      elbow.add(hand);
-      this.arms.push({ shoulder, elbow });
-    }
-
-    // ---- head
-    this.spine.add(this.head);
-    this.head.position.y = 0.6;
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.062, 0.12, 10), skin);
-    neck.position.y = -0.08;
-    this.head.add(neck);
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.135, 24, 18), skin);
-    skull.scale.set(0.94, 1.08, 1.0);
-    skull.position.y = 0.07;
-    skull.castShadow = true;
-    const jaw2 = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 10), skin);
-    jaw2.scale.set(0.95, 0.75, 0.95);
-    jaw2.position.set(0, 0.0, 0.02);
-    this.head.add(skull, jaw2);
-    // Hair: a close cap, swept fringe, and a bun at the back.
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.145, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.55), hair);
-    cap.scale.set(0.98, 1.05, 1.04);
-    cap.position.set(0, 0.085, -0.012);
-    cap.rotation.x = -0.38;
-    cap.castShadow = true;
-    this.head.add(cap);
-    const fringe = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), hair);
-    fringe.scale.set(1.5, 0.5, 0.7);
-    fringe.position.set(0.04, 0.16, 0.085);
-    fringe.rotation.set(0.2, 0, -0.35);
-    const fringe2 = fringe.clone();
-    fringe2.scale.set(1.0, 0.45, 0.6);
-    fringe2.position.set(-0.07, 0.15, 0.09);
-    fringe2.rotation.set(0.25, 0, 0.3);
-    this.head.add(fringe, fringe2);
-    for (const side of [-1, 1]) {
-      const lock = new THREE.Mesh(new THREE.CapsuleGeometry(0.03, 0.07, 4, 8), hair);
-      lock.position.set(side * 0.122, 0.06, 0.025);
-      lock.rotation.z = side * 0.12;
-      this.head.add(lock);
-    }
-    this.bun.position.set(0, 0.13, -0.125);
-    this.head.add(this.bun);
-    const bunBall = new THREE.Mesh(new THREE.SphereGeometry(0.05, 14, 10), hair);
-    bunBall.scale.set(1.15, 0.85, 0.8);
-    bunBall.position.set(0, 0.02, -0.03);
-    bunBall.castShadow = true;
-    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.012, 6, 12), scarfMat);
-    tie.rotation.x = Math.PI / 2.4;
-    this.bun.add(bunBall, tie);
-    // Face.
-    for (const side of [-1, 1]) {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.018, 10, 8), dark);
-      eye.scale.set(0.85, 1.25, 0.5);
-      eye.position.set(side * 0.047, 0.065, 0.122);
-      this.head.add(eye);
-      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.011, 0.012), hair);
-      brow.position.set(side * 0.049, 0.103, 0.124);
-      brow.rotation.z = side * -0.1;
-      this.head.add(brow);
-    }
-    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), skin);
-    nose.scale.set(0.9, 1.1, 1.1);
-    nose.position.set(0, 0.03, 0.134);
-    this.head.add(nose);
-
-    // ---- coral scarf: a thick wrap with a knot, and two simulated tails
-    const cowl = new THREE.Mesh(new THREE.TorusGeometry(0.098, 0.05, 8, 18), scarfMat);
-    cowl.rotation.x = Math.PI / 2 + 0.18;
-    cowl.position.set(0, 0.5, 0.01);
-    cowl.castShadow = true;
-    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.048, 10, 8), scarfMat);
-    knot.position.set(-0.07, 0.455, 0.09);
-    this.spine.add(cowl, knot);
-    for (const [x, z, len, width] of [
-      [-0.075, 0.1, 7, 0.085],
-      [-0.035, 0.115, 5, 0.07],
-    ]) {
-      const anchor = new THREE.Object3D();
-      anchor.position.set(x, 0.44, z);
-      this.spine.add(anchor);
-      this.scarfAnchors.push(anchor);
-      const scarf = new Scarf(scarfMat, len, width);
-      this.scarves.push(scarf);
-      scene.add(scarf.mesh);
-    }
-
-    this.carryAnchor.position.set(0, 0.24, 0.34);
-    this.spine.add(this.carryAnchor);
+    this.carryAnchor.position.set(0, 1.1, 0.32);
+    this.visual.add(this.carryAnchor);
     scene.add(this.root);
   }
 
+  get ready(): boolean {
+    return this.model !== null;
+  }
+
+  /** Kept for the quality switch; the character has a single level of detail. */
+  setDetail(_level: 'high' | 'low'): void {}
+
+  /** Attach the loaded character (public/assets/mara/mara.glb). */
+  attach(gltf: GLTF): void {
+    const model = gltf.scene;
+    model.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(model);
+    const s = HEIGHT / Math.max(0.5, box.max.y - box.min.y);
+    model.scale.setScalar(s);
+    model.position.y = -box.min.y * s;
+    this.visual.add(model);
+    this.model = model;
+    model.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone);
+      if (!m.isMesh) return;
+      m.castShadow = true;
+      m.receiveShadow = true;
+      m.frustumCulled = false;
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) this.addFadeable(mat);
+    });
+    this.mixer = new THREE.AnimationMixer(model);
+    for (const clip of gltf.animations) {
+      const a = this.mixer.clipAction(clip);
+      a.enabled = true;
+      a.setEffectiveWeight(0);
+      this.actions.set(clip.name, a);
+    }
+    this.root.updateMatrixWorld(true);
+    this.measureLocomotion(gltf.animations);
+    for (const n of ['idle', ...LOCOMOTION, 'jumpLoop', 'land']) this.actions.get(n)?.play();
+    this.actions.get('idle')?.setEffectiveWeight(1);
+    this.mixer.update(0);
+    this.root.updateMatrixWorld(true);
+    this.addScarf();
+  }
+
+  /** Ground speed of each locomotion clip, from how far a planted foot travels per cycle. */
+  private measureLocomotion(clips: THREE.AnimationClip[]): void {
+    const model = this.model!;
+    const foot = this.bones.get('foot_l');
+    const hips = this.bones.get('pelvis');
+    if (!foot || !hips) return;
+    const probe = new THREE.AnimationMixer(model);
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    for (const name of LOCOMOTION) {
+      const clip = clips.find((c) => c.name === name);
+      if (!clip) continue;
+      const act = probe.clipAction(clip);
+      act.play();
+      let min = Infinity;
+      let max = -Infinity;
+      for (let i = 0; i <= 40; i++) {
+        probe.setTime((clip.duration * i) / 40);
+        model.updateMatrixWorld(true);
+        foot.getWorldPosition(a);
+        hips.getWorldPosition(b);
+        const z = a.z - b.z;
+        min = Math.min(min, z);
+        max = Math.max(max, z);
+      }
+      act.stop();
+      // A planted foot sweeps the stride backwards during roughly half the cycle.
+      const v = (2 * (max - min)) / clip.duration;
+      if (v > 0.3 && v < 12) this.naturalSpeed[name] = v;
+    }
+    probe.stopAllAction();
+    probe.uncacheRoot(model);
+  }
+
+  /** Measured ground speed of each locomotion clip (m/s), for tests and tuning. */
+  get locomotionSpeeds(): Record<string, number> {
+    return { ...this.naturalSpeed };
+  }
+
+  /** A coral knit wrap at her neck, with two loose tails. */
+  private addScarf(): void {
+    const neck = this.bones.get('neck_01');
+    const chest = this.bones.get('spine_03');
+    if (!neck || !chest) return;
+    const knit = new THREE.MeshStandardMaterial({ color: SCARF_COLOR, roughness: 1, normalMap: this.tex.wool.normalMap });
+    this.addFadeable(knit);
+    const neckPos = neck.getWorldPosition(new THREE.Vector3());
+    const facing = this.root.getWorldQuaternion(new THREE.Quaternion());
+    const wrap = new THREE.Group();
+    for (const [y, r, t, tilt] of [
+      [-0.01, 0.1, 0.036, 0.22],
+      [0.035, 0.088, 0.03, 0.08],
+    ]) {
+      const torus = new THREE.Mesh(new THREE.TorusGeometry(r, t, 10, 28), knit);
+      torus.rotation.x = Math.PI / 2 + tilt;
+      torus.position.set(0, y, 0.008);
+      torus.castShadow = true;
+      wrap.add(torus);
+    }
+    const knot = new THREE.Mesh(new THREE.SphereGeometry(0.036, 14, 10), knit);
+    knot.scale.set(1.1, 0.9, 0.8);
+    knot.position.set(0.045, -0.04, 0.1);
+    wrap.add(knot);
+    wrap.quaternion.copy(facing);
+    wrap.position.copy(neckPos).add(new THREE.Vector3(0, -0.025, 0));
+    this.scene.add(wrap);
+    neck.attach(wrap);
+    const tailMat = new THREE.MeshStandardMaterial({ color: SCARF_COLOR, roughness: 1 });
+    this.addFadeable(tailMat);
+    for (const [x, len, width] of [
+      [0.03, 3, 0.05],
+      [0.055, 2, 0.044],
+    ]) {
+      const anchor = new THREE.Object3D();
+      anchor.position.copy(neckPos).add(new THREE.Vector3(x, -0.09, 0.09).applyQuaternion(facing));
+      this.scene.add(anchor);
+      chest.attach(anchor);
+      this.scarfAnchors.push(anchor);
+      const scarf = new Scarf(tailMat, len, width);
+      this.scarves.push(scarf);
+      this.scene.add(scarf.mesh);
+    }
+  }
+
   onJump(): void {
-    this.stretchVel += 2.4;
+    this.airTime = 0;
+    this.play('jumpStart', 1.6, 0.25);
   }
 
   onLand(impact: number): void {
-    this.stretchVel -= clamp(impact * 0.22, 0.6, 3.6);
+    if (impact < 3) return;
+    this.landT = 0;
+    this.landWeight = clamp(impact / 10, 0.35, 0.85);
+    const land = this.actions.get('land');
+    if (land) {
+      land.reset();
+      land.time = 0.2;
+      land.setLoop(THREE.LoopOnce, 1);
+      land.clampWhenFinished = true;
+      land.timeScale = 1.4;
+      land.play();
+    }
+  }
+
+  /** Story beats: play a clip on the whole body (timeScale 0 holds a pose, e.g. lying asleep). */
+  cinematic(name: string, timeScale = 1, startAt = 0): void {
+    this.play(name, timeScale, startAt);
+    if (this.oneShot && timeScale === 0) this.oneShot.weight = 1;
+  }
+
+  /** End any story clip at once and return to the normal locomotion pose. */
+  endCinematic(): void {
+    if (!this.oneShot) return;
+    const a = this.actions.get(this.oneShot.name);
+    a?.stop();
+    a?.setEffectiveWeight(0);
+    this.oneShot = null;
+  }
+
+  /** Start a full-body one-shot: fades in, holds until it ends (or the mode ends), fades out. */
+  private play(name: string, timeScale = 1, startAt = 0): void {
+    const a = this.actions.get(name);
+    if (!a) return;
+    if (this.oneShot && this.oneShot.name !== name) {
+      this.actions.get(this.oneShot.name)?.stop();
+      this.actions.get(this.oneShot.name)?.setEffectiveWeight(0);
+    }
+    a.reset();
+    a.setLoop(THREE.LoopOnce, 1);
+    a.clampWhenFinished = true;
+    a.timeScale = timeScale;
+    a.time = startAt;
+    a.play();
+    this.oneShot = { name, weight: this.oneShot?.name === name ? this.oneShot.weight : 0, target: 1 };
+  }
+
+  /**
+   * Materials that fade near the camera use a dithered alpha hash that is always on, so changing
+   * the opacity only changes a uniform. Switching `transparent` instead changes the shader: on
+   * integrated GPUs (ANGLE/D3D11) recompiling Mara's eight programs froze the game for 4-6 s the
+   * first time the camera came close (review 492bce4 R2).
+   */
+  private addFadeable(m: THREE.Material): void {
+    if (!m.transparent) m.alphaHash = true;
+    this.materials.push(m);
   }
 
   /** Fade the avatar when the camera gets very close so it never blocks the view. */
@@ -331,7 +279,6 @@ export class PlayerAvatar {
     if (Math.abs(o - this.opacity) < 0.01) return;
     this.opacity = o;
     for (const m of this.materials) {
-      m.transparent = o < 0.999;
       m.opacity = o;
       m.depthWrite = o > 0.5;
     }
@@ -341,150 +288,140 @@ export class PlayerAvatar {
 
   update(dt: number, s: AvatarState): void {
     this.time += dt;
-    this.root.position.set(s.feet.x, s.feet.y - 0.02, s.feet.z);
+    this.root.position.set(s.feet.x, s.feet.y - 0.01, s.feet.z);
     this.root.rotation.y = s.facing;
-
-    const speedN = clamp(s.speed / MOVEMENT.maxSpeed, 0, 1);
-    this.runBlend = damp(this.runBlend, s.grounded ? speedN : this.runBlend * 0.6, 12, dt);
-    this.airBlend = damp(this.airBlend, s.grounded ? 0 : 1, s.grounded ? 18 : 9, dt);
-    this.carryBlend = damp(this.carryBlend, s.carrying ? 1 : 0, 10, dt);
+    if (!this.mixer || !this.model) {
+      this.root.updateMatrixWorld(true);
+      return;
+    }
+    const mode = s.mode ?? 'move';
     this.turnRate = damp(this.turnRate, wrapAngle(s.facing - this.lastFacing) / Math.max(dt, 1e-4), 8, dt);
     this.lastFacing = s.facing;
 
-    // Stride phase advances with distance travelled, so feet don't slide.
-    const prevPhase = this.phase;
-    if (s.grounded) this.phase += (dt * s.speed * Math.PI) / 1.3;
-    if (s.grounded && s.speed > 1 && Math.floor(prevPhase / Math.PI) !== Math.floor(this.phase / Math.PI)) {
-      this.onFootstep?.(s.speed);
+    // --- traversal and event one-shots
+    if (mode !== this.lastMode) {
+      if (mode === 'hang') this.play('climb', 0, 0.02);
+      else if (mode === 'climb') this.play('climb', this.clipDuration('climb') / TRAVERSAL.pullUpTime, 0.02);
+      else if (mode === 'vault') this.play('vault', this.clipDuration('vault') / (TRAVERSAL.vaultTime * 1.6), 0.1);
+      else if (this.oneShot && /climb|vault/.test(this.oneShot.name)) this.oneShot.target = 0;
+      this.lastMode = mode;
+    }
+    if ((s.knockbacks ?? 0) > this.lastKnockbacks) {
+      this.lastKnockbacks = s.knockbacks ?? 0;
+      this.play('knockback', 1.3);
+    }
+    if (s.reach > 0 && this.lastReach <= 0 && mode === 'move' && s.grounded) this.play('interact', 1.7, 0.15);
+    this.lastReach = s.reach;
+
+    // --- one-shot weight: fade in quickly, out when finished or released
+    if (this.oneShot) {
+      const a = this.actions.get(this.oneShot.name)!;
+      const finished = a.time >= a.getClip().duration - 1e-3 && a.timeScale !== 0;
+      if (finished && mode === 'move') this.oneShot.target = 0;
+      if (this.oneShot.name === 'jumpStart' && this.airTime > 0.12 && (s.verticalSpeed < 0 || s.grounded)) this.oneShot.target = 0;
+      this.oneShot.weight = damp(this.oneShot.weight, this.oneShot.target, this.oneShot.target > 0 ? 20 : 9, dt);
+      if (this.oneShot.target === 0 && this.oneShot.weight < 0.02) {
+        a.stop();
+        a.setEffectiveWeight(0);
+        this.oneShot = null;
+      } else a.setEffectiveWeight(this.oneShot.weight);
+    }
+    const shot = this.oneShot?.weight ?? 0;
+
+    // --- air
+    this.airTime = s.grounded ? 0 : this.airTime + dt;
+    const airborne = !s.grounded && mode === 'move' && (this.airTime > 0.1 || s.verticalSpeed > 1);
+    this.airBlend = damp(this.airBlend, airborne ? 1 : 0, airborne ? 12 : 18, dt);
+
+    // --- landing overlay
+    let land = 0;
+    if (this.landT >= 0) {
+      this.landT += dt;
+      land = this.landWeight * Math.max(0, 1 - this.landT / 0.35);
+      if (this.landT > 0.35) this.landT = -1;
     }
 
-    const run = this.runBlend;
-    const A = lerp(0.12, 0.95, run);
-    const sp = Math.sin(this.phase);
-    const cp = Math.cos(this.phase);
-
-    // --- legs: ground pose
-    const ground = [
-      { thigh: -sp * A, knee: 0.08 + Math.max(0, cp) * A * 1.35 },
-      { thigh: sp * A, knee: 0.08 + Math.max(0, -cp) * A * 1.35 },
-    ];
-    // --- legs: air pose (rising tuck vs falling reach for the ground)
-    const rising = clamp(s.verticalSpeed / 6, -1, 1);
-    const air = [
-      { thigh: lerp(-0.35, -1.05, Math.max(0, rising)), knee: lerp(0.5, 1.5, Math.max(0, rising)) },
-      { thigh: lerp(0.15, 0.35, Math.max(0, rising)), knee: lerp(0.3, 0.55, Math.max(0, rising)) },
-    ];
-    for (let i = 0; i < 2; i++) {
-      const leg = this.legs[i];
-      leg.thigh.rotation.x = lerp(ground[i].thigh, air[i].thigh, this.airBlend);
-      leg.knee.rotation.x = lerp(ground[i].knee, air[i].knee, this.airBlend);
-      leg.foot.rotation.x = -(leg.thigh.rotation.x + leg.knee.rotation.x) * 0.7;
+    // --- locomotion: phase-locked blend of walk, jog and sprint by ground speed
+    const v = s.grounded ? s.speed : 0;
+    const ns = this.naturalSpeed;
+    const w: Record<string, number> = { idle: 0, walk: 0, jog: 0, sprint: 0 };
+    if (v < 0.15) w.idle = 1;
+    else if (v < ns.walk) {
+      const t = (v - 0.15) / (ns.walk - 0.15);
+      w.idle = 1 - t;
+      w.walk = t;
+    } else if (v < ns.jog) {
+      const t = (v - ns.walk) / (ns.jog - ns.walk);
+      w.walk = 1 - t;
+      w.jog = t;
+    } else {
+      const t = clamp((v - ns.jog) / Math.max(0.1, ns.sprint - ns.jog), 0, 1);
+      w.jog = 1 - t;
+      w.sprint = t;
     }
-
-    // --- arms
-    const breath = Math.sin(this.time * 2.1);
-    for (let i = 0; i < 2; i++) {
-      const side = i === 0 ? -1 : 1;
-      const arm = this.arms[i];
-      const swing = (i === 0 ? sp : -sp) * A * 0.85;
-      let sx = swing;
-      let sz = side * (0.09 + run * 0.12 + breath * 0.01);
-      let ex = -(0.2 + run * 0.95);
-      // Air: arms rise and spread for balance.
-      sx = lerp(sx, lerp(-0.25, -0.9, Math.max(0, rising)), this.airBlend);
-      sz = lerp(sz, side * lerp(1.05, 0.45, Math.max(0, rising)), this.airBlend);
-      ex = lerp(ex, -0.35, this.airBlend);
-      sx = lerp(sx, -1.05, this.carryBlend);
-      sz = lerp(sz, side * -0.18, this.carryBlend);
-      ex = lerp(ex, -0.75, this.carryBlend);
-      // Reach (right arm) for interactions.
-      if (i === 1 && s.reach > 0) {
-        const r = Math.sin(s.reach * Math.PI);
-        sx = lerp(sx, -1.35, r);
-        ex = lerp(ex, -0.15, r);
-      }
-      arm.shoulder.rotation.x = sx;
-      arm.shoulder.rotation.z = sz;
-      arm.elbow.rotation.x = ex;
-    }
-
-    // --- traversal poses: hanging, pulling up, vaulting
-    const mode = s.mode ?? 'move';
-    const mt = s.modeT ?? 0;
-    this.hangBlend = damp(this.hangBlend, mode === 'hang' || mode === 'climb' ? 1 : 0, 18, dt);
-    this.vaultBlend = damp(this.vaultBlend, mode === 'vault' ? 1 : 0, 24, dt);
-    if (this.hangBlend > 0.01) {
-      const pull = mode === 'climb' ? Math.min(1, mt * 1.6) : 0;
-      const sway = mode === 'hang' ? Math.sin(this.time * 2.4) * 0.05 : 0;
-      for (let i = 0; i < 2; i++) {
-        const side = i === 0 ? -1 : 1;
-        const arm = this.arms[i];
-        arm.shoulder.rotation.x = lerp(arm.shoulder.rotation.x, lerp(-2.9, -0.7, pull), this.hangBlend);
-        arm.shoulder.rotation.z = lerp(arm.shoulder.rotation.z, side * lerp(0.2, 0.35, pull), this.hangBlend);
-        arm.elbow.rotation.x = lerp(arm.elbow.rotation.x, lerp(-0.2, -1.5, pull), this.hangBlend);
-        const leg = this.legs[i];
-        const kick = mode === 'climb' ? Math.sin(Math.min(1, mt) * Math.PI) : 0;
-        leg.thigh.rotation.x = lerp(leg.thigh.rotation.x, 0.08 + sway - kick * (i === 0 ? 1.3 : 0.4), this.hangBlend);
-        leg.knee.rotation.x = lerp(leg.knee.rotation.x, 0.25 + kick * (i === 0 ? 1.4 : 0.6), this.hangBlend);
-      }
-    }
-    if (this.vaultBlend > 0.01) {
-      const tuck = Math.sin(Math.min(1, mt) * Math.PI);
-      for (let i = 0; i < 2; i++) {
-        const side = i === 0 ? -1 : 1;
-        const arm = this.arms[i];
-        // Left hand plants on the rail; right arm swings out for balance.
-        arm.shoulder.rotation.x = lerp(arm.shoulder.rotation.x, i === 0 ? -0.5 : -1.1, this.vaultBlend);
-        arm.shoulder.rotation.z = lerp(arm.shoulder.rotation.z, side * (i === 0 ? 0.5 : 1.0), this.vaultBlend);
-        arm.elbow.rotation.x = lerp(arm.elbow.rotation.x, -0.2, this.vaultBlend);
-        const leg = this.legs[i];
-        leg.thigh.rotation.x = lerp(leg.thigh.rotation.x, -1.0 * tuck - 0.2, this.vaultBlend);
-        leg.knee.rotation.x = lerp(leg.knee.rotation.x, 1.4 * tuck + 0.2, this.vaultBlend);
+    let rate = 0;
+    for (const n of LOCOMOTION) rate += (w[n] * clamp(v / ns[n], 0.6, 1.4)) / this.clipDuration(n);
+    const moving = w.walk + w.jog + w.sprint;
+    if (moving > 0) rate /= moving;
+    const prev = this.phase;
+    this.phase = (this.phase + dt * rate) % 1;
+    if (s.grounded && v > 1 && Math.floor(prev * 2) !== Math.floor(this.phase * 2)) this.onFootstep?.(v);
+    const groundShare = (1 - this.airBlend) * (1 - shot) * (1 - land);
+    for (const n of ['idle', ...LOCOMOTION]) {
+      const a = this.actions.get(n);
+      if (!a) continue;
+      a.setEffectiveWeight(w[n] * groundShare);
+      if (n !== 'idle') {
+        a.timeScale = 0;
+        a.time = this.phase * this.clipDuration(n);
       }
     }
+    this.actions.get('jumpLoop')?.setEffectiveWeight(this.airBlend * (1 - shot));
+    this.actions.get('land')?.setEffectiveWeight(land * (1 - shot));
 
-    // --- body
-    const bob = (Math.abs(sp) * 0.055 - 0.02) * run;
-    this.hips.position.y = HIP_Y + bob * (1 - this.airBlend) - run * 0.02;
-    this.hips.rotation.y = -sp * 0.12 * run;
-    this.spine.rotation.y = sp * 0.22 * run;
-    this.spine.scale.y = 1 + breath * 0.012 * (1 - run);
-    const lean = run * 0.14 * (1 - this.hangBlend) + this.carryBlend * -0.05 + this.vaultBlend * 0.25;
-    this.visual.rotation.x = damp(this.visual.rotation.x, lean, 8, dt);
-    const roll = clamp(-this.turnRate * 0.035, -0.22, 0.22) * run * (1 - this.vaultBlend) - this.vaultBlend * 0.35;
-    this.visual.rotation.z = damp(this.visual.rotation.z, roll, 10, dt);
+    this.mixer.update(dt);
 
-    // Squash and stretch (critically damped spring around 0).
-    const k = 160;
-    const c = 2 * Math.sqrt(k) * 0.55;
-    this.stretchVel += (-k * this.stretch - c * this.stretchVel) * dt;
-    this.stretch = clamp(this.stretch + this.stretchVel * dt, -0.22, 0.18);
-    this.visual.scale.set(1 - this.stretch * 0.5, 1 + this.stretch, 1 - this.stretch * 0.5);
+    // --- body lean with speed and into turns (subtle on a realistic figure)
+    this.lean = damp(this.lean, clamp(v / MOVEMENT.maxSpeed, 0, 1) * 0.06 * (1 - shot), 6, dt);
+    this.visual.rotation.x = this.lean;
+    this.visual.rotation.z = damp(this.visual.rotation.z, clamp(-this.turnRate * 0.02, -0.12, 0.12) * clamp(v / 4, 0, 1), 8, dt);
 
-    // --- head: glance at points of interest, otherwise idle look-around
-    let targetYaw = Math.sin(this.time * 0.37) * 0.25 * (1 - run);
-    let targetPitch = -0.05;
-    if (s.lookAt) {
+    // --- head: glance at points of interest, otherwise a slow idle look-around
+    let targetYaw = Math.sin(this.time * 0.37) * 0.18 * (v < 0.5 ? 1 : 0);
+    let targetPitch = 0;
+    if (s.lookAt && mode === 'move') {
       const dx = s.lookAt.x - s.feet.x;
       const dz = s.lookAt.z - s.feet.z;
       const yaw = wrapAngle(Math.atan2(dx, dz) - s.facing);
       if (Math.abs(yaw) < 1.6) {
-        targetYaw = clamp(yaw, -0.9, 0.9);
-        targetPitch = clamp(-Math.atan2(s.lookAt.y - (s.feet.y + 1.5), Math.hypot(dx, dz)), -0.5, 0.5);
+        targetYaw = clamp(yaw, -0.8, 0.8);
+        targetPitch = clamp(Math.atan2(s.lookAt.y - (s.feet.y + 1.55), Math.hypot(dx, dz)), -0.45, 0.45);
       }
     }
-    this.headYaw = dampAngle(this.headYaw, targetYaw, 6, dt);
-    this.headPitch = damp(this.headPitch, targetPitch, 6, dt);
-    this.head.rotation.set(this.headPitch, this.headYaw - this.spine.rotation.y, 0);
-
-    // Hair bun bobs on a spring with vertical motion and turns.
-    const bunTarget = clamp(-s.verticalSpeed * 0.03, -0.25, 0.3) + run * 0.12;
-    this.bunVel += ((bunTarget - this.bunSwing) * 120 - this.bunVel * 10) * dt;
-    this.bunSwing += this.bunVel * dt;
-    this.bun.rotation.x = this.bunSwing;
-    this.bun.rotation.z = clamp(this.turnRate * 0.02, -0.25, 0.25);
+    // Full-body clips (climbing, lying down, getting up) own the head.
+    this.headYaw = dampAngle(this.headYaw, targetYaw * (1 - shot), 6, dt);
+    this.headPitch = damp(this.headPitch, targetPitch * (1 - shot), 6, dt);
+    this.root.updateMatrixWorld(true);
+    this.turnBone('neck_01', this.headYaw * 0.4, this.headPitch * 0.4);
+    this.turnBone('Head', this.headYaw * 0.6, this.headPitch * 0.6);
 
     this.root.updateMatrixWorld(true);
     this.scarves.forEach((scarf, i) => scarf.update(dt, this.scarfAnchors[i], this.root, s.speed));
+  }
+
+  private clipDuration(name: string): number {
+    return this.actions.get(name)?.getClip().duration ?? 1;
+  }
+
+  /** Turn a bone by yaw (about world up) and pitch (about the character's right axis), in world space. */
+  private turnBone(name: string, yaw: number, pitch: number): void {
+    const b = this.bones.get(name);
+    if (!b || !b.parent || (yaw === 0 && pitch === 0)) return;
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.root.getWorldQuaternion(qa));
+    const delta = qb.setFromAxisAngle(UP, yaw).multiply(new THREE.Quaternion().setFromAxisAngle(right, -pitch));
+    const world = b.getWorldQuaternion(new THREE.Quaternion());
+    const parentInv = b.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+    b.quaternion.copy(parentInv.multiply(delta.multiply(world)));
+    b.updateMatrixWorld(true);
   }
 }

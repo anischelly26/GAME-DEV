@@ -1,0 +1,1296 @@
+{
+  "date": "2026-10-15T13:28:50.628Z",
+  "environment": {
+    "os": "10.0.26200",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12650H",
+    "ramGiB": 7.708171844482422,
+    "node": "v22.13.1",
+    "browser": "155.0.4283.45"
+  },
+  "runs": [
+    {
+      "label": "latest",
+      "quality": "high",
+      "mode": "headed production, normal realtime, scripted real input pipeline",
+      "errors": [],
+      "environment": {
+        "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x000046A3) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "viewport": [
+          1280,
+          720
+        ],
+        "canvas": [
+          1280,
+          720
+        ],
+        "dpr": 1.0000000149011612,
+        "visibility": "visible",
+        "focus": true,
+        "pointerLocked": true,
+        "power": {
+          "charging": true,
+          "level": 0.98
+        }
+      },
+      "state": {
+        "gameState": "complete",
+        "feet": [
+          -4.768,
+          11.62,
+          -9.461
+        ],
+        "velocity": [
+          0,
+          -2,
+          0
+        ],
+        "grounded": true,
+        "mode": "move",
+        "facing": 5.036953515813163,
+        "flags": [
+          "clue.read",
+          "lever.tried",
+          "valve.closed",
+          "hatch.lifting",
+          "hatch.open",
+          "gap.crossed",
+          "lookout.reached",
+          "lookout.lit",
+          "reveal.done",
+          "engine.reached",
+          "collar.braked",
+          "collar.ridden",
+          "engine.top",
+          "ram.caught",
+          "feed.ram",
+          "steam.redirected",
+          "ram.primed",
+          "ram.released",
+          "exit.reached",
+          "engine.finished"
+        ],
+        "objective": "",
+        "checkpoint": "exit",
+        "falls": 0,
+        "complete": true,
+        "focused": null,
+        "prompt": null,
+        "cameraZone": "hall",
+        "cameraDistance": 6.2,
+        "level": {
+          "bypassOpen": false,
+          "pressure": 0.89,
+          "liftBand": true,
+          "hatch": "latched",
+          "failedPulls": 1,
+          "autoHints": 0,
+          "requestedHints": 0
+        },
+        "autopilot": {
+          "state": "done",
+          "step": 51,
+          "total": 51,
+          "message": "route complete",
+          "log": [
+            "[0] pause @0.52s",
+            "[1] interact diagram @0.88s",
+            "[2] interact lever @1.00s",
+            "[3] interact valve @1.37s",
+            "[4] wait pressureReady @0.53s",
+            "[5] interact lever @0.93s",
+            "[6] wait hatchOpen @1.90s",
+            "[7] move 1.1,4.6,27.6 @0.25s",
+            "[8] move 1.1,4.6,26.0 @0.47s",
+            "[9] jump @0.70s",
+            "[10] move 0.7,4.6,23.9 @0.22s",
+            "[11] jump @0.78s",
+            "[12] move 0.0,4.6,17.9 @0.48s",
+            "[13] move -0.3,4.6,14.6 @0.77s",
+            "[14] interact lookout-light @0.40s",
+            "[15] wait revealDone @3.48s",
+            "[16] move 1.4,4.6,12.8 @0.53s",
+            "[17] move 0.5,2.5,11.3 @0.33s",
+            "[18] move 0.9,0.0,10.2 @0.23s",
+            "[19] move 3.6,0.0,10.0 @0.52s",
+            "[20] move 5.7,0.0,9.1 @0.58s",
+            "[21] jump @0.70s",
+            "[22] move 8.6,0.0,6.3 @0.32s",
+            "[23] vault @0.43s",
+            "[24] move 10.6,0.0,4.2 @0.30s",
+            "[25] climb @0.78s",
+            "[26] move 11.8,2.0,0.7 @0.60s",
+            "[27] move 11.1,0.0,-0.4 @0.23s",
+            "[28] move 10.7,0.0,-0.7 @0.25s",
+            "[29] wait shuttleAtStart @1.42s",
+            "[30] move 10.7,0.0,-1.1 @0.22s",
+            "[31] move 10.5,0.0,-2.2 @0.38s",
+            "[32] wait shuttleAtEnd @5.40s",
+            "[33] move 8.6,0.0,-6.5 @0.52s",
+            "[34] move 7.4,0.0,-7.6 @0.30s",
+            "[35] move 6.6,0.0,-7.8 @0.35s",
+            "[36] interact brake @0.67s",
+            "[37] wait collarHeld @1.22s",
+            "[38] interact deck-lever @1.02s",
+            "[39] wait collarTop @3.55s",
+            "[40] move 4.5,9.2,-5.4 @1.30s",
+            "[41] move 6.7,9.2,-8.0 @0.78s",
+            "[42] move 4.9,9.2,-9.5 @0.60s",
+            "[43] interact ram-catch @0.33s",
+            "[44] interact feed-diverter @0.78s",
+            "[45] move -0.4,9.2,-10.6 @1.90s",
+            "[46] move -1.4,9.2,-10.7 @0.35s",
+            "[47] interact ram-release @0.05s",
+            "[48] wait pistonUp @2.40s",
+            "[49] jump @0.75s",
+            "[50] wait complete @8.65s"
+          ]
+        },
+        "time": 68.067
+      },
+      "cell": {
+        "frames": 75,
+        "seconds": 7.956900000000002,
+        "averageFps": 9.425781397277833,
+        "medianMs": 104.20000000000073,
+        "p95Ms": 139.09999999999854,
+        "p99Ms": 242.90000000000146,
+        "percentOver33ms": 100,
+        "percentOver50ms": 97.33333333333333
+      },
+      "route": {
+        "frames": 585,
+        "seconds": 66.688,
+        "averageFps": 8.772192898272554,
+        "medianMs": 103.80000000000291,
+        "p95Ms": 138.90000000000146,
+        "p99Ms": 194.59999999999127,
+        "percentOver33ms": 100,
+        "percentOver50ms": 98.80341880341881
+      },
+      "checkpoints": {
+        "cell": {
+          "frames": 87,
+          "seconds": 8.810299999999996,
+          "averageFps": 9.874805625234107,
+          "medianMs": 97.10000000000582,
+          "p95Ms": 146.5,
+          "p99Ms": 298.09999999999854,
+          "percentOver33ms": 100,
+          "percentOver50ms": 97.70114942528735
+        },
+        "landing": {
+          "frames": 39,
+          "seconds": 10.156800000000002,
+          "averageFps": 3.8397920604914924,
+          "medianMs": 110.80000000000291,
+          "p95Ms": 228.90000000000146,
+          "p99Ms": 6217,
+          "percentOver33ms": 100,
+          "percentOver50ms": 92.3076923076923
+        },
+        "lookout": {
+          "frames": 55,
+          "seconds": 5.9655999999999985,
+          "averageFps": 9.219525278262038,
+          "medianMs": 110.79999999999563,
+          "p95Ms": 166,
+          "p99Ms": 215.10000000000582,
+          "percentOver33ms": 100,
+          "percentOver50ms": 98.18181818181819
+        },
+        "route": {
+          "frames": 50,
+          "seconds": 5.050299999999996,
+          "averageFps": 9.900401956319435,
+          "medianMs": 99.09999999999854,
+          "p95Ms": 125.10000000000582,
+          "p99Ms": 145.70000000000437,
+          "percentOver33ms": 100,
+          "percentOver50ms": 100
+        },
+        "shuttle": {
+          "frames": 87,
+          "seconds": 8.858900000000009,
+          "averageFps": 9.820632358419207,
+          "medianMs": 97.40000000000873,
+          "p95Ms": 131.60000000000582,
+          "p99Ms": 172.39999999999418,
+          "percentOver33ms": 100,
+          "percentOver50ms": 98.85057471264368
+        },
+        "engine": {
+          "frames": 90,
+          "seconds": 10.523699999999996,
+          "averageFps": 8.552125203112976,
+          "medianMs": 111.60000000000582,
+          "p95Ms": 145.90000000000873,
+          "p99Ms": 194.59999999999127,
+          "percentOver33ms": 100,
+          "percentOver50ms": 100
+        },
+        "engine-top": {
+          "frames": 36,
+          "seconds": 3.8573999999999944,
+          "averageFps": 9.332711152589841,
+          "medianMs": 110.39999999999418,
+          "p95Ms": 139.3000000000029,
+          "p99Ms": 139.3000000000029,
+          "percentOver33ms": 100,
+          "percentOver50ms": 100
+        },
+        "breach": {
+          "frames": 42,
+          "seconds": 4.203900000000009,
+          "averageFps": 9.990722900164112,
+          "medianMs": 97.29999999998836,
+          "p95Ms": 117.89999999999418,
+          "p99Ms": 124.80000000000291,
+          "percentOver33ms": 100,
+          "percentOver50ms": 100
+        },
+        "exit": {
+          "frames": 99,
+          "seconds": 9.261099999999992,
+          "averageFps": 10.689874852879258,
+          "medianMs": 96.69999999999709,
+          "p95Ms": 118,
+          "p99Ms": 119.10000000000582,
+          "percentOver33ms": 100,
+          "percentOver50ms": 100
+        }
+      },
+      "focusLossFrames": 0,
+      "longestFrames": [
+        {
+          "dt": 6217,
+          "stage": "route",
+          "cp": "landing",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 21.983333333333366,
+          "yaw": 6.147169398252877,
+          "feet": [
+            0.9286779165267944,
+            5.778664588928223,
+            24.23555564880371
+          ],
+          "speed": 5.499999999999999,
+          "focused": true,
+          "visibility": "visible"
+        },
+        {
+          "dt": 298.09999999999854,
+          "stage": "route",
+          "cp": "cell",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 15.283333333333672,
+          "yaw": 6.304281909393025,
+          "feet": [
+            -0.5459696054458618,
+            4.620034694671631,
+            28.16975212097168
+          ],
+          "speed": 0,
+          "focused": true,
+          "visibility": "visible"
+        },
+        {
+          "dt": 236.3000000000029,
+          "stage": "route",
+          "cp": "exit",
+          "mode": "move",
+          "gameState": "complete",
+          "gameTime": 67.71666666666411,
+          "yaw": 7.707649740057757,
+          "feet": [
+            -4.767977714538574,
+            11.620100021362305,
+            -9.461128234863281
+          ],
+          "speed": 0,
+          "focused": true,
+          "visibility": "visible"
+        }
+      ]
+    },
+    {
+      "label": "baseline",
+      "quality": "high",
+      "mode": "headed production, normal realtime, scripted real input pipeline",
+      "errors": [],
+      "environment": {
+        "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x000046A3) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "viewport": [
+          1280,
+          720
+        ],
+        "canvas": [
+          1280,
+          720
+        ],
+        "dpr": 1.0000000149011612,
+        "visibility": "visible",
+        "focus": true,
+        "pointerLocked": true,
+        "power": {
+          "charging": true,
+          "level": 0.98
+        }
+      },
+      "state": {
+        "gameState": "complete",
+        "feet": [
+          -4.772,
+          11.62,
+          -9.46
+        ],
+        "velocity": [
+          0,
+          -2,
+          0
+        ],
+        "grounded": true,
+        "mode": "move",
+        "facing": 4.310806199862126,
+        "flags": [
+          "clue.read",
+          "lever.tried",
+          "valve.closed",
+          "hatch.lifting",
+          "hatch.open",
+          "gap.crossed",
+          "lookout.reached",
+          "lookout.lit",
+          "reveal.done",
+          "engine.reached",
+          "collar.braked",
+          "collar.ridden",
+          "engine.top",
+          "steam.redirected",
+          "exit.reached",
+          "engine.finished"
+        ],
+        "objective": "",
+        "checkpoint": "exit",
+        "falls": 0,
+        "complete": true,
+        "focused": null,
+        "prompt": null,
+        "cameraZone": "hall",
+        "cameraDistance": 6.2,
+        "level": {
+          "bypassOpen": false,
+          "pressure": 0.86,
+          "liftBand": true,
+          "hatch": "latched",
+          "failedPulls": 1,
+          "hintTier": 0
+        },
+        "autopilot": {
+          "state": "done",
+          "step": 50,
+          "total": 50,
+          "message": "route complete",
+          "log": [
+            "[0] pause @0.52s",
+            "[1] interact diagram @0.85s",
+            "[2] interact lever @0.92s",
+            "[3] interact valve @1.20s",
+            "[4] wait pressureReady @0.65s",
+            "[5] interact lever @0.73s",
+            "[6] wait hatchOpen @1.90s",
+            "[7] move 1.1,4.6,27.6 @0.22s",
+            "[8] move 1.1,4.6,26.0 @0.40s",
+            "[9] jump @0.68s",
+            "[10] move 0.7,4.6,23.9 @0.13s",
+            "[11] jump @0.77s",
+            "[12] move 0.0,4.6,17.9 @0.40s",
+            "[13] move -0.3,4.6,14.6 @0.75s",
+            "[14] interact lookout-light @0.45s",
+            "[15] wait revealDone @12.30s",
+            "[16] move 1.4,4.6,12.8 @0.47s",
+            "[17] move 0.5,2.5,11.3 @0.30s",
+            "[18] move 0.9,0.0,10.2 @0.22s",
+            "[19] move 3.6,0.0,10.0 @0.45s",
+            "[20] move 5.7,0.0,9.1 @0.58s",
+            "[21] jump @0.68s",
+            "[22] move 8.6,0.0,6.3 @0.23s",
+            "[23] vault @0.43s",
+            "[24] move 10.6,0.0,4.2 @0.32s",
+            "[25] climb @0.78s",
+            "[26] move 11.8,2.0,0.7 @0.55s",
+            "[27] move 11.1,0.0,-0.4 @0.20s",
+            "[28] move 10.7,0.0,-0.7 @0.25s",
+            "[29] wait shuttleAtStart @2.58s",
+            "[30] move 10.7,0.0,-1.1 @0.18s",
+            "[31] move 10.5,0.0,-2.2 @0.33s",
+            "[32] wait shuttleAtEnd @5.48s",
+            "[33] move 8.6,0.0,-6.5 @0.45s",
+            "[34] move 7.4,0.0,-7.6 @0.27s",
+            "[35] move 6.6,0.0,-7.8 @0.32s",
+            "[36] interact brake @0.58s",
+            "[37] wait collarHeld @1.22s",
+            "[38] interact deck-lever @0.98s",
+            "[39] wait collarTop @3.55s",
+            "[40] move 4.5,9.2,-5.4 @0.73s",
+            "[41] move 6.7,9.2,-8.0 @0.80s",
+            "[42] move 4.9,9.2,-9.5 @0.53s",
+            "[43] interact steam-valve @0.32s",
+            "[44] move -0.4,9.2,-10.6 @1.72s",
+            "[45] wait pistonDown @0.02s",
+            "[46] move -1.4,9.2,-10.7 @0.32s",
+            "[47] wait pistonUp @3.15s",
+            "[48] jump @0.70s",
+            "[49] wait complete @8.63s"
+          ]
+        },
+        "time": 78.817
+      },
+      "cell": {
+        "frames": 148,
+        "seconds": 7.985099999999998,
+        "averageFps": 18.534520544514162,
+        "medianMs": 55.20000000000073,
+        "p95Ms": 62.599999999998545,
+        "p99Ms": 70.10000000000582,
+        "percentOver33ms": 99.32432432432432,
+        "percentOver50ms": 62.83783783783784
+      },
+      "route": {
+        "frames": 1133,
+        "seconds": 63.2886,
+        "averageFps": 17.902118232983504,
+        "medianMs": 55.30000000000291,
+        "p95Ms": 69,
+        "p99Ms": 76.20000000000437,
+        "percentOver33ms": 99.29390997352162,
+        "percentOver50ms": 63.19505736981465
+      },
+      "checkpoints": {
+        "cell": {
+          "frames": 130,
+          "seconds": 7.394900000000002,
+          "averageFps": 17.579683295244017,
+          "medianMs": 55.5,
+          "p95Ms": 69.39999999999418,
+          "p99Ms": 76.30000000000291,
+          "percentOver33ms": 97.6923076923077,
+          "percentOver50ms": 70.76923076923077
+        },
+        "landing": {
+          "frames": 58,
+          "seconds": 4.703400000000001,
+          "averageFps": 12.331504868818298,
+          "medianMs": 55.599999999998545,
+          "p95Ms": 76.30000000000291,
+          "p99Ms": 1519.5,
+          "percentOver33ms": 93.10344827586206,
+          "percentOver50ms": 74.13793103448276
+        },
+        "lookout": {
+          "frames": 245,
+          "seconds": 13.722199999999997,
+          "averageFps": 17.854279925959396,
+          "medianMs": 55.5,
+          "p95Ms": 69.29999999999563,
+          "p99Ms": 76.59999999999854,
+          "percentOver33ms": 100,
+          "percentOver50ms": 73.06122448979592
+        },
+        "route": {
+          "frames": 83,
+          "seconds": 4.460399999999995,
+          "averageFps": 18.608196574298294,
+          "medianMs": 55.29999999998836,
+          "p95Ms": 67.79999999999563,
+          "p99Ms": 69.69999999999709,
+          "percentOver33ms": 98.79518072289157,
+          "percentOver50ms": 62.65060240963855
+        },
+        "shuttle": {
+          "frames": 167,
+          "seconds": 9.171100000000006,
+          "averageFps": 18.209375102223277,
+          "medianMs": 55.30000000000291,
+          "p95Ms": 63.30000000000291,
+          "p99Ms": 70,
+          "percentOver33ms": 100,
+          "percentOver50ms": 62.275449101796404
+        },
+        "engine": {
+          "frames": 149,
+          "seconds": 8.0895,
+          "averageFps": 18.41893812967427,
+          "medianMs": 55.30000000000291,
+          "p95Ms": 62.80000000000291,
+          "p99Ms": 69.30000000000291,
+          "percentOver33ms": 100,
+          "percentOver50ms": 68.45637583892618
+        },
+        "engine-top": {
+          "frames": 43,
+          "seconds": 2.351,
+          "averageFps": 18.290089323692047,
+          "medianMs": 55.39999999999418,
+          "p95Ms": 68.90000000000873,
+          "p99Ms": 77.10000000000582,
+          "percentOver33ms": 100,
+          "percentOver50ms": 60.46511627906977
+        },
+        "breach": {
+          "frames": 85,
+          "seconds": 4.564800000000003,
+          "averageFps": 18.620750087627048,
+          "medianMs": 55.19999999999709,
+          "p95Ms": 62.80000000000291,
+          "p99Ms": 70.19999999999709,
+          "percentOver33ms": 100,
+          "percentOver50ms": 58.8235294117647
+        },
+        "exit": {
+          "frames": 173,
+          "seconds": 8.831300000000002,
+          "averageFps": 19.589414921925417,
+          "medianMs": 48.79999999998836,
+          "p95Ms": 62.39999999999418,
+          "p99Ms": 63.19999999999709,
+          "percentOver33ms": 100,
+          "percentOver50ms": 39.30635838150289
+        }
+      },
+      "focusLossFrames": 0,
+      "longestFrames": [
+        {
+          "dt": 1519.5,
+          "stage": "route",
+          "cp": "landing",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 24.316666666666567,
+          "yaw": 6.283185307179586,
+          "feet": [
+            0.9230585694313049,
+            5.768287181854248,
+            24.146892547607422
+          ],
+          "speed": 6,
+          "focused": true,
+          "visibility": "visible"
+        },
+        {
+          "dt": 221.5,
+          "stage": "route",
+          "cp": "cell",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 18.016666666666925,
+          "yaw": 6.283185307179586,
+          "feet": [
+            -0.5461222529411316,
+            4.619945049285889,
+            28.174375534057617
+          ],
+          "speed": 0,
+          "focused": true,
+          "visibility": "visible"
+        },
+        {
+          "dt": 104,
+          "stage": "route",
+          "cp": "shuttle",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 45.64999999999869,
+          "yaw": 6.7527280652416035,
+          "feet": [
+            10.831247329711914,
+            0.020099759101867676,
+            -0.6182605028152466
+          ],
+          "speed": 0,
+          "focused": true,
+          "visibility": "visible"
+        }
+      ]
+    },
+    {
+      "label": "latest",
+      "quality": "low",
+      "mode": "headed production, normal realtime, scripted real input pipeline",
+      "errors": [],
+      "environment": {
+        "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x000046A3) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "viewport": [
+          1280,
+          720
+        ],
+        "canvas": [
+          1280,
+          720
+        ],
+        "dpr": 1.0000000149011612,
+        "visibility": "visible",
+        "focus": true,
+        "pointerLocked": true,
+        "power": {
+          "charging": true,
+          "level": 0.98
+        }
+      },
+      "state": {
+        "gameState": "complete",
+        "feet": [
+          -4.623,
+          11.62,
+          -9.512
+        ],
+        "velocity": [
+          0,
+          -2,
+          0
+        ],
+        "grounded": true,
+        "mode": "move",
+        "facing": 5.039163110983256,
+        "flags": [
+          "clue.read",
+          "lever.tried",
+          "valve.closed",
+          "hatch.lifting",
+          "hatch.open",
+          "gap.crossed",
+          "lookout.reached",
+          "lookout.lit",
+          "reveal.done",
+          "engine.reached",
+          "collar.braked",
+          "collar.ridden",
+          "engine.top",
+          "ram.caught",
+          "feed.ram",
+          "steam.redirected",
+          "ram.primed",
+          "ram.released",
+          "exit.reached",
+          "engine.finished"
+        ],
+        "objective": "",
+        "checkpoint": "exit",
+        "falls": 0,
+        "complete": true,
+        "focused": null,
+        "prompt": null,
+        "cameraZone": "hall",
+        "cameraDistance": 6.2,
+        "level": {
+          "bypassOpen": false,
+          "pressure": 0.88,
+          "liftBand": true,
+          "hatch": "latched",
+          "failedPulls": 1,
+          "autoHints": 0,
+          "requestedHints": 0
+        },
+        "autopilot": {
+          "state": "done",
+          "step": 51,
+          "total": 51,
+          "message": "route complete",
+          "log": [
+            "[0] pause @0.52s",
+            "[1] interact diagram @0.88s",
+            "[2] interact lever @1.00s",
+            "[3] interact valve @1.28s",
+            "[4] wait pressureReady @0.65s",
+            "[5] interact lever @0.73s",
+            "[6] wait hatchOpen @1.90s",
+            "[7] move 1.1,4.6,27.6 @0.25s",
+            "[8] move 1.1,4.6,26.0 @0.47s",
+            "[9] jump @0.70s",
+            "[10] move 0.7,4.6,23.9 @0.22s",
+            "[11] jump @0.78s",
+            "[12] move 0.0,4.6,17.9 @0.52s",
+            "[13] move -0.3,4.6,14.6 @0.77s",
+            "[14] interact lookout-light @0.40s",
+            "[15] wait revealDone @3.48s",
+            "[16] move 1.4,4.6,12.8 @0.53s",
+            "[17] move 0.5,2.5,11.3 @0.35s",
+            "[18] move 0.9,0.0,10.2 @0.23s",
+            "[19] move 3.6,0.0,10.0 @0.52s",
+            "[20] move 5.7,0.0,9.1 @0.78s",
+            "[21] jump @0.70s",
+            "[22] move 8.6,0.0,6.3 @0.32s",
+            "[23] vault @0.43s",
+            "[24] move 10.6,0.0,4.2 @0.30s",
+            "[25] climb @0.78s",
+            "[26] move 11.8,2.0,0.7 @0.60s",
+            "[27] move 11.1,0.0,-0.4 @0.27s",
+            "[28] move 10.7,0.0,-0.7 @0.27s",
+            "[29] wait shuttleAtStart @0.02s",
+            "[30] move 10.7,0.0,-1.1 @0.20s",
+            "[31] move 10.5,0.0,-2.2 @0.38s",
+            "[32] wait shuttleAtEnd @3.90s",
+            "[33] move 8.6,0.0,-6.5 @0.57s",
+            "[34] move 7.4,0.0,-7.6 @0.30s",
+            "[35] move 6.6,0.0,-7.8 @0.35s",
+            "[36] interact brake @0.67s",
+            "[37] wait collarHeld @1.22s",
+            "[38] interact deck-lever @1.32s",
+            "[39] wait collarTop @3.55s",
+            "[40] move 4.5,9.2,-5.4 @0.90s",
+            "[41] move 6.7,9.2,-8.0 @0.78s",
+            "[42] move 4.9,9.2,-9.5 @0.60s",
+            "[43] interact ram-catch @0.38s",
+            "[44] interact feed-diverter @0.77s",
+            "[45] move -0.4,9.2,-10.6 @2.00s",
+            "[46] move -1.4,9.2,-10.7 @0.35s",
+            "[47] interact ram-release @0.05s",
+            "[48] wait pistonUp @2.40s",
+            "[49] jump @0.75s",
+            "[50] wait complete @8.67s"
+          ]
+        },
+        "time": 67.95
+      },
+      "cell": {
+        "frames": 244,
+        "seconds": 8.026599999999998,
+        "averageFps": 30.3989235790995,
+        "medianMs": 34.5,
+        "p95Ms": 41.69999999999709,
+        "p99Ms": 42.30000000000291,
+        "percentOver33ms": 61.885245901639344,
+        "percentOver50ms": 0
+      },
+      "route": {
+        "frames": 1621,
+        "seconds": 56.052699999999994,
+        "averageFps": 28.919213525842647,
+        "medianMs": 33.5,
+        "p95Ms": 41.59999999999127,
+        "p99Ms": 48.40000000000873,
+        "percentOver33ms": 50.647748303516344,
+        "percentOver50ms": 0.3701418877236274
+      },
+      "checkpoints": {
+        "cell": {
+          "frames": 225,
+          "seconds": 7.582100000000006,
+          "averageFps": 29.675155959430743,
+          "medianMs": 34.599999999998545,
+          "p95Ms": 41.799999999995634,
+          "p99Ms": 48.80000000000291,
+          "percentOver33ms": 66.66666666666667,
+          "percentOver50ms": 0.8888888888888888
+        },
+        "landing": {
+          "frames": 110,
+          "seconds": 8.415,
+          "averageFps": 13.071895424836601,
+          "medianMs": 28.5,
+          "p95Ms": 41.599999999998545,
+          "p99Ms": 69.69999999999709,
+          "percentOver33ms": 41.81818181818182,
+          "percentOver50ms": 3.6363636363636362
+        },
+        "lookout": {
+          "frames": 151,
+          "seconds": 5.0365,
+          "averageFps": 29.98113769482776,
+          "medianMs": 34.5,
+          "p95Ms": 41.60000000000582,
+          "p99Ms": 48.5,
+          "percentOver33ms": 65.56291390728477,
+          "percentOver50ms": 0
+        },
+        "route": {
+          "frames": 149,
+          "seconds": 4.800599999999991,
+          "averageFps": 31.037786943298812,
+          "medianMs": 34.400000000001455,
+          "p95Ms": 41.69999999999709,
+          "p99Ms": 42.10000000000582,
+          "percentOver33ms": 58.38926174496644,
+          "percentOver50ms": 0
+        },
+        "shuttle": {
+          "frames": 168,
+          "seconds": 5.237800000000003,
+          "averageFps": 32.07453511016074,
+          "medianMs": 33.60000000000582,
+          "p95Ms": 36.39999999999418,
+          "p99Ms": 42.10000000000582,
+          "percentOver33ms": 50.595238095238095,
+          "percentOver50ms": 0
+        },
+        "engine": {
+          "frames": 259,
+          "seconds": 8.713,
+          "averageFps": 29.725697234018135,
+          "medianMs": 34.59999999999127,
+          "p95Ms": 41.60000000000582,
+          "p99Ms": 43.09999999999127,
+          "percentOver33ms": 72.97297297297297,
+          "percentOver50ms": 0
+        },
+        "engine-top": {
+          "frames": 108,
+          "seconds": 3.413100000000006,
+          "averageFps": 31.642788081216434,
+          "medianMs": 34.10000000000582,
+          "p95Ms": 41.59999999999127,
+          "p99Ms": 42.10000000000582,
+          "percentOver33ms": 52.77777777777778,
+          "percentOver50ms": 0
+        },
+        "breach": {
+          "frames": 129,
+          "seconds": 4.058099999999992,
+          "averageFps": 31.78827530124942,
+          "medianMs": 29.19999999999709,
+          "p95Ms": 41.69999999999709,
+          "p99Ms": 48.60000000000582,
+          "percentOver33ms": 44.96124031007752,
+          "percentOver50ms": 0
+        },
+        "exit": {
+          "frames": 322,
+          "seconds": 8.7965,
+          "averageFps": 36.605468083897,
+          "medianMs": 27.69999999999709,
+          "p95Ms": 34.80000000000291,
+          "p99Ms": 35.89999999999418,
+          "percentOver33ms": 15.527950310559007,
+          "percentOver50ms": 0
+        }
+      },
+      "focusLossFrames": 0,
+      "longestFrames": [
+        {
+          "dt": 5029.399999999994,
+          "stage": "route",
+          "cp": "landing",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 24.599999999999884,
+          "yaw": 6.157056350263198,
+          "feet": [
+            0.9286807179450989,
+            5.778620719909668,
+            24.235029220581055
+          ],
+          "speed": 5.500000000000001,
+          "focused": true,
+          "visibility": "visible"
+        },
+        {
+          "dt": 132,
+          "stage": "route",
+          "cp": "cell",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 18.016666666666925,
+          "yaw": 6.30455092715967,
+          "feet": [
+            -0.5462265610694885,
+            4.6199445724487305,
+            28.169795989990234
+          ],
+          "speed": 0,
+          "focused": true,
+          "visibility": "visible"
+        },
+        {
+          "dt": 69.69999999999709,
+          "stage": "route",
+          "cp": "landing",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 24.749999999999876,
+          "yaw": 6.177757335880894,
+          "feet": [
+            0.8862490653991699,
+            5.476340293884277,
+            23.5914249420166
+          ],
+          "speed": 3.1000000000004437,
+          "focused": true,
+          "visibility": "visible"
+        }
+      ]
+    },
+    {
+      "label": "baseline",
+      "quality": "low",
+      "mode": "headed production, normal realtime, scripted real input pipeline",
+      "errors": [],
+      "environment": {
+        "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x000046A3) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "viewport": [
+          1280,
+          720
+        ],
+        "canvas": [
+          960,
+          540
+        ],
+        "dpr": 1.0000000149011612,
+        "visibility": "visible",
+        "focus": true,
+        "pointerLocked": true,
+        "power": {
+          "charging": true,
+          "level": 0.98
+        }
+      },
+      "state": {
+        "gameState": "complete",
+        "feet": [
+          -4.775,
+          11.62,
+          -9.459
+        ],
+        "velocity": [
+          0,
+          -2,
+          0
+        ],
+        "grounded": true,
+        "mode": "move",
+        "facing": 4.311044532482054,
+        "flags": [
+          "clue.read",
+          "lever.tried",
+          "valve.closed",
+          "hatch.lifting",
+          "hatch.open",
+          "gap.crossed",
+          "lookout.reached",
+          "lookout.lit",
+          "reveal.done",
+          "engine.reached",
+          "collar.braked",
+          "collar.ridden",
+          "engine.top",
+          "steam.redirected",
+          "exit.reached",
+          "engine.finished"
+        ],
+        "objective": "",
+        "checkpoint": "exit",
+        "falls": 0,
+        "complete": true,
+        "focused": null,
+        "prompt": null,
+        "cameraZone": "hall",
+        "cameraDistance": 6.2,
+        "level": {
+          "bypassOpen": false,
+          "pressure": 0.86,
+          "liftBand": true,
+          "hatch": "latched",
+          "failedPulls": 1,
+          "hintTier": 0
+        },
+        "autopilot": {
+          "state": "done",
+          "step": 50,
+          "total": 50,
+          "message": "route complete",
+          "log": [
+            "[0] pause @0.52s",
+            "[1] interact diagram @0.77s",
+            "[2] interact lever @1.05s",
+            "[3] interact valve @1.22s",
+            "[4] wait pressureReady @0.65s",
+            "[5] interact lever @0.65s",
+            "[6] wait hatchOpen @1.90s",
+            "[7] move 1.1,4.6,27.6 @0.22s",
+            "[8] move 1.1,4.6,26.0 @0.40s",
+            "[9] jump @0.68s",
+            "[10] move 0.7,4.6,23.9 @0.13s",
+            "[11] jump @0.80s",
+            "[12] move 0.0,4.6,17.9 @0.43s",
+            "[13] move -0.3,4.6,14.6 @0.75s",
+            "[14] interact lookout-light @0.40s",
+            "[15] wait revealDone @12.30s",
+            "[16] move 1.4,4.6,12.8 @0.48s",
+            "[17] move 0.5,2.5,11.3 @0.30s",
+            "[18] move 0.9,0.0,10.2 @0.22s",
+            "[19] move 3.6,0.0,10.0 @0.45s",
+            "[20] move 5.7,0.0,9.1 @0.55s",
+            "[21] jump @0.72s",
+            "[22] move 8.6,0.0,6.3 @0.25s",
+            "[23] vault @0.43s",
+            "[24] move 10.6,0.0,4.2 @0.27s",
+            "[25] climb @0.78s",
+            "[26] move 11.8,2.0,0.7 @0.52s",
+            "[27] move 11.1,0.0,-0.4 @0.20s",
+            "[28] move 10.7,0.0,-0.7 @0.25s",
+            "[29] wait shuttleAtStart @2.88s",
+            "[30] move 10.7,0.0,-1.1 @0.18s",
+            "[31] move 10.5,0.0,-2.2 @0.33s",
+            "[32] wait shuttleAtEnd @5.48s",
+            "[33] move 8.6,0.0,-6.5 @0.60s",
+            "[34] move 7.4,0.0,-7.6 @0.32s",
+            "[35] move 6.6,0.0,-7.8 @0.32s",
+            "[36] interact brake @0.70s",
+            "[37] wait collarHeld @1.22s",
+            "[38] interact deck-lever @0.87s",
+            "[39] wait collarTop @3.55s",
+            "[40] move 4.5,9.2,-5.4 @0.82s",
+            "[41] move 6.7,9.2,-8.0 @0.85s",
+            "[42] move 4.9,9.2,-9.5 @0.62s",
+            "[43] interact steam-valve @0.32s",
+            "[44] move -0.4,9.2,-10.6 @1.73s",
+            "[45] wait pistonDown @0.02s",
+            "[46] move -1.4,9.2,-10.7 @0.32s",
+            "[47] wait pistonUp @3.13s",
+            "[48] jump @0.70s",
+            "[49] wait complete @8.63s"
+          ]
+        },
+        "time": 79.667
+      },
+      "cell": {
+        "frames": 409,
+        "seconds": 8.013200000000005,
+        "averageFps": 51.0407827085309,
+        "medianMs": 20.799999999995634,
+        "p95Ms": 28,
+        "p99Ms": 34.79999999999927,
+        "percentOver33ms": 2.444987775061125,
+        "percentOver50ms": 0
+      },
+      "route": {
+        "frames": 2977,
+        "seconds": 63.26709999999999,
+        "averageFps": 47.05447222964227,
+        "medianMs": 20.80000000000291,
+        "p95Ms": 27.89999999999418,
+        "p99Ms": 34.700000000004366,
+        "percentOver33ms": 1.4444071212630165,
+        "percentOver50ms": 0.06718172657037286
+      },
+      "checkpoints": {
+        "cell": {
+          "frames": 338,
+          "seconds": 7.215,
+          "averageFps": 46.846846846846844,
+          "medianMs": 20.80000000000291,
+          "p95Ms": 28.099999999998545,
+          "p99Ms": 34.80000000000291,
+          "percentOver33ms": 2.9585798816568047,
+          "percentOver50ms": 0.2958579881656805
+        },
+        "landing": {
+          "frames": 143,
+          "seconds": 4.355699999999997,
+          "averageFps": 32.83054388502424,
+          "medianMs": 20.900000000001455,
+          "p95Ms": 28.10000000000582,
+          "p99Ms": 48.400000000001455,
+          "percentOver33ms": 4.895104895104895,
+          "percentOver50ms": 0.6993006993006993
+        },
+        "lookout": {
+          "frames": 646,
+          "seconds": 13.7634,
+          "averageFps": 46.93607684147812,
+          "medianMs": 20.80000000000291,
+          "p95Ms": 28,
+          "p99Ms": 34.700000000004366,
+          "percentOver33ms": 1.7027863777089782,
+          "percentOver50ms": 0
+        },
+        "route": {
+          "frames": 202,
+          "seconds": 4.218,
+          "averageFps": 47.88999525841631,
+          "medianMs": 20.80000000000291,
+          "p95Ms": 27.89999999999418,
+          "p99Ms": 29.400000000001455,
+          "percentOver33ms": 0.49504950495049505,
+          "percentOver50ms": 0
+        },
+        "shuttle": {
+          "frames": 439,
+          "seconds": 9.635799999999996,
+          "averageFps": 45.55926856099132,
+          "medianMs": 20.89999999999418,
+          "p95Ms": 27.90000000000873,
+          "p99Ms": 34.69999999999709,
+          "percentOver33ms": 1.1389521640091116,
+          "percentOver50ms": 0
+        },
+        "engine": {
+          "frames": 388,
+          "seconds": 8.283,
+          "averageFps": 46.8429313050827,
+          "medianMs": 20.80000000000291,
+          "p95Ms": 27.80000000000291,
+          "p99Ms": 34.59999999999127,
+          "percentOver33ms": 1.0309278350515463,
+          "percentOver50ms": 0
+        },
+        "engine-top": {
+          "frames": 112,
+          "seconds": 2.421100000000006,
+          "averageFps": 46.25996447895574,
+          "medianMs": 20.80000000000291,
+          "p95Ms": 28.10000000000582,
+          "p99Ms": 48.39999999999418,
+          "percentOver33ms": 4.464285714285714,
+          "percentOver50ms": 0
+        },
+        "breach": {
+          "frames": 228,
+          "seconds": 4.564899999999994,
+          "averageFps": 49.946329601962866,
+          "medianMs": 20.80000000000291,
+          "p95Ms": 27.60000000000582,
+          "p99Ms": 28.19999999999709,
+          "percentOver33ms": 0,
+          "percentOver50ms": 0
+        },
+        "exit": {
+          "frames": 481,
+          "seconds": 8.810199999999996,
+          "averageFps": 54.59580940273776,
+          "medianMs": 20.60000000000582,
+          "p95Ms": 23.19999999999709,
+          "p99Ms": 27.90000000000873,
+          "percentOver33ms": 0,
+          "percentOver50ms": 0
+        }
+      },
+      "focusLossFrames": 0,
+      "longestFrames": [
+        {
+          "dt": 1144.2999999999956,
+          "stage": "route",
+          "cp": "landing",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 24.199999999999907,
+          "yaw": 6.283185307179586,
+          "feet": [
+            0.9229427576065063,
+            5.768287181854248,
+            24.145936965942383
+          ],
+          "speed": 6,
+          "focused": true,
+          "visibility": "visible"
+        },
+        {
+          "dt": 83.09999999999854,
+          "stage": "route",
+          "cp": "cell",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 17.816666666666936,
+          "yaw": 6.283185307179586,
+          "feet": [
+            -0.5456032156944275,
+            4.619945526123047,
+            28.17890167236328
+          ],
+          "speed": 0,
+          "focused": true,
+          "visibility": "visible"
+        },
+        {
+          "dt": 48.5,
+          "stage": "route",
+          "cp": "lookout",
+          "mode": "move",
+          "gameState": "playing",
+          "gameTime": 27.333333333333062,
+          "yaw": 6.283185307179586,
+          "feet": [
+            -0.42619168758392334,
+            4.620100021362305,
+            13.681163787841797
+          ],
+          "speed": 0,
+          "focused": true,
+          "visibility": "visible"
+        }
+      ]
+    }
+  ],
+  "testedCommit": "492bce4bb04490d13bb1aff857279321714ad0bf",
+  "baselineCommit": "4979589a18635ec2596959c8f4eb570b41726c82",
+  "cameraPolicy": [
+    {
+      "label": "latest",
+      "fixture": "half-second lateral airborne trajectory, 4 m/s, no look input, initial yaw 0; unobstructed mock camera cast",
+      "yawDelta": -0.42444664375727825,
+      "degrees": -24.319001315784813,
+      "movement": {
+        "maxSpeed": 5.5,
+        "carrySpeedFactor": 0.85,
+        "groundAccel": 32,
+        "groundDecel": 36,
+        "turnAccel": 62,
+        "airAccel": 18,
+        "gravity": 26,
+        "fallGravityMul": 1.35,
+        "jumpCutGravityMul": 2.6,
+        "jumpHeight": 1.45,
+        "maxFallSpeed": 26,
+        "coyoteTime": 0.15,
+        "jumpBuffer": 0.16,
+        "turnRate": 11,
+        "capsuleRadius": 0.3,
+        "capsuleHalfHeight": 0.45,
+        "ledgeAssist": 0.42
+      }
+    },
+    {
+      "label": "baseline",
+      "fixture": "half-second lateral airborne trajectory, 4 m/s, no look input, initial yaw 0; unobstructed mock camera cast",
+      "yawDelta": 0,
+      "degrees": 0,
+      "movement": {
+        "maxSpeed": 6,
+        "carrySpeedFactor": 0.85,
+        "groundAccel": 58,
+        "groundDecel": 46,
+        "turnAccel": 95,
+        "airAccel": 24,
+        "gravity": 26,
+        "fallGravityMul": 1.35,
+        "jumpCutGravityMul": 2.6,
+        "jumpHeight": 1.45,
+        "maxFallSpeed": 26,
+        "coyoteTime": 0.12,
+        "jumpBuffer": 0.14,
+        "turnRate": 16,
+        "capsuleRadius": 0.3,
+        "capsuleHalfHeight": 0.45,
+        "ledgeAssist": 0.42
+      }
+    }
+  ],
+  "checks": {
+    "typecheck": "passed",
+    "unitTests": {
+      "passed": 37
+    },
+    "productionBuild": "passed",
+    "targetedE2E": {
+      "passed": 20,
+      "skipped": 0,
+      "elapsed": "3.4m",
+      "browser": "headed Edge",
+      "files": [
+        "tests/e2e/input.spec.ts",
+        "tests/e2e/parkour.spec.ts"
+      ]
+    },
+    "fullE2ERerun": false
+  }
+}

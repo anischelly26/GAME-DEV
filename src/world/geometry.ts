@@ -27,6 +27,39 @@ export function worldBox(w: number, h: number, d: number, uvScale = 3): THREE.Bu
 }
 
 /**
+ * Replace a geometry's UVs with a box projection in its own space (metres / `uvScale`), choosing
+ * the projection axis per triangle. Small pieces (rubble, corbels, arches) then show the same
+ * masonry scale as the walls instead of squeezing the whole texture onto each face.
+ */
+export function boxProjectUVs(geometry: THREE.BufferGeometry, uvScale = 3): THREE.BufferGeometry {
+  const g = geometry.index ? geometry.toNonIndexed() : geometry.clone();
+  const pos = g.getAttribute('position');
+  const uv = new Float32Array(pos.count * 2);
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i += 3) {
+    a.fromBufferAttribute(pos, i);
+    b.fromBufferAttribute(pos, i + 1);
+    c.fromBufferAttribute(pos, i + 2);
+    n.subVectors(b, a).cross(c.clone().sub(a));
+    const ax = Math.abs(n.x);
+    const ay = Math.abs(n.y);
+    const az = Math.abs(n.z);
+    for (let v = 0; v < 3; v++) {
+      const p = v === 0 ? a : v === 1 ? b : c;
+      // Vertical faces keep courses horizontal (v follows Y); horizontal faces use XZ.
+      const [u, w] = ay >= ax && ay >= az ? [p.x, p.z] : ax >= az ? [p.z, p.y] : [p.x, p.y];
+      uv[(i + v) * 2] = u / uvScale;
+      uv[(i + v) * 2 + 1] = w / uvScale;
+    }
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return g;
+}
+
+/**
  * Vertical prism from a convex polygon in the XZ plane (any winding).
  * UVs: top/bottom planar in XZ, sides by perimeter length and height, all in world units / `uvScale`.
  */

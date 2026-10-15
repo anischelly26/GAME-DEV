@@ -53,6 +53,18 @@ const shots = [
   { name: '15-steam-curtain', cp: 'engine-top', pre: () => G(() => window.__GAME.game.level.engine.debugFrame('steam')), steps: 40 },
   { name: '16-breach-piston', cp: 'breach', steps: 60 },
   { name: '17-exit-gantry', cp: 'exit', steps: 60 },
+  // Split-feed puzzle (R8): the junction (CATCH, gauges, FEED) and the caught ram at the breach.
+  { name: '18-feed-junction', cp: 'engine-top', pre: () => G(() => window.__GAME.game.level.engine.debugFrame('junction')), steps: 40 },
+  { name: '19-ram-primed', cp: 'breach', pre: () => G(() => window.__GAME.game.level.engine.debugFrame('ram')), steps: 40 },
+  // Character and polish comparisons (matched framings for before/after review).
+  // c1 repeats the framing of Codex's probe-character-front.png (restart, camera yaw pi, pitch 0.05).
+  { name: 'c1-mara-front-probe', cp: 'cell', pre: () => G(() => window.__GAME.restart()), steps: 30, cam: [Math.PI, 0.05] },
+  { name: 'c2-mara-portrait-front', cp: 'landing', portrait: [0, 1.5, 1.45, 1.15] },
+  { name: 'c3-mara-portrait-three-quarter', cp: 'landing', portrait: [0.75, 1.35, 1.5, 1.2] },
+  { name: 'c4-mara-portrait-side', cp: 'landing', portrait: [Math.PI / 2, 1.5, 1.3, 1.0] },
+  { name: 'c5-mara-portrait-back', cp: 'landing', portrait: [Math.PI, 1.6, 1.5, 1.1] },
+  { name: 'c6-mara-face', cp: 'landing', portrait: [0.3, 0.55, 1.52, 1.5] },
+  { name: 'c7-mara-boots-hands', cp: 'landing', portrait: [0.5, 0.95, 0.75, 0.55] },
 ];
 
 for (const s of shots) {
@@ -60,7 +72,19 @@ for (const s of shots) {
   await G((id) => window.__GAME.teleport(id), s.cp);
   if (s.pre) await s.pre();
   if (s.cam) await G(([y, p]) => window.__GAME.setCamera(y, p), s.cam);
-  await G((n) => window.__GAME.step(n), s.steps);
+  if (s.portrait) {
+    // Close camera around Mara: [angle from her facing, distance, camera height, look height].
+    await G((n) => window.__GAME.step(n), 30);
+    await G(([a, d, ch, lh]) => {
+      const g = window.__GAME.game;
+      const f = g.player.feet;
+      const yaw = g.player.facing + a;
+      const cam = g.camera.camera.position.clone().set(f.x + Math.sin(yaw) * d, f.y + ch, f.z + Math.cos(yaw) * d);
+      const look = cam.clone().set(f.x, f.y + lh, f.z);
+      g.camera.playShot(cam, look, 0.001);
+    }, s.portrait);
+  }
+  await G((n) => window.__GAME.step(n), s.steps ?? 20);
   await page.screenshot({ path: join(out, `${s.name}.png`) });
   console.log('captured', s.name, JSON.stringify(await G(() => window.__GAME.state().feet)));
 }

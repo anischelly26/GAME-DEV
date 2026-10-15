@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { Level, LevelContext, RouteStep } from '../Level';
-import { Batcher, worldBox } from '../../world/geometry';
+import { Batcher, boxProjectUVs, worldBox } from '../../world/geometry';
 import { Palette } from '../../world/materials';
 import { saltStainTexture } from '../../world/textures';
 import { PressureHatch, OPENING } from '../../world/props/PressureHatch';
@@ -18,13 +18,30 @@ import { EngineRoute, ROUTE_RAIL_GAPS, ROUTE_WALKWAY_OVERRIDES } from './EngineR
 
 const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
-/** Hint tiers for the hatch puzzle: reminder -> point at evidence -> explicit causal hint. */
-const HINT_TIMES = [45, 90, 150];
+/**
+ * Hatch puzzle hints. Automatic hints are gentle and happen at most once each: a reminder of the
+ * goal, then attention to the diagram. The explicit causal solution is only given on request
+ * (Pause -> Hint); repeated requests may repeat it.
+ */
+const AUTO_HINTS: Array<{ after: number; tier: HintTier }> = [
+  { after: 60, tier: 'reminder' },
+  { after: 120, tier: 'evidence' },
+];
+type HintTier = 'reminder' | 'evidence' | 'explicit';
+const HINT_ORDER: HintTier[] = ['reminder', 'evidence', 'explicit'];
 
 /**
  * Chapter 1 slice, "The Quiet Cell": Mara's cell and its pressure hatch, the maintenance shaft with
  * a practice jump and a drainage gap, and the lookout over the turbine hall.
  */
+/** One beat of a scripted sequence. `watchOnly` beats (narration, lines, camera) are dropped on skip. */
+interface SequenceStep {
+  at: number;
+  run: () => void;
+  done?: boolean;
+  watchOnly?: boolean;
+}
+
 export class QuietCellLevel implements Level {
   readonly name = 'The Quiet Cell';
   readonly checkpointIds = ['cell', 'landing', 'lookout', 'route', 'shuttle', 'engine', 'engine-top', 'breach', 'exit'];
@@ -46,9 +63,14 @@ export class QuietCellLevel implements Level {
   private dripT = 0;
   private time = 0;
   private hintTimer = 0;
-  private hintTier = 0;
+  /** Next automatic hint (index into AUTO_HINTS); never wraps around. */
+  private autoHint = 0;
+  /** Next tier for a requested hint. */
+  private requestedHint = 0;
+  /** Requested hints for the split feed at the breach. */
+  private requestedEngineHint = 0;
   private lastPulse = 0;
-  private sequence: { t: number; steps: Array<{ at: number; run: () => void; done?: boolean }> } | null = null;
+  private sequence: { t: number; steps: SequenceStep[] } | null = null;
   private fadeLevel = 0;
   private falling = false;
 
@@ -110,15 +132,22 @@ export class QuietCellLevel implements Level {
     ]) {
       batch.add(new THREE.BoxGeometry(0.07, bunk.h - 0.08, 0.07), m.iron, new THREE.Matrix4().makeTranslation(x, cy + (bunk.h - 0.08) / 2, z));
     }
-    const blanket = new THREE.Mesh(new RoundedBoxGeometry(0.86, 0.09, 1.7, 3, 0.04), m.wool);
-    blanket.position.set(bunk.x0 + 0.46, cy + bunk.h + 0.04, bunk.z0 + 1.05);
+    // Canvas straw mattress under a grey wool blanket.
+    const canvas = new THREE.MeshStandardMaterial({ color: '#86765a', roughness: 1, map: ctx.textures.smock.map, normalMap: ctx.textures.smock.normalMap });
+    const wool = new THREE.MeshStandardMaterial({ color: '#7a766b', roughness: 1, map: ctx.textures.wool.map, normalMap: ctx.textures.wool.normalMap });
+    const mattress = new THREE.Mesh(new RoundedBoxGeometry(0.84, 0.1, 2.24, 3, 0.045), canvas);
+    mattress.position.set(bunk.x0 + 0.46, cy + bunk.h + 0.045, (bunk.z0 + bunk.z1) / 2);
+    mattress.castShadow = mattress.receiveShadow = true;
+    root.add(mattress);
+    const blanket = new THREE.Mesh(new RoundedBoxGeometry(0.86, 0.05, 1.5, 3, 0.024), wool);
+    blanket.position.set(bunk.x0 + 0.46, cy + bunk.h + 0.11, bunk.z0 + 1.0);
     blanket.rotation.y = 0.04;
     blanket.castShadow = blanket.receiveShadow = true;
-    const fold = new THREE.Mesh(new RoundedBoxGeometry(0.8, 0.12, 0.35, 3, 0.05), m.wool);
-    fold.position.set(bunk.x0 + 0.47, cy + bunk.h + 0.1, bunk.z0 + 0.2);
+    const fold = new THREE.Mesh(new RoundedBoxGeometry(0.8, 0.12, 0.35, 3, 0.05), wool);
+    fold.position.set(bunk.x0 + 0.47, cy + bunk.h + 0.15, bunk.z0 + 0.2);
     fold.rotation.set(0.15, -0.1, 0);
     const pillow = new THREE.Mesh(new RoundedBoxGeometry(0.55, 0.12, 0.3, 3, 0.06), new THREE.MeshStandardMaterial({ color: '#a69a7c', roughness: 1 }));
-    pillow.position.set(bunk.x0 + 0.45, cy + bunk.h + 0.07, bunk.z1 - 0.25);
+    pillow.position.set(bunk.x0 + 0.45, cy + bunk.h + 0.13, bunk.z1 - 0.25);
     const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.1, 12), m.tin);
     cup.position.set(-1.0, cy + 0.05, 31.6);
     const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), m.tin);
@@ -149,11 +178,94 @@ export class QuietCellLevel implements Level {
     // Rubble and a cracked patch: believable maintenance damage.
     for (let i = 0; i < 7; i++) {
       const s = 0.1 + rng() * 0.16;
-      const chunk = new THREE.Mesh(new RoundedBoxGeometry(s * 1.4, s, s * 1.1, 1, 0.03), m.stone);
+      const chunk = new THREE.Mesh(boxProjectUVs(new RoundedBoxGeometry(s * 1.4, s, s * 1.1, 1, 0.03)), m.stone);
       chunk.position.set(1.7 + rng() * 0.45, cy + s / 2, 31.2 + rng() * 0.6);
       chunk.rotation.set(rng(), rng() * 3, rng());
       chunk.castShadow = true;
       root.add(chunk);
+    }
+
+    // Structure and wear (visual only): a darker base course, a repaired patch of newer brick
+    // with iron tie plates, a wall shackle, scratched tally marks, a bucket and a floor drain.
+    {
+      const base = (x0: number, x1: number, z0: number, z1: number) =>
+        batch.add(worldBox(x1 - x0, 0.32, z1 - z0, 3), m.stoneDark, new THREE.Matrix4().makeTranslation((x0 + x1) / 2, cy + 0.16, (z0 + z1) / 2), { tint: tint(0.75), damp: true });
+      base(CELL.x0, CELL.x0 + 0.05, CELL.z0, CELL.z1);
+      base(CELL.x1 - 0.05, CELL.x1, CELL.z0, CELL.z1);
+      base(CELL.x0, CELL.x1, CELL.z1 - 0.05, CELL.z1);
+      // Repair: smaller, warmer brick infill set into the back wall, with lime streaks.
+      batch.add(worldBox(1.25, 1.15, 0.03, 1.5), m.stone, new THREE.Matrix4().makeTranslation(-1.15, cy + 1.95, CELL.z1 - 0.012), { tint: new THREE.Color(1.18, 1.06, 0.92) });
+      for (const [x, y] of [
+        [-1.95, 3.2],
+        [1.95, 3.2],
+      ]) {
+        const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.03, 16), m.ironDark);
+        plate.rotation.x = Math.PI / 2;
+        plate.position.set(x, cy + y, CELL.z1 - 0.015);
+        const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.07, 6), m.iron);
+        bolt.rotation.x = Math.PI / 2;
+        bolt.position.set(x, cy + y, CELL.z1 - 0.04);
+        root.add(plate, bolt);
+      }
+      // Shackle ring above the bunk, with a short length of chain.
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.012, 6, 16), m.iron);
+      ring.position.set(CELL.x0 + 0.03, cy + 1.45, 30.1);
+      ring.rotation.y = Math.PI / 2;
+      root.add(ring);
+      for (let i = 0; i < 4; i++) {
+        const link = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.007, 4, 10), m.ironDark);
+        link.scale.set(1, 1.5, 1);
+        link.position.set(CELL.x0 + 0.04, cy + 1.33 - i * 0.075, 30.1);
+        link.rotation.y = i % 2 ? Math.PI / 2 : 0;
+        root.add(link);
+      }
+      // Tally marks scratched into the wall beside the bunk.
+      const tally = document.createElement('canvas');
+      tally.width = 256;
+      tally.height = 128;
+      const g = tally.getContext('2d')!;
+      g.strokeStyle = 'rgba(214,206,186,0.75)';
+      g.lineWidth = 3;
+      for (let i = 0; i < 17; i++) {
+        const group = Math.floor(i / 5);
+        const j = i % 5;
+        const x = 18 + group * 58 + j * 10 + rng() * 2;
+        if (j === 4) {
+          g.beginPath();
+          g.moveTo(x - 46, 92);
+          g.lineTo(x + 4, 34);
+          g.stroke();
+        } else {
+          g.beginPath();
+          g.moveTo(x, 30 + rng() * 6);
+          g.lineTo(x + rng() * 3 - 1.5, 96 + rng() * 6);
+          g.stroke();
+        }
+      }
+      const tallyTex = new THREE.CanvasTexture(tally);
+      tallyTex.colorSpace = THREE.SRGBColorSpace;
+      const marks = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.28), new THREE.MeshStandardMaterial({ map: tallyTex, transparent: true, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -1 }));
+      marks.position.set(CELL.x0 + 0.012, cy + 1.1, 31.2);
+      marks.rotation.y = Math.PI / 2;
+      root.add(marks);
+      // Tin bucket in the back corner.
+      const bucket = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.3, 16, 1, true), m.tin.clone());
+      (bucket.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      bucket.position.set(1.95, cy + 0.15, 31.55);
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.008, 4, 16, Math.PI), m.iron);
+      handle.position.set(1.95, cy + 0.3, 31.55);
+      handle.rotation.set(0, 0.4, 0);
+      bucket.castShadow = true;
+      root.add(bucket, handle);
+      // Floor drain beside the puddle.
+      const drain = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.02, 18), m.ironDark);
+      drain.position.set(-0.75, cy + 0.008, 28.2);
+      root.add(drain);
+      for (let i = -2; i <= 2; i++) {
+        const slot = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.012, 0.24 - Math.abs(i) * 0.05), m.cellShadow);
+        slot.position.set(-0.75 + i * 0.055, cy + 0.016, 28.2);
+        root.add(slot);
+      }
     }
 
     // Salt crust decals: around the slit, along the tide line, below the vent.
@@ -307,7 +419,7 @@ export class QuietCellLevel implements Level {
     for (let i = 0; i < 8; i++) {
       const s = 0.25 + rng() * 0.35;
       const side = i % 2 ? breach.x0 : breach.x1;
-      const block = new THREE.Mesh(new RoundedBoxGeometry(s * 1.3, s, s, 1, 0.05), m.stone);
+      const block = new THREE.Mesh(boxProjectUVs(new RoundedBoxGeometry(s * 1.3, s, s, 1, 0.05)), m.stone);
       block.position.set(side + (i % 2 ? -0.1 : 0.1), L.y + 0.4 + (i >> 1) * 0.65, L.z1 + 0.5 + rng() * 0.4);
       block.rotation.set(rng() * 0.4, rng(), rng() * 0.4);
       block.castShadow = true;
@@ -373,7 +485,7 @@ export class QuietCellLevel implements Level {
       revealDone: () => ctx.progression.has('reveal.done'),
     };
     this.route = [...buildRoute(), ...this.engine.route];
-    this.routeParts = { slice: buildRoute(), engine: this.engine.route };
+    this.routeParts = { slice: buildRoute(), engine: this.engine.route, feed: this.engine.feedRoute };
     this.startIntro();
   }
 
@@ -530,10 +642,96 @@ export class QuietCellLevel implements Level {
   // ---------------------------------------------------------------- story beats
 
   private startIntro(): void {
+    if (this.ctx.intro) {
+      this.playOpening();
+      return;
+    }
     const { dialogue, progression } = this.ctx;
     progression.setObjective('Open the service hatch');
     this.later(1.2, () => dialogue.say('Horn', 'Pressure cycle in progress. All cells remain sealed.'));
     this.later(4.2, () => dialogue.say('Mara', 'Fresh copper on that line. Who repairs a pipe in a cell?'));
+  }
+
+  /**
+   * Chapter One's opening. The night before, Mara refused to sign off a flood diversion that
+   * would drown her district, went back to her workshop to prove the plan wrong and fell asleep
+   * over the drawings. She wakes on the floor of a cell in Breakwater. Narration cards over black,
+   * then the cell: she gets up, looks around, works out where she is, and the chapter title plays.
+   *
+   * Skipping (Jump/Interact) leaves out the narration, lines and camera moves (`watchOnly`) and
+   * runs every other step, so watching and skipping end the same way: Mara standing at the cell
+   * spawn, camera behind her, control on, objective set.
+   */
+  private playOpening(): void {
+    const { dialogue, progression, camera, avatar, hud, events } = this.ctx;
+    const y = CELL.y;
+    const at = (x: number, dy: number, z: number) => v3(x, y + dy, z);
+    const steps: SequenceStep[] = [
+      {
+        at: 0,
+        run: () => {
+          this.ctx.setControl(false);
+          progression.setObjective('');
+          // Asleep on the floor between the bunk and the hatch: the first frame of getting up.
+          avatar.cinematic('wake', 0);
+          camera.playShot(at(1.75, 2.35, 27.55), at(-0.45, 0.1, 30.0), 0.001);
+          hud.story({
+            backdrop: true,
+            eyebrow: 'Saltmere, the night before',
+            text: 'Mara Venn keeps the tide engines of Saltmere running. Yesterday she was ordered to sign off a flood diversion that would drown her own district at the next high tide.',
+          });
+        },
+      },
+      { at: 6.2, watchOnly: true, run: () => hud.story({ backdrop: true, text: 'She refused. She went back to her workshop to prove the plan was wrong, and fell asleep over the drawings.' }) },
+      { at: 11.4, watchOnly: true, run: () => hud.story({ backdrop: true, text: 'She woke up somewhere else.' }) },
+      {
+        at: 14.2,
+        watchOnly: true,
+        run: () => {
+          hud.story(null);
+          events.emit('sfx', { name: 'horn' });
+        },
+      },
+      { at: 15.0, watchOnly: true, run: () => dialogue.say('Horn', 'Pressure cycle in progress. All cells remain sealed.', 3.4) },
+      {
+        at: 16.4,
+        watchOnly: true,
+        run: () => {
+          avatar.cinematic('wake', 0.75);
+          camera.playShot(at(1.3, 1.6, 27.85), at(-0.4, 0.95, 29.75), 2.6);
+        },
+      },
+      { at: 18.9, watchOnly: true, run: () => dialogue.say('Mara', "Where... This isn't my workshop.", 2.4) },
+      {
+        at: 19.3,
+        watchOnly: true,
+        run: () => {
+          // Face on: she looks around the cell.
+          avatar.cinematic('shakeHead', 0.9);
+          camera.playShot(at(0.25, 1.6, 27.95), at(-0.35, 1.45, 29.7), 1.6);
+        },
+      },
+      { at: 21.6, watchOnly: true, run: () => dialogue.say('Mara', 'Salt on the walls. That engine thump... I know this place. Breakwater.', 3.6) },
+      { at: 22.6, watchOnly: true, run: () => camera.playShot(at(1.85, 3.3, 27.4), at(-0.3, 0.7, 30.4), 5.0) },
+      {
+        at: 25.2,
+        watchOnly: true,
+        run: () => hud.story({ eyebrow: 'Chapter One', title: 'The Quiet Cell', text: 'The prison runs on the tide. So will her way out.' }),
+      },
+      {
+        at: 29.4,
+        run: () => {
+          hud.story(null);
+          avatar.endCinematic();
+          camera.clearShot();
+          camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
+          this.ctx.setControl(true);
+          progression.setObjective('Open the service hatch');
+        },
+      },
+      { at: 31.2, run: () => dialogue.say('Mara', 'Fresh copper on that line. Who repairs a pipe in a cell?') },
+    ];
+    this.sequence = { t: 0, steps };
   }
 
   private activateLookout(): void {
@@ -545,39 +743,39 @@ export class QuietCellLevel implements Level {
     progression.set('lookout.lit');
     events.emit('sfx', { name: 'ignite', x: this.lookoutLight.lampWorld.x, y: this.lookoutLight.lampWorld.y, z: this.lookoutLight.lampWorld.z });
     progression.setObjective('');
-    const steps: Array<{ at: number; run: () => void }> = [
-      { at: 0.3, run: () => this.ctx.setControl(false) },
+    // Control is held only for the camera move and the lights coming on (about 3 s); the intercom
+    // exchange plays over gameplay. The whole beat can be skipped (Jump/Interact).
+    const steps: SequenceStep[] = [
+      { at: 0.25, run: () => this.ctx.setControl(false) },
       {
-        at: 0.35,
+        at: 0.3,
         run: () => {
           // Frame Mara at the rail with the hall, the engine and the beacon beyond.
-          camera.playShot(v3(1.7, LOOKOUT.y + 2.2, 15.3), v3(-10.5, LOOKOUT.y + 2.6, -16), 2.8);
+          camera.playShot(v3(1.7, LOOKOUT.y + 2.2, 15.3), v3(-10.5, LOOKOUT.y + 2.6, -16), 1.8);
         },
       },
     ];
     this.hall.routeLamps.forEach((lamp, i) => {
       steps.push({
-        at: 1.4 + i * 0.5,
+        at: 0.9 + i * 0.24,
         run: () => {
           lamp.setOn(true);
           events.emit('sfx', { name: 'lampOn', x: lamp.group.position.x, y: lamp.group.position.y, z: lamp.group.position.z });
         },
       });
     });
-    const t0 = 1.4 + this.hall.routeLamps.length * 0.5 + 0.4;
+    const tLights = 0.9 + this.hall.routeLamps.length * 0.24;
     steps.push(
       {
-        at: t0,
+        at: tLights,
         run: () => {
           events.emit('sfx', { name: 'intercom', x: this.intercomPos.x, y: this.intercomPos.y, z: this.intercomPos.z });
           this.intercomBlink = 4;
+          dialogue.say('Intercom', 'The tide turns soon. Follow the service lights.', 3.6);
         },
       },
-      { at: t0 + 0.6, run: () => dialogue.say('Intercom', 'The tide turns soon. Follow the service lights.', 3.6) },
-      { at: t0 + 4.6, run: () => dialogue.say('Mara', 'Who is this?', 1.8) },
-      { at: t0 + 6.6, run: () => events.emit('sfx', { name: 'static' }) },
       {
-        at: t0 + 7.0,
+        at: tLights + 0.9,
         run: () => {
           progression.set('reveal.done');
           camera.clearShot();
@@ -589,6 +787,8 @@ export class QuietCellLevel implements Level {
           this.ctx.hud.tip('The rope at the right of the railing has dropped. Short drops are safe.', 'route-open');
         },
       },
+      { at: tLights + 4.0, run: () => dialogue.say('Mara', 'Who is this?', 1.8) },
+      { at: tLights + 5.6, run: () => events.emit('sfx', { name: 'static' }) },
     );
     this.sequence = { t: 0, steps };
   }
@@ -596,13 +796,37 @@ export class QuietCellLevel implements Level {
   private intercomBlink = 0;
   private timers: Array<{ t: number; run: () => void }> = [];
 
+  /** Whether a cinematic currently holds control (and can be skipped). */
+  get cinematicActive(): boolean {
+    return this.sequence !== null && this.ctx.player.frozen;
+  }
+
+  /**
+   * Finish the running sequence now: every remaining step runs once, in order, so the camera,
+   * gate, objective, dialogue and checkpoint end exactly as if the player had watched it. Steps
+   * marked `watchOnly` (narration cards, story lines, camera moves) are dropped.
+   */
+  skipCinematic(): void {
+    if (!this.cinematicActive || !this.sequence) return;
+    const seq = this.sequence;
+    for (const s of seq.steps) {
+      if (s.done) continue;
+      s.done = true;
+      if (!s.watchOnly) s.run();
+    }
+    this.ctx.camera.clearShot();
+    this.ctx.camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
+    this.sequence = null;
+    this.ctx.events.emit('sfx', { name: 'paper' });
+  }
+
   private later(seconds: number, run: () => void): void {
     this.timers.push({ t: seconds, run });
   }
 
-  /** The increment's ending: out on the gantry in the breach, with the harbour below. */
+  /** Chapter One's ending: out on the gantry in the breach, with the harbour below. */
   private finishEngine(): void {
-    const { progression, dialogue, camera, events } = this.ctx;
+    const { progression, dialogue, camera, events, hud } = this.ctx;
     if (progression.has('engine.finished')) return;
     progression.set('engine.finished');
     progression.setObjective('');
@@ -612,17 +836,26 @@ export class QuietCellLevel implements Level {
       t: 0,
       steps: [
         { at: 0.2, run: () => this.ctx.setControl(false) },
-        { at: 0.25, run: () => camera.playShot(ex.clone().addScaledVector(out, -3.2).add(v3(1.6, 2.2, 0)), ex.clone().addScaledVector(out, 40).add(v3(0, -6, 0)), 3.0) },
-        { at: 1.4, run: () => events.emit('sfx', { name: 'intercom', x: ex.x, y: ex.y + 1, z: ex.z }) },
-        { at: 1.9, run: () => dialogue.say('Intercom', 'You made the engine carry you. The archive is past the harbour crane.', 4.2) },
-        { at: 6.4, run: () => dialogue.say('Mara', 'Ivo. It has to be.', 2) },
+        { at: 0.25, watchOnly: true, run: () => camera.playShot(ex.clone().addScaledVector(out, -3.2).add(v3(1.6, 2.2, 0)), ex.clone().addScaledVector(out, 40).add(v3(0, -6, 0)), 3.0) },
+        { at: 1.4, watchOnly: true, run: () => events.emit('sfx', { name: 'intercom', x: ex.x, y: ex.y + 1, z: ex.z }) },
+        { at: 1.9, watchOnly: true, run: () => dialogue.say('Intercom', "You made the engine carry you. You're out of the cells, not off the rock.", 3.8) },
+        { at: 6.0, watchOnly: true, run: () => dialogue.say('Mara', 'Who are you? Who brought me here?', 2.4) },
+        { at: 8.6, watchOnly: true, run: () => dialogue.say('Intercom', 'Sorn wants your signature, or your silence. The only thing on Breakwater that still flies is in the hangar cell. Get there.', 5.4) },
+        { at: 14.2, watchOnly: true, run: () => dialogue.say('Mara', 'Ivo. It has to be.', 2) },
         {
-          at: 8.8,
-          run: () =>
+          at: 16.6,
+          watchOnly: true,
+          run: () => hud.story({ eyebrow: 'End of Chapter One', title: 'The Quiet Cell', text: 'Mara is out of the cell block. Somewhere above her, in the hangar cell, an old aircraft is waiting.' }),
+        },
+        {
+          at: 21.4,
+          run: () => {
+            hud.story(null);
             this.ctx.complete({
-              title: 'The Breathing Engine',
-              body: 'The machine that held the prison together just carried you out of the cell block. Next destination: the archive workshop beside the harbour crane. It is not built yet: this is the end of the current playable build.',
-            }),
+              title: 'Chapter One complete',
+              body: 'The machine that held the prison together just carried you out of the cell block. Next: Chapter Two, Wings in a Cage, the hangar cell and the old aircraft. It is in development; this is the end of the current build.',
+            });
+          },
         },
       ],
     };
@@ -630,26 +863,37 @@ export class QuietCellLevel implements Level {
 
   // ---------------------------------------------------------------- hints
 
+  /** A hint the player asked for (pause menu): the next tier, up to the explicit solution. */
   hint(): void {
-    const { dialogue, hud, progression } = this.ctx;
-    if (this.logic.hatch !== 'closed') {
-      const next = progression.objective || 'Explore the lookout';
-      hud.tip(`Objective: ${next}.`);
+    // Up at the split feed, hints are about that puzzle (their own escalation).
+    if (this.engine.feedPuzzleActive) {
+      this.engine.hint(HINT_ORDER[Math.min(this.requestedEngineHint, HINT_ORDER.length - 1)]);
+      this.requestedEngineHint++;
       return;
     }
-    const tier = this.hintTier;
-    this.hintTier = Math.min(2, this.hintTier + 1);
+    if (this.logic.hatch !== 'closed') {
+      const next = this.ctx.progression.objective || 'Explore the lookout';
+      this.ctx.hud.tip(`Objective: ${next}.`);
+      return;
+    }
+    const tier = HINT_ORDER[Math.min(this.requestedHint, HINT_ORDER.length - 1)];
+    this.requestedHint++;
     this.hintTimer = 0;
-    if (tier === 0) {
+    this.giveHint(tier);
+  }
+
+  private giveHint(tier: HintTier): void {
+    const { dialogue, hud } = this.ctx;
+    if (tier === 'reminder') {
       hud.tip('Objective: open the service hatch.');
       hud.pulseObjective();
-    } else if (tier === 1) {
+    } else if (tier === 'evidence') {
       dialogue.interrupt();
       dialogue.say('Mara', 'Someone scratched a diagram next to the hatch.');
       this.hatch.pulseHighlight();
     } else {
       dialogue.interrupt();
-      dialogue.say('Mara', "The bypass is dumping it all into the vent. Shut the bypass, wait for the needle, then the lever.", 5);
+      dialogue.say('Mara', 'The bypass is dumping it all into the vent. Shut the bypass, wait for the needle, then the lever.', 5);
     }
   }
 
@@ -667,13 +911,13 @@ export class QuietCellLevel implements Level {
     due.forEach((t) => t.run());
     if (this.sequence) {
       this.sequence.t += dt;
-      for (const s of this.sequence.steps as Array<{ at: number; run: () => void; done?: boolean }>) {
+      for (const s of this.sequence.steps) {
         if (!s.done && this.sequence.t >= s.at) {
           s.done = true;
           s.run();
         }
       }
-      if (this.sequence.steps.every((s) => (s as { done?: boolean }).done)) this.sequence = null;
+      if (this.sequence.steps.every((s) => s.done)) this.sequence = null;
     }
 
     // Puzzle state.
@@ -700,8 +944,10 @@ export class QuietCellLevel implements Level {
     // Hints, only while the puzzle is unsolved and the player is in the cell.
     if (this.logic.hatch === 'closed' && player.feet.z > CELL.z0) {
       this.hintTimer += dt;
-      if (this.hintTier < HINT_TIMES.length && this.hintTimer >= HINT_TIMES[this.hintTier] - (this.hintTier > 0 ? HINT_TIMES[this.hintTier - 1] : 0)) {
-        this.hint();
+      const next = AUTO_HINTS[this.autoHint];
+      if (next && this.hintTimer >= next.after) {
+        this.autoHint++;
+        this.giveHint(next.tier);
       }
     }
 
@@ -725,11 +971,17 @@ export class QuietCellLevel implements Level {
     }
   }
 
+  /** After a fall recovery at a checkpoint. */
+  onRespawn(checkpointId: string): void {
+    this.engine.onRespawn(checkpointId);
+  }
+
   afterPlayer(): void {
     this.engine.applyMotion();
   }
 
   update(dt: number, time: number, alpha: number): void {
+    this.ctx.hud.setSkipHint(this.cinematicActive, this.ctx.input.usingGamepad);
     this.engine.update(dt, time, alpha);
     this.hatch.update(dt, time, this.logic.pressure);
     this.hall.update(dt, time, this.ctx.camera.camera.position);
@@ -768,7 +1020,9 @@ export class QuietCellLevel implements Level {
     this.sequence = null;
     this.timers = [];
     this.hintTimer = 0;
-    this.hintTier = 0;
+    this.autoHint = 0;
+    this.requestedHint = 0;
+    this.requestedEngineHint = 0;
     this.falling = false;
     this.fadeLevel = 0;
     this.startIntro();
@@ -810,7 +1064,8 @@ export class QuietCellLevel implements Level {
       liftBand: this.logic.pressure >= LIFT_THRESHOLD,
       hatch: this.logic.hatch,
       failedPulls: this.logic.failedPulls,
-      hintTier: this.hintTier,
+      autoHints: this.autoHint,
+      requestedHints: this.requestedHint,
     };
   }
 }

@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import type { Physics } from '../../physics/Physics';
 import type { MaterialLibrary } from '../../world/materials';
 import { Palette } from '../../world/materials';
-import { Batcher, gearGeometry, prismGeometry, worldBox } from '../../world/geometry';
+import { Batcher, boxProjectUVs, gearGeometry, prismGeometry, worldBox } from '../../world/geometry';
 import { mulberry32 } from '../../core/math';
 import { BEACON, BREACH_SIDES, HALL, halfSide, sideAngle, sideFraction } from './layout';
 import { WorkLamp, glowSprite } from '../../world/props/Lanterns';
@@ -75,9 +75,7 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
       physics.box(new THREE.Vector3(...centerOf(k, 0, aMid)).setY(y), new THREE.Vector3(L, h / 2, HALL.wallT / 2), q);
       // Sluice arch outlines on alternate sides.
       if (k % 3 === 0) {
-        const arch = new THREE.Mesh(new THREE.TorusGeometry(1.3, 0.18, 6, 16, Math.PI), m.stone);
-        arch.applyMatrix4(sideMatrix(k, 0, -6.5, HALL.aWall - 0.05));
-        batch.add(arch.geometry.clone().applyMatrix4(arch.matrix), m.stone, undefined, { tint: tint(0.8), damp: true });
+        batch.add(boxProjectUVs(new THREE.TorusGeometry(1.3, 0.18, 6, 16, Math.PI)), m.stone, sideMatrix(k, 0, -6.5, HALL.aWall - 0.05), { tint: tint(0.8), damp: true });
         batch.add(worldBox(2.4, 3.2, 0.1, 3), recessMat, sideMatrix(k, 0, -8.1, HALL.aWall - 0.02), { tint: tint(0.3) });
       }
     }
@@ -118,7 +116,7 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
         }
         // Corbel under the vertex.
         const v = sideFraction(k, HALL.aWall - 0.4, 1);
-        batch.add(new RoundedBoxGeometry(0.5, 0.7, 0.9, 1, 0.08), m.stone, new THREE.Matrix4().compose(new THREE.Vector3(v[0], y0 - HALL.floorT - 0.35, v[1]), q, new THREE.Vector3(1, 1, 1)));
+        batch.add(boxProjectUVs(new RoundedBoxGeometry(0.5, 0.7, 0.9, 1, 0.08)), m.stone, new THREE.Matrix4().compose(new THREE.Vector3(v[0], y0 - HALL.floorT - 0.35, v[1]), q, new THREE.Vector3(1, 1, 1)));
       } else if (!breach) {
         // Broken stub of the collapsed walkway, hugging the wall.
         const poly: Array<[number, number]> = [
@@ -136,7 +134,7 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
           const f = (i + 0.5) / 6;
           const p = sideFraction(k, HALL.aWall + 0.25, f);
           const hgt = 0.4 + rng() * 1.4;
-          const blk = new RoundedBoxGeometry(0.7 + rng() * 0.4, hgt, 0.6, 1, 0.08);
+          const blk = boxProjectUVs(new RoundedBoxGeometry(0.7 + rng() * 0.4, hgt, 0.6, 1, 0.08));
           batch.add(blk, m.stone, new THREE.Matrix4().compose(new THREE.Vector3(p[0], y0 - 0.2 + hgt / 2 - (tier === 2 ? 0 : 0.1), p[1]), new THREE.Quaternion().setFromEuler(new THREE.Euler(rng() * 0.3, th + rng() * 0.4, rng() * 0.3)), new THREE.Vector3(1, 1, 1)), { tint: tint(0.85), damp: true });
         }
         continue;
@@ -148,7 +146,7 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
           const f = 0.08 + i * 0.21;
           const p = sideFraction(k, HALL.aWall + 0.2, f);
           const hgt = 0.18 + rng() * 0.22;
-          const blk = new RoundedBoxGeometry(0.55 + rng() * 0.3, hgt, 0.45, 1, 0.06);
+          const blk = boxProjectUVs(new RoundedBoxGeometry(0.55 + rng() * 0.3, hgt, 0.45, 1, 0.06));
           batch.add(blk, m.stone, new THREE.Matrix4().compose(new THREE.Vector3(p[0], y0 + hgt / 2 - 0.02, p[1]), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, th + (rng() - 0.5) * 0.6, 0)), new THREE.Vector3(1, 1, 1)), { tint: tint(0.85), damp: true });
         }
         // Broken stubs of the old wall at both sides and a cracked lintel.
@@ -175,7 +173,7 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
       batch.add(worldBox(2 * opening + 0.02, lintelH, HALL.wallT, 3), m.stone, sideMatrix(k, 0, lintelY, aMid), { tint: fTint, damp: true });
       physics.box(new THREE.Vector3(...centerOf(k, 0, aMid)).setY(lintelY), new THREE.Vector3(opening, lintelH / 2, HALL.wallT / 2), q);
       // Keystone over the opening.
-      batch.add(new RoundedBoxGeometry(0.5, 0.55, 0.16, 1, 0.05), m.stone, sideMatrix(k, 0, y0 + HALL.cellOpeningH + 0.22, HALL.aWall - 0.06), { tint: tint(1.1) });
+      batch.add(boxProjectUVs(new RoundedBoxGeometry(0.5, 0.55, 0.16, 1, 0.05)), m.stone, sideMatrix(k, 0, y0 + HALL.cellOpeningH + 0.22, HALL.aWall - 0.06), { tint: tint(1.1) });
 
       // A dim work lamp beside most cells, so the tiers read at a distance.
       if (rng() < 0.75) glowPositions.push(new THREE.Vector3(...worldOf(k, opening + 0.45, HALL.aWall - 0.12)).setY(y0 + 2.5));

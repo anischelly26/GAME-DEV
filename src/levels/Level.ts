@@ -15,6 +15,8 @@ import type { TraversalSurfaces } from '../player/Traversal';
 
 /** Everything a level needs from the game. Levels never reach into `Game` directly. */
 export interface LevelContext {
+  /** Play the story opening when the level starts. */
+  intro: boolean;
   scene: THREE.Scene;
   physics: Physics;
   materials: MaterialLibrary;
@@ -56,8 +58,12 @@ export interface Level {
   /** Ordered checkpoint ids, first is the section start. */
   readonly checkpointIds: string[];
   fixedUpdate(dt: number, time: number): void;
+  /** Jump/Interact pressed while a cinematic holds control: finish it now in a valid state. */
+  skipCinematic?(): void;
   /** Runs after the player moved and before the physics step (moving platforms go here). */
   afterPlayer?(dt: number): void;
+  /** Called after the player is recovered at checkpoint `id` (falls and manual respawn). */
+  onRespawn?(id: string): void;
   update(dt: number, time: number, alpha: number): void;
   /** Restore the complete initial state ("Restart section"). */
   reset(): void;

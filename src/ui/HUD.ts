@@ -5,16 +5,24 @@ export interface Settings {
   sensitivity: number; // 0.2 .. 3, multiplies the base mouse sensitivity
   invertY: boolean;
   volume: number; // 0..1
-  quality: 'high' | 'low';
+  /** 'auto' picks Low on integrated and mobile GPUs, High otherwise (see RenderPipeline). */
+  quality: 'auto' | 'high' | 'low';
+  version?: number;
 }
 
-export const DEFAULT_SETTINGS: Settings = { sensitivity: 1, invertY: false, volume: 0.8, quality: 'high' };
+const SETTINGS_VERSION = 2;
+export const DEFAULT_SETTINGS: Settings = { sensitivity: 1, invertY: false, volume: 0.8, quality: 'auto', version: SETTINGS_VERSION };
 const SETTINGS_KEY = 'it-takes-one.settings';
 
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    if (raw) {
+      const stored = JSON.parse(raw) as Partial<Settings>;
+      // Version 1 saved 'high' as the default whenever any setting changed; there was no 'auto'.
+      if ((stored.version ?? 1) < SETTINGS_VERSION) stored.quality = 'auto';
+      return { ...DEFAULT_SETTINGS, ...stored, version: SETTINGS_VERSION };
+    }
   } catch {
     /* storage unavailable: use defaults */
   }
@@ -70,6 +78,8 @@ export class HUD {
   private readonly fallFadeEl: HTMLElement;
   private readonly documentEl: HTMLElement;
   private readonly debugEl: HTMLElement;
+  private readonly skipEl: HTMLElement;
+  private readonly storyEl: HTMLElement;
   private readonly screen: HTMLElement;
   private readonly card: HTMLElement;
   private tipTimer = 0;
@@ -77,10 +87,13 @@ export class HUD {
   documentOpen: string | null = null;
   private documentTimer = 0;
   settings: Settings = loadSettings();
+  /** What 'Auto' resolves to on this machine, shown in the settings menu. */
+  autoQualityLabel = 'High';
 
   constructor(container: HTMLElement) {
     this.root = el('div', 'hud', container);
     this.fallFadeEl = el('div', 'fade', this.root);
+    this.storyEl = el('div', 'story hidden', this.root);
     this.objective = el('div', 'objective hidden', this.root, '<div class="label">Objective</div><div class="text"></div>');
     this.objectiveText = this.objective.querySelector('.text')!;
     this.prompt = el('div', 'prompt hidden', this.root);
@@ -88,6 +101,7 @@ export class HUD {
     this.tipEl = el('div', 'tip hidden', this.root);
     this.documentEl = el('div', 'document hidden', this.root);
     this.debugEl = el('div', 'debug hidden', this.root);
+    this.skipEl = el('div', 'skip hidden', this.root, '<span class="key">Space</span> or <span class="key">E</span> skip');
     this.fadeEl = el('div', 'fade', this.root);
     this.screen = el('div', 'screen', this.root);
     this.card = el('div', 'card', this.screen);
@@ -105,8 +119,8 @@ export class HUD {
     this.card.innerHTML = `
       <div class="eyebrow">Working title</div>
       <h1>It Takes One</h1>
-      <p>Chapter 1, <i>The Quiet Cell</i> — first playable section.<br/>
-      Breakwater prison runs on the tide. So will your way out.</p>
+      <p>Mara Venn fell asleep in her workshop and woke up inside Breakwater, the prison that runs
+      on the tide.<br/>Chapter One, <i>The Quiet Cell</i>.</p>
       ${CONTROLS_HTML}
       <div class="buttons"><button class="primary" data-a="start">Begin</button></div>`;
     const btn = this.card.querySelector<HTMLButtonElement>('[data-a="start"]')!;
@@ -141,7 +155,7 @@ export class HUD {
         <label>Mouse sensitivity <input type="range" min="0.2" max="3" step="0.05" value="${s.sensitivity}" data-s="sensitivity"></label>
         <label>Invert vertical look <input type="checkbox" ${s.invertY ? 'checked' : ''} data-s="invertY"></label>
         <label>Volume <input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-s="volume"></label>
-        <label>Graphics <select data-s="quality"><option value="high" ${s.quality === 'high' ? 'selected' : ''}>High</option><option value="low" ${s.quality === 'low' ? 'selected' : ''}>Low (faster)</option></select></label>
+        <label>Graphics <select data-s="quality"><option value="auto" ${s.quality === 'auto' ? 'selected' : ''}>Auto (${this.autoQualityLabel})</option><option value="high" ${s.quality === 'high' ? 'selected' : ''}>High (dedicated graphics card)</option><option value="low" ${s.quality === 'low' ? 'selected' : ''}>Low (faster)</option></select></label>
       </div>
       ${CONTROLS_HTML}`;
     const on = (a: string, fn: () => void) => this.card.querySelector(`[data-a="${a}"]`)?.addEventListener('click', fn);
@@ -251,6 +265,24 @@ export class HUD {
   }
 
   /** Respawn / transition fade (0..1). */
+  /**
+   * Full-screen story card: the opening's narration and chapter titles. `backdrop` blacks out the
+   * view (narration); without it the text sits over the scene (titles). null fades it away.
+   */
+  story(card: { eyebrow?: string; title?: string; text?: string; backdrop?: boolean } | null): void {
+    if (!card) {
+      this.storyEl.classList.add('hidden');
+      return;
+    }
+    this.storyEl.classList.toggle('backdrop', card.backdrop ?? false);
+    this.storyEl.innerHTML = `<div class="inner">${card.eyebrow ? `<div class="eyebrow">${card.eyebrow}</div>` : ''}${card.title ? `<h1>${card.title}</h1>` : ''}${card.text ? `<p>${card.text}</p>` : ''}</div>`;
+    this.storyEl.classList.remove('hidden');
+  }
+
+  get storyText(): string {
+    return this.storyEl.classList.contains('hidden') ? '' : (this.storyEl.textContent ?? '');
+  }
+
   setFade(v: number): void {
     this.fadeEl.style.opacity = String(v);
   }
@@ -259,12 +291,20 @@ export class HUD {
     this.fallFadeEl.style.opacity = String(Math.min(1, v));
   }
 
+  /** Shown while a skippable cinematic holds control. */
+  setSkipHint(visible: boolean, gamepad = false): void {
+    const html = gamepad ? '<span class="key pad">A</span> skip' : '<span class="key">Space</span> or <span class="key">E</span> skip';
+    if (visible && this.skipEl.innerHTML !== html) this.skipEl.innerHTML = html;
+    this.skipEl.classList.toggle('hidden', !visible);
+  }
+
   setDebug(text: string | null): void {
     this.debugEl.classList.toggle('hidden', text === null);
     if (text !== null) this.debugEl.textContent = text;
   }
 
   resetRun(): void {
+    this.story(null);
     this.shownTips.clear();
     this.tipEl.classList.add('hidden');
     this.hideDocument();

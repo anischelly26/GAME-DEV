@@ -118,8 +118,11 @@ export class PistonPlatform implements MovingPlatform {
     return 1 - smoothstep(0, 1, (c - 2 * rest - travel) / travel);
   }
 
+  /** When set, the platform follows this height (0..1) instead of its own cycle. */
+  heightOverride: number | null = null;
+
   get height(): number {
-    return this.heightAt(this.time);
+    return this.heightOverride ?? this.heightAt(this.time);
   }
 
   /** Advance the motion and publish this step's delta (before the player moves). */
