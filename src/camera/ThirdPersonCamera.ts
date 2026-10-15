@@ -46,6 +46,8 @@ export class ThirdPersonCamera {
   private pullIn = 0;
   /** Seconds since the player last turned the camera (mouse or stick). */
   private sinceLook = 10;
+  /** Seconds the player has been on the ground (0 while airborne, hanging or climbing). */
+  private groundedFor = 0;
   private readonly prevFeet = new THREE.Vector3();
   private readonly velocity = new THREE.Vector3();
   private readonly lookAhead = new THREE.Vector3();
@@ -134,7 +136,10 @@ export class ThirdPersonCamera {
 
     // Lazy follow: when the player hasn't touched the camera for a moment, drift around behind the
     // direction of travel, slowly and never when running toward the camera (that would spin it).
-    if (this.recenterTarget === null && this.sinceLook > 1.0 && v > 1.2) {
+    // Only on the ground: movement is camera-relative, so turning the camera during a jump, hang or
+    // climb would bend the direction of a held key mid-air.
+    this.groundedFor = grounded ? this.groundedFor + dt : 0;
+    if (this.recenterTarget === null && this.sinceLook > 1.0 && v > 1.2 && this.groundedFor > 0.3) {
       const behind = Math.atan2(-this.velocity.x, -this.velocity.z);
       const diff = Math.atan2(Math.sin(behind - this.yaw), Math.cos(behind - this.yaw));
       if (Math.abs(diff) < 2.4) this.yaw = dampAngle(this.yaw, this.yaw + diff, 0.9 * clamp((v - 1.2) / 4, 0, 1) * clamp((this.sinceLook - 1) / 0.8, 0, 1), dt);
