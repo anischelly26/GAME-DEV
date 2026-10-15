@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../../core/math';
 import { glowSprite } from './Lanterns';
+import { mergeStatic } from '../geometry';
 
 /**
  * The old seaplane hangar on a rock spur of Breakwater, seen from the breach at the end of Chapter
@@ -143,6 +144,8 @@ export class Hangar {
     this.windsock.position.set(10.5, 8.7, 10);
     g.add(this.windsock);
 
+    // About 70 parts become one mesh per material (the windsock keeps moving).
+    mergeStatic(g, [this.windsock]);
     g.updateMatrixWorld(true);
     this.focus.set(0, 3.2, 4).applyMatrix4(g.matrixWorld);
   }

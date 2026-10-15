@@ -442,6 +442,10 @@ export class QuietCellLevel implements Level {
     this.channelWater.mesh.scale.set(1, 1, 0.3);
     scene.add(this.channelWater.mesh);
 
+    this.wallDust = new SteamEmitter(v3(0.4, cy + 3.95, CELL.z0 + 0.12), v3(0, -0.25, 0.35), 0, new THREE.Color('#8f806b'));
+    this.wallDust.peakOpacity = 0.16;
+    scene.add(this.wallDust.group);
+
     // Shaft lights: the far landing is warm and inviting; a cold lamp over the hatch.
     const farLamp = new WorkLamp(m, v3(S.x1 - 0.01, S.floorY + 2.4, 19.6), v3(-1, 0, 0), { light: true, intensity: 8, distance: 9 });
     const hatchLamp = new WorkLamp(m, v3(-1.2, S.floorY + 2.7, S.z1 - 0.01), v3(0, 0, -1), { light: true, intensity: 4, distance: 7 });
@@ -536,12 +540,18 @@ export class QuietCellLevel implements Level {
       complete: () => ctx.progression.complete,
       revealDone: () => ctx.progression.has('reveal.done'),
     };
+    // Things Mara glances at as she passes (head turns; the interaction target wins when focused).
+    const a = this.hatch.anchors;
+    this.pois.push(a.diagram, a.gauge, a.pistonSeal, this.orderPos, this.intercomPos, v3(0, HALL.tierY[1] + 3, 0), v3(0, HALL.tierY[2] + 2, 0));
     this.route = [...buildRoute(), ...this.engine.route];
     this.routeParts = { slice: buildRoute(), engine: this.engine.route, feed: this.engine.feedRoute };
     this.startIntro();
   }
 
   private channelSteam: SteamEmitter;
+  private readonly pois: THREE.Vector3[] = [];
+  /** Dust shaken off the hatch wall by each breath of the engine (felt in the cell). */
+  private wallDust!: SteamEmitter;
   private orderCanvas!: HTMLCanvasElement;
   private readonly orderPos = new THREE.Vector3();
   private hangar!: Hangar;
@@ -957,6 +967,27 @@ export class QuietCellLevel implements Level {
 
   // ---------------------------------------------------------------- hints
 
+  pointOfInterest(feet: THREE.Vector3, facing: number): THREE.Vector3 | null {
+    // From the top tier and the exit gantry, the hangar across the water draws the eye.
+    if (feet.y > HALL.tierY[2] - 1 && this.hangar.isLit) return this.hangar.focus;
+    let best: THREE.Vector3 | null = null;
+    let bestScore = Infinity;
+    for (const p of this.pois) {
+      const dx = p.x - feet.x;
+      const dz = p.z - feet.z;
+      const d = Math.hypot(dx, dz);
+      if (d < 0.6 || d > 12 || Math.abs(p.y - feet.y) > 8) continue;
+      const yaw = Math.atan2(Math.sin(Math.atan2(dx, dz) - facing), Math.cos(Math.atan2(dx, dz) - facing));
+      if (Math.abs(yaw) > 1.3) continue;
+      const score = d * (1 + Math.abs(yaw));
+      if (score < bestScore) {
+        bestScore = score;
+        best = p;
+      }
+    }
+    return best;
+  }
+
   /** A hint the player asked for (pause menu): the next tier, up to the explicit solution. */
   hint(): void {
     // Up at the split feed, hints are about that puzzle (their own escalation).
@@ -1037,6 +1068,8 @@ export class QuietCellLevel implements Level {
         events.emit('sfx', { name: 'vent', x: this.hatch.anchors.vent.x, y: this.hatch.anchors.vent.y, z: this.hatch.anchors.vent.z });
       }
       events.emit('sfx', { name: 'engineThump' });
+      // In the cell the engine is felt through the wall: a little dust drifts off the hatch wall.
+      if (player.feet.z > CELL.z0 && player.feet.y > CELL.y - 1 && player.feet.y < CELL.y + 3) this.wallDust.burst = 0.5;
     }
     this.lastPulse = pulse;
     this.hatch.fixedUpdate(dt, this.logic.hatch === 'closed' ? 0 : this.logic.liftProgress, this.logic.hatch === 'latched', time);
@@ -1090,6 +1123,7 @@ export class QuietCellLevel implements Level {
     this.ctx.hud.setSkipHint(this.cinematicActive, this.ctx.input.usingGamepad);
     this.engine.update(dt, time, alpha);
     this.hangar.update(dt);
+    this.wallDust.update(dt);
     this.hatch.update(dt, time, this.logic.pressure);
     this.hall.update(dt, time, this.ctx.camera.camera.position);
     this.landingLight.update(dt, time);

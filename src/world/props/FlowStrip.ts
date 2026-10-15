@@ -8,7 +8,9 @@ import * as THREE from 'three';
  */
 export class FlowStrip {
   readonly group = new THREE.Group();
-  private readonly segments: Array<{ mat: THREE.MeshBasicMaterial; tex: THREE.Texture }> = [];
+  private readonly mat: THREE.MeshBasicMaterial;
+  private readonly tex: THREE.Texture;
+  private readonly color: THREE.Color;
   private level = 0;
   private target = 0;
   private offset = 0;
@@ -19,8 +21,11 @@ export class FlowStrip {
    */
   constructor(points: THREE.Vector3[], facing: (dir: THREE.Vector3, mid: THREE.Vector3) => THREE.Vector3, opts: { width?: number; color?: string } = {}) {
     const width = opts.width ?? 0.11;
-    const color = new THREE.Color(opts.color ?? '#ffc46b');
-    const base = chevronTexture();
+    this.color = new THREE.Color(opts.color ?? '#ffc46b');
+    // One mesh for the whole path: a quad per segment, U measured in chevrons along the path.
+    const positions: number[] = [];
+    const uvs: number[] = [];
+    let u = 0;
     for (let i = 0; i < points.length - 1; i++) {
       const a = points[i];
       const b = points[i + 1];
@@ -29,23 +34,28 @@ export class FlowStrip {
       d.normalize();
       const mid = a.clone().add(b).multiplyScalar(0.5);
       const n = facing(d, mid).clone().projectOnPlane(d).normalize();
-      const y = new THREE.Vector3().crossVectors(n, d);
-      const tex = base.clone();
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.repeat.set(len / 0.22, 1);
-      tex.needsUpdate = true;
-      const mat = new THREE.MeshBasicMaterial({ map: tex, color: color.clone().multiplyScalar(0.12), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(len, width), mat);
-      mesh.matrix.makeBasis(d, y, n).setPosition(mid);
-      mesh.matrixAutoUpdate = false;
-      mesh.renderOrder = 2;
-      this.group.add(mesh);
-      this.segments.push({ mat, tex });
+      const y = new THREE.Vector3().crossVectors(n, d).multiplyScalar(width / 2);
+      const u1 = u + len / 0.22;
+      const corners = [a.clone().sub(y), b.clone().sub(y), b.clone().add(y), a.clone().add(y)];
+      const cu = [u, u1, u1, u];
+      const cv = [0, 0, 1, 1];
+      for (const k of [0, 1, 2, 0, 2, 3]) {
+        positions.push(corners[k].x, corners[k].y, corners[k].z);
+        uvs.push(cu[k], cv[k]);
+      }
+      u = u1;
     }
-    this.color = color;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    this.tex = chevronTexture().clone();
+    this.tex.wrapS = THREE.RepeatWrapping;
+    this.tex.needsUpdate = true;
+    this.mat = new THREE.MeshBasicMaterial({ map: this.tex, color: this.color.clone().multiplyScalar(0.12), transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 });
+    const mesh = new THREE.Mesh(geo, this.mat);
+    mesh.renderOrder = 2;
+    this.group.add(mesh);
   }
-
-  private readonly color: THREE.Color;
 
   /** Pressure flowing along this pipe (true) or not. */
   set(flowing: boolean, instant = false): void {
@@ -60,11 +70,8 @@ export class FlowStrip {
   update(dt: number): void {
     this.level += (this.target - this.level) * (1 - Math.exp(-dt * 4));
     this.offset -= dt * 1.6 * this.level;
-    const brightness = 0.12 + this.level * 1.25;
-    for (const s of this.segments) {
-      s.tex.offset.x = this.offset;
-      s.mat.color.copy(this.color).multiplyScalar(brightness);
-    }
+    this.tex.offset.x = this.offset;
+    this.mat.color.copy(this.color).multiplyScalar(0.12 + this.level * 1.25);
   }
 }
 

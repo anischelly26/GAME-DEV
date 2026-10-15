@@ -253,3 +253,41 @@ export function trs(x: number, y: number, z: number, rotY = 0, rotX = 0, rotZ = 
   m.compose(new THREE.Vector3(x, y, z), q, new THREE.Vector3(scale, scale, scale));
   return m;
 }
+
+/**
+ * Merge every static mesh under `root` into one mesh per material (fewer draw calls for set pieces
+ * built from many small parts). Meshes under any object in `keep` (animated parts) are left alone.
+ */
+export function mergeStatic(root: THREE.Object3D, keep: THREE.Object3D[] = []): void {
+  root.updateMatrixWorld(true);
+  const toLocal = new THREE.Matrix4().copy(root.matrixWorld).invert();
+  const kept = (o: THREE.Object3D) => {
+    for (let p: THREE.Object3D | null = o; p && p !== root; p = p.parent) if (keep.includes(p)) return true;
+    return false;
+  };
+  const buckets = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const merged: THREE.Mesh[] = [];
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || kept(m) || Array.isArray(m.material)) return;
+    let g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+    for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal' && name !== 'uv') g.deleteAttribute(name);
+    if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
+    g = g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(toLocal, m.matrixWorld));
+    g.clearGroups();
+    const list = buckets.get(m.material) ?? [];
+    list.push(g);
+    buckets.set(m.material, list);
+    merged.push(m);
+  });
+  for (const m of merged) m.removeFromParent();
+  for (const [material, geometries] of buckets) {
+    const g = mergeGeometries(geometries, false);
+    if (!g) continue;
+    g.computeBoundingSphere();
+    const mesh = new THREE.Mesh(g, material);
+    mesh.matrixAutoUpdate = false;
+    root.add(mesh);
+    for (const part of geometries) part.dispose();
+  }
+}
