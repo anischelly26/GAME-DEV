@@ -22,8 +22,8 @@ export interface AvatarState {
   modeT?: number;
 }
 
-// Brighter than the knit wrap's base colour because the wool texture darkens it.
-const SCARF_COLOR = '#f07a5c';
+/** Matches the knit wrap (see maraMaterials): the tails are its loose ends. */
+const SCARF_COLOR = '#cf5e46';
 
 interface Limb {
   upper: THREE.Bone;
@@ -85,12 +85,12 @@ export class PlayerAvatar {
 
   constructor(scene: THREE.Scene, tex: TextureLibrary) {
     this.root.add(this.visual);
-    const scarfMat = new THREE.MeshStandardMaterial({ color: SCARF_COLOR, map: tex.wool.map, normalMap: tex.wool.normalMap, roughness: 1 });
+    const scarfMat = new THREE.MeshStandardMaterial({ color: SCARF_COLOR, normalMap: tex.wool.normalMap, roughness: 1 });
     this.materials.push(scarfMat);
     // Two loose tails hanging from the knot on her left.
     for (const [x, y, z, len, width] of [
-      [0.036, 0.078, 0.1, 4, 0.07],
-      [0.06, 0.082, 0.094, 3, 0.06],
+      [0.04, 0.078, 0.1, 3, 0.05],
+      [0.062, 0.082, 0.094, 2, 0.044],
     ]) {
       const anchor = new THREE.Object3D();
       anchor.position.set(x, y, z);
