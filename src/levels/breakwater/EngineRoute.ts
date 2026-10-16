@@ -611,6 +611,7 @@ export class EngineRoute {
         contains: (p) => p.distanceTo(feet) < 1.8 && Math.abs(p.y - c.y) < 1.2,
         onEnter: () => {
           if (ctx.checkpoints.reach(c.id)) {
+            if (c.id === 'breach' && ctx.progression.set('area.breach')) ctx.hud.areaTitle('The Breach', 'Where the wall gave way to the sea');
             this.lightById.get(c.id)?.ignite();
             ctx.events.emit('sfx', { name: 'ignite', x: feet.x, y: feet.y + 1.5, z: feet.z });
           }
@@ -851,6 +852,7 @@ export class EngineRoute {
       contains: (p) => p.distanceTo(sidePos(7, 10.6, uAt(10.6, 0.3), T1)) < 2.4 && p.y < 2,
       onEnter: () => {
         progression.set('engine.reached');
+        if (progression.set('area.engine')) this.ctx.hud.areaTitle('The Breathing Engine', 'It rises and falls with the sea');
         dialogue.say('Mara', "The collar breathes with the tide. If I can catch it at the gantry...");
         progression.setObjective('Stop the collar at the gantry and ride it up');
       },

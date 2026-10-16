@@ -33,6 +33,7 @@ const SAMPLED: Record<string, Layer[]> = {
   pot: [['pot', 0.6, 0.95, 1.05]],
   uiSelect: [['ui.select', 0.35, 1, 1]],
   doorCreak: [['creak', 0.55, 0.62, 0.68]],
+  boardsBreak: [['wood.medium', 0.9, 0.7, 0.8], ['land.heavy', 0.45, 1.15, 1.25], ['wood.medium', 0.6, 1.1, 1.2]],
 };
 /** These keep their synthesised layer too (steam, hiss and machinery read better with it). */
 const ALSO_SYNTH = new Set(['latch', 'lever', 'piston', 'groundPound', 'airDash']);
@@ -498,6 +499,35 @@ export class AudioSystem {
       case 'paper':
         this.burst('highpass', 2500, 0.7, 0.18, 0.06, o());
         break;
+      case 'whistle': {
+        // A steam whistle: three pipes sounding together, a pressure swoop up at the start and a
+        // sag at the end, over a breath of hissing steam.
+        const ctx = this.ctx!;
+        const t = ctx.currentTime;
+        const out = o(0.9);
+        for (const [f, amp] of [
+          [466, 0.06],
+          [587, 0.05],
+          [698, 0.045],
+        ]) {
+          const osc = ctx.createOscillator();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(f * 0.93, t);
+          osc.frequency.exponentialRampToValueAtTime(f, t + 0.14);
+          osc.frequency.setValueAtTime(f, t + 1.35);
+          osc.frequency.exponentialRampToValueAtTime(f * 0.96, t + 1.8);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(amp, t + 0.08);
+          g.gain.setValueAtTime(amp, t + 1.35);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 1.85);
+          osc.connect(g).connect(out);
+          osc.start(t);
+          osc.stop(t + 1.9);
+        }
+        this.burst('bandpass', 2600, 0.8, 1.8, 0.05, out, 0.06);
+        break;
+      }
       case 'lampOut':
         // The flame gutters and goes: a soft breath of air and a tiny tick of the cooling glass.
         this.burst('lowpass', 700, 0.6, 0.55, 0.12, o(), 0.04, 0, 180);

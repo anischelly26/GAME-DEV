@@ -43,7 +43,16 @@ export interface TurbineHall {
  * column, a breach on the far side that opens to the sea and the harbour beacon. In this slice it is
  * the reveal seen from the lookout; the next increment makes it playable.
  */
-export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: MaterialLibrary, moonDir: THREE.Vector3, walkwayOverrides: Set<string> = new Set(), railGaps: Set<string> = new Set()): TurbineHall {
+export function buildTurbineHall(
+  scene: THREE.Scene,
+  physics: Physics,
+  m: MaterialLibrary,
+  moonDir: THREE.Vector3,
+  walkwayOverrides: Set<string> = new Set(),
+  railGaps: Set<string> = new Set(),
+  /** Cells ("tier:k") whose bars are bent open: they get a floor, walls and a ceiling. */
+  openCells: Set<string> = new Set(),
+): TurbineHall {
   const batch = new Batcher();
   const root = new THREE.Group();
   root.name = 'turbine-hall';
@@ -174,7 +183,8 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
       physics.box(new THREE.Vector3(...centerOf(k, 0, aMid)).setY(lintelY), new THREE.Vector3(opening, lintelH / 2, HALL.wallT / 2), q);
       // The bars close the opening for the player and the camera: the dark recess behind is only a
       // backdrop, with no walls of its own, so a camera that slipped in would see through the hall.
-      physics.box(new THREE.Vector3(...centerOf(k, 0, aMid)).setY(y0 + HALL.cellOpeningH / 2), new THREE.Vector3(opening, HALL.cellOpeningH / 2, HALL.wallT / 2), q);
+      const open = openCells.has(`${tier}:${k}`);
+      if (!open) physics.box(new THREE.Vector3(...centerOf(k, 0, aMid)).setY(y0 + HALL.cellOpeningH / 2), new THREE.Vector3(opening, HALL.cellOpeningH / 2, HALL.wallT / 2), q);
       // Keystone over the opening.
       batch.add(boxProjectUVs(new RoundedBoxGeometry(0.5, 0.55, 0.16, 1, 0.05)), m.stone, sideMatrix(k, 0, y0 + HALL.cellOpeningH + 0.22, HALL.aWall - 0.06), { tint: tint(1.1) });
 
@@ -186,7 +196,35 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
       batch.add(new THREE.BoxGeometry(2 * opening, HALL.cellOpeningH, recessDepth), recessMat, sideMatrix(k, 0, y0 + HALL.cellOpeningH / 2, HALL.aWall + HALL.wallT + recessDepth / 2 - 0.02), { tint: tint(0.35, 0.2), castShadow: false });
       const bars = 13;
       const broken = rng() < 0.12;
+      if (open) {
+        // Someone bent these bars apart. Inside: a real floor, walls and ceiling (for Mara and the
+        // camera), from the threshold under the facade to the back wall.
+        const a0 = HALL.aWall;
+        const a1 = HALL.aWall + HALL.wallT + recessDepth;
+        const aC = (a0 + a1) / 2;
+        const depth = a1 - a0;
+        const at = (u: number, y: number, a: number) => new THREE.Vector3(...centerOf(k, u, a)).setY(y);
+        batch.add(worldBox(2 * opening, HALL.floorT, depth, 3), m.floor, sideMatrix(k, 0, y0 - HALL.floorT / 2, aC), { tint: tint(0.7) });
+        physics.box(at(0, y0 - HALL.floorT / 2, aC), new THREE.Vector3(opening, HALL.floorT / 2, depth / 2), q);
+        for (const s of [-1, 1]) physics.box(at(s * (opening + 0.1), y0 + HALL.cellOpeningH / 2, aC), new THREE.Vector3(0.1, HALL.cellOpeningH / 2, depth / 2), q);
+        physics.box(at(0, y0 + HALL.cellOpeningH / 2, a1 + 0.1), new THREE.Vector3(opening + 0.2, HALL.cellOpeningH / 2, 0.1), q);
+        physics.box(at(0, y0 + HALL.cellOpeningH + 0.1, aC), new THREE.Vector3(opening + 0.2, 0.1, depth / 2), q);
+        // Two bars levered apart from their feet; their tops vanish into the piers.
+        for (const [u, lean] of [
+          [-0.42, 0.34],
+          [0.42, -0.36],
+        ]) {
+          const geo = new THREE.CylinderGeometry(0.03, 0.03, HALL.cellOpeningH, 6);
+          geo.translate(0, HALL.cellOpeningH / 2, 0);
+          const bar = new THREE.Mesh(geo, m.iron);
+          bar.applyMatrix4(sideMatrix(k, u, y0, HALL.aWall + HALL.wallT * 0.5));
+          bar.rotateZ(lean);
+          bar.castShadow = true;
+          root.add(bar);
+        }
+      }
       for (let b = 0; b < bars; b++) {
+        if (open && b >= 4 && b <= 8) continue;
         if (broken && (b === 5 || b === 6 || b === 7)) continue;
         const u = -opening + 0.1 + (b * (2 * opening - 0.2)) / (bars - 1);
         barPositions.push(sideMatrix(k, u, y0 + HALL.cellOpeningH / 2, HALL.aWall + HALL.wallT * 0.5));

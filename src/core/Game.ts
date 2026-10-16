@@ -162,6 +162,7 @@ export class Game {
       hud: this.hud,
       moonDir: this.moonDir,
       traversal: this.traversal,
+      effects: this.effects,
       respawn: (reason) => this.respawn(reason),
       complete: (card) => this.complete(card),
       setControl: (enabled) => this.setControl(enabled),

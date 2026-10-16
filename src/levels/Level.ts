@@ -12,6 +12,7 @@ import type { PlayerAvatar } from '../player/PlayerAvatar';
 import type { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import type { HUD } from '../ui/HUD';
 import type { TraversalSurfaces } from '../player/Traversal';
+import type { Effects } from '../world/Effects';
 
 /** Everything a level needs from the game. Levels never reach into `Game` directly. */
 export interface LevelContext {
@@ -35,10 +36,12 @@ export interface LevelContext {
   moonDir: THREE.Vector3;
   /** Register climbable ledges and vaultable obstacles here. */
   traversal: TraversalSurfaces;
+  /** Pooled puffs and rings (dust, splinters, chalk). */
+  effects: Effects;
   /** Respawn at the current checkpoint (used by fall recovery). */
   respawn(reason: 'fall' | 'manual'): void;
   /** Show the completion screen (`reward`: laid over the current view rather than a menu). */
-  complete(card?: { title: string; body: string; reward?: boolean }): void;
+  complete(card?: { title: string; body: string; reward?: boolean; marks?: { found: number; total: number } }): void;
   /** Hold or release player control (cutscene beats). */
   setControl(enabled: boolean): void;
   /**

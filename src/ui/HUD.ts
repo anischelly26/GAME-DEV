@@ -235,7 +235,7 @@ export class HUD {
    * The completion screen. With `reward` it is laid over the current view (the vista the ending
    * framed) as a title card, with the choices fading in after a moment, rather than a menu.
    */
-  showComplete(stats: { time: number; falls: number; title?: string; body?: string; reward?: boolean }, onRestart: () => void, onContinue: () => void): void {
+  showComplete(stats: { time: number; falls: number; title?: string; body?: string; reward?: boolean; marks?: { found: number; total: number } }, onRestart: () => void, onContinue: () => void): void {
     this.screen.classList.remove('hidden');
     this.screen.classList.toggle('reward', !!stats.reward);
     const mins = Math.floor(stats.time / 60);
@@ -249,7 +249,7 @@ export class HUD {
         stats.body ??
         'The service lights lead down into the turbine hall, where the Breathing Engine heaves with the tide. That is the next destination. It is not built yet: this is the end of the first playable section.'
       }</p>
-      <div class="stats"><div><b>${mins}:${secs}</b>time</div><div><b>${stats.falls}</b>falls</div></div>
+      <div class="stats"><div><b>${mins}:${secs}</b>time</div><div><b>${stats.falls}</b>falls</div>${stats.marks ? `<div><b>${stats.marks.found}/${stats.marks.total}</b>chalk marks</div>` : ''}</div>
       <div class="buttons">
         <button class="primary" data-a="restart">${stats.reward ? 'Play Chapter One again' : 'Restart section'}</button>
         <button data-a="continue">Keep exploring</button>

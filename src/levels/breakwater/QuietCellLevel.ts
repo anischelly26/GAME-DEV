@@ -8,18 +8,22 @@ import { PressureHatch, OPENING } from '../../world/props/PressureHatch';
 import { hazardStripeTexture } from '../../world/props/Maintenance';
 import { Hangar } from '../../world/props/Hangar';
 import { Workshop } from './Workshop';
+import { ChalkMarks, chalkArrowTexture, type ChalkMarkSpot } from '../../world/props/ChalkMarks';
+import { BoardedHatch } from '../../world/props/BoardedHatch';
 import { ServiceLight, WorkLamp, glowSprite } from '../../world/props/Lanterns';
 import { LightShaft, SteamEmitter, Water } from '../../world/Atmosphere';
 import { PressureHatchLogic, enginePulse, LIFT_THRESHOLD } from '../../gameplay/puzzles/PressureHatchLogic';
 import { boxVolume } from '../../gameplay/Progression';
 import { mulberry32 } from '../../core/math';
-import { CELL, FALL_FADE_Y, HALL, LOOKOUT, RECOVER_Y, SHAFT, SPAWNS, sideAngle } from './layout';
+import { CELL, FALL_FADE_Y, HALL, LOOKOUT, RECOVER_Y, SHAFT, SPAWNS, sideAngle, sideFraction } from './layout';
 
 const sideAngle10 = sideAngle(10);
 import { buildTurbineHall, type TurbineHall } from './TurbineHall';
 import { EngineRoute, ROUTE_RAIL_GAPS, ROUTE_WALKWAY_OVERRIDES } from './EngineRoute';
 
 const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+/** Hall cells whose bars someone bent open ("tier:k"): tier three, side 9, before the ram. */
+const OPEN_CELLS = new Set(['2:9']);
 
 /**
  * Hatch puzzle hints. Automatic hints are gentle and happen at most once each: a reminder of the
@@ -82,10 +86,22 @@ export class QuietCellLevel implements Level {
   private readonly fill: THREE.PointLight;
   private readonly fillHome = new THREE.Vector3();
   private inWorkshop = false;
+  /** Secrets and toys (see buildSecrets). */
+  private marks!: ChalkMarks;
+  private boards!: BoardedHatch;
+  private boardsNearT = 0;
+  private readonly whistleAt = new THREE.Vector3();
+  private readonly whistleTop = new THREE.Vector3();
+  private whistleHandle!: THREE.Group;
+  private whistleHandleY = 0;
+  private whistleSteam!: SteamEmitter;
+  private whistleT = 0;
+  private whistlePulls = 0;
+  private readonly chest = new THREE.Vector3();
 
   constructor(private readonly ctx: LevelContext) {
     const { scene, physics, materials: m } = ctx;
-    this.hall = buildTurbineHall(scene, physics, m, ctx.moonDir, ROUTE_WALKWAY_OVERRIDES, ROUTE_RAIL_GAPS);
+    this.hall = buildTurbineHall(scene, physics, m, ctx.moonDir, ROUTE_WALKWAY_OVERRIDES, ROUTE_RAIL_GAPS, OPEN_CELLS);
 
     const batch = new Batcher();
     const root = new THREE.Group();
@@ -595,6 +611,7 @@ export class QuietCellLevel implements Level {
     this.engine.onExit = () => this.finishEngine();
 
     // ------------------------------------------------------------ gameplay wiring
+    this.buildSecrets();
     this.registerCheckpoints();
     this.registerInteractions();
     this.registerTriggers();
@@ -783,6 +800,7 @@ export class QuietCellLevel implements Level {
       contains: boxVolume(v3(S.x0, S.floorY - 0.5, S.gapNear + 0.3), v3(S.x1, S.floorY + 3, S.z1 - 0.1)),
       onEnter: () => {
         if (checkpoints.reach('landing')) {
+          this.showArea('shaft', 'The Maintenance Shaft', 'Between the cells and the engine');
           this.landingLight.ignite();
           events.emit('sfx', { name: 'ignite', x: this.landingLight.lampWorld.x, y: this.landingLight.lampWorld.y, z: this.landingLight.lampWorld.z });
           progression.setObjective(progression.has('kicker.taken') ? 'Cross the maintenance shaft' : 'Check the tool roll on the crate');
@@ -1075,6 +1093,7 @@ export class QuietCellLevel implements Level {
           this.engine.openRoute();
           events.emit('sfx', { name: 'lever', x: 1.4, y: LOOKOUT.y + 1, z: HALL.aWall - 0.1 });
           progression.setObjective('Follow the service lights down into the hall');
+          this.showArea('hall', 'The Turbine Hall', 'Breakwater runs on the tide');
           this.ropeHintAt = this.time + 16;
         },
       },
@@ -1112,6 +1131,200 @@ export class QuietCellLevel implements Level {
     this.ctx.camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
     this.sequence = null;
     this.ctx.events.emit('sfx', { name: 'paper' });
+  }
+
+  // ---------------------------------------------------------------- secrets and toys
+
+  /**
+   * Off the main path: five chalk "IV" marks (one beside the tally marks in Mara's cell, one on a
+   * shelf only a double jump reaches, one at the lookout, one under boards only a ground pound
+   * breaks, one in a cell whose bars someone bent open), and a steam whistle by the scaffold, for
+   * the joy of pulling it.
+   */
+  private buildSecrets(): void {
+    const { scene, physics, materials: m, interactions, events } = this.ctx;
+    const S = SHAFT;
+    const L = LOOKOUT;
+    const T1 = HALL.tierY[0];
+    const T3 = HALL.tierY[2];
+    const radial = (k: number) => v3(Math.sin(sideAngle(k)), 0, Math.cos(sideAngle(k)));
+    const onSide = (k: number, a: number, f: number, y: number) => {
+      const [x, z] = sideFraction(k, a, f);
+      return v3(x, y, z);
+    };
+    const root = new THREE.Group();
+    root.name = 'secrets';
+    scene.add(root);
+
+    // A maintenance shelf high on the breach wall over the far landing. A single jump falls short
+    // (with the controller's step-up) by about 0.4 m; a double jump clears it with 0.45 m to spare.
+    const shelfTop = S.floorY + 2.15;
+    const sx0 = 2.05;
+    const sz1 = S.z0 + 0.8;
+    const sc = v3((sx0 + S.x1) / 2, shelfTop - 0.06, (S.z0 + sz1) / 2);
+    const shelf = new THREE.Mesh(boxProjectUVs(new THREE.BoxGeometry(S.x1 - sx0, 0.12, sz1 - S.z0)), m.wood);
+    shelf.position.copy(sc);
+    shelf.castShadow = shelf.receiveShadow = true;
+    root.add(shelf);
+    for (const x of [sx0 + 0.25, S.x1 - 0.3]) {
+      const brace = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.95), m.ironDark);
+      brace.position.set(x, shelfTop - 0.45, S.z0 + 0.36);
+      brace.rotation.x = -0.72;
+      root.add(brace);
+    }
+    const toolbox = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.2, 0.22, 2, 0.02), m.iron);
+    toolbox.position.set(3.25, shelfTop + 0.1, S.z0 + 0.3);
+    toolbox.rotation.y = 0.2;
+    toolbox.castShadow = true;
+    root.add(toolbox);
+    const shelfCol = physics.box(sc, v3((S.x1 - sx0) / 2, 0.06, (sz1 - S.z0) / 2));
+    physics.setSurface(shelfCol, 'wood');
+
+    // Boards over an old floor hatch in the dead end left of the scaffold (tier one, side 17),
+    // with a chalk arrow on the pier above pointing down at them.
+    const kB = 17;
+    const boardsAt = onSide(kB, 11.0, 0.84, T1);
+    this.boards = new BoardedHatch(physics, m, boardsAt, sideAngle(kB));
+    root.add(this.boards.group);
+    const arrowTex = chalkArrowTexture();
+    const arrow = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.34, 0.68),
+      new THREE.MeshStandardMaterial({ map: arrowTex, emissiveMap: arrowTex, emissive: '#f4ecd8', emissiveIntensity: 0.35, transparent: true, roughness: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
+    );
+    const arrowAt = onSide(kB, HALL.aWall - 0.012, 0.9, T1 + 1.3);
+    arrow.position.copy(arrowAt);
+    arrow.lookAt(arrowAt.clone().sub(radial(kB)));
+    root.add(arrow);
+    events.on('groundPound', (e) => {
+      if (this.boards.broken) return;
+      const c = this.boards.centre;
+      const onBoards = e.collider === this.boards.collider.handle || (Math.hypot(e.x - c.x, e.z - c.z) < 0.75 && Math.abs(e.y - c.y) < 0.6);
+      if (onBoards) this.breakBoards();
+    });
+
+    // The cell with the bent bars (tier three, side 9): someone slept here.
+    const cellBack = HALL.aWall + HALL.wallT + HALL.recess;
+    const bedroll = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 1.2, 4, 10), m.wool);
+    bedroll.position.copy(onSide(9, cellBack - 0.5, 0.36, T3 + 0.2));
+    bedroll.rotation.set(Math.PI / 2, 0, sideAngle(9) + Math.PI / 2);
+    bedroll.scale.set(1, 1, 0.6);
+    root.add(bedroll);
+    const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.12, 8), m.ceramic);
+    const candleAt = onSide(9, cellBack - 0.35, 0.66, T3 + 0.06);
+    candle.position.copy(candleAt);
+    root.add(candle);
+    const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowSprite(), color: '#ffb46a', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.7 }));
+    flame.position.copy(candleAt).setY(T3 + 0.2);
+    flame.scale.setScalar(0.5);
+    root.add(flame);
+
+    // The marks.
+    this.marks = new ChalkMarks([
+      { id: 'cell', pos: v3(CELL.x0 + 0.014, CELL.y + 0.82, 31.62), normal: v3(1, 0, 0), radius: 1.35, size: 0.28 },
+      { id: 'shelf', pos: v3(2.85, shelfTop + 0.8, S.z0 + 0.012), normal: v3(0, 0, 1), radius: 0.85 },
+      { id: 'lookout', pos: v3(L.x0 + 0.012, L.y + 0.55, 16.5), normal: v3(1, 0, 0), radius: 1.1 },
+      { id: 'boards', pos: boardsAt.clone().setY(T1 + 0.012), normal: v3(0, 1, 0), radius: 1.15, size: 0.6, hidden: true },
+      { id: 'open-cell', pos: onSide(9, cellBack - 0.012, 0.56, T3 + 1.25), normal: radial(9).negate(), radius: 1.2 },
+    ]);
+    root.add(this.marks.group);
+
+    // The steam whistle: a brass bell on a feed pipe against the pier, and a lever arm whose chain
+    // hangs to a wooden grip at hand height.
+    const kW = 1;
+    const out = radial(kW).negate();
+    const wBase = onSide(kW, HALL.aWall - 0.14, 0.88, T1);
+    const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 10), m.brass);
+    pipe.position.copy(wBase).setY(T1 + 1.1);
+    const bell = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.11, 0.46, 18), m.brass);
+    bell.position.copy(wBase).setY(T1 + 2.43);
+    const slot = new THREE.Mesh(new THREE.CylinderGeometry(0.112, 0.112, 0.05, 18), m.ironDark);
+    slot.position.copy(wBase).setY(T1 + 2.28);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.1, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), m.brass);
+    cap.position.copy(wBase).setY(T1 + 2.66);
+    const valve = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.16), m.ironDark);
+    valve.position.copy(wBase).setY(T1 + 2.15);
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.42), m.ironDark);
+    arm.position.copy(wBase).addScaledVector(out, 0.21).setY(T1 + 2.15);
+    arm.rotation.y = sideAngle(kW);
+    for (const o of [pipe, bell, slot, cap, valve, arm]) {
+      o.castShadow = true;
+      root.add(o);
+    }
+    this.whistleHandle = new THREE.Group();
+    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.78, 4), m.ironDark);
+    chain.position.y = 0.43;
+    const grip = new THREE.Mesh(new THREE.CapsuleGeometry(0.032, 0.14, 4, 8), m.wood);
+    grip.rotation.z = Math.PI / 2;
+    grip.rotation.y = sideAngle(kW);
+    this.whistleHandle.add(chain, grip);
+    this.whistleHandle.position.copy(wBase).addScaledVector(out, 0.42).setY(T1 + 1.35);
+    this.whistleHandleY = this.whistleHandle.position.y;
+    root.add(this.whistleHandle);
+    this.whistleAt.copy(this.whistleHandle.position);
+    this.whistleTop.copy(wBase).setY(T1 + 2.3);
+    // Steam leaves through the slot, up and out over the walkway.
+    this.whistleSteam = new SteamEmitter(this.whistleTop.clone().addScaledVector(out, 0.1), v3(0, 1.8, 0).addScaledVector(out, 1.1), 0, new THREE.Color('#e4eaec'));
+    this.whistleSteam.peakOpacity = 0.32;
+    root.add(this.whistleSteam.group);
+    interactions.add({
+      id: 'whistle',
+      position: this.whistleAt,
+      radius: 1.6,
+      prompt: () => (this.whistleT > 0 ? null : 'Pull the steam whistle'),
+      interact: () => this.pullWhistle(),
+    });
+  }
+
+  private breakBoards(): void {
+    const { events, progression, camera, effects } = this.ctx;
+    const c = this.boards.centre;
+    this.boards.smash();
+    this.marks.reveal('boards');
+    progression.set('boards.broken');
+    events.emit('sfx', { name: 'boardsBreak', x: c.x, y: c.y, z: c.z });
+    effects.burst(c.clone().setY(c.y + 0.15), { count: 16, color: '#7d5a3a', speed: 3, spread: 1.2, life: 0.8, size: [0.08, 0.2], rise: 0.5, opacity: 0.8 });
+    camera.shake(0.2);
+  }
+
+  private pullWhistle(): void {
+    const { player, events, camera, dialogue, progression } = this.ctx;
+    if (this.whistleT > 0) return;
+    this.whistleT = 2.2;
+    this.whistlePulls++;
+    player.lockFor(0.35, this.whistleAt);
+    const h = this.whistleAt;
+    events.emit('sfx', { name: 'whistlePull', x: h.x, y: h.y, z: h.z });
+    this.later(0.15, () => {
+      const t = this.whistleTop;
+      events.emit('sfx', { name: 'whistle', x: t.x, y: t.y, z: t.z });
+      this.whistleSteam.burst = 1.6;
+      camera.shake(0.12);
+    });
+    progression.set('whistle.pulled');
+    if (this.whistlePulls === 1) this.later(2.1, () => dialogue.say('Mara', '...Sorry. I had to.', 2));
+    if (this.whistlePulls === 3) this.later(2.3, () => dialogue.say('Horn', 'Unscheduled whistle. Pressure loss logged.', 3));
+  }
+
+  private onMarkFound(spot: ChalkMarkSpot): void {
+    const { progression, events, hud, dialogue, effects } = this.ctx;
+    progression.set(`mark.${spot.id}`);
+    const n = this.marks.foundCount;
+    events.emit('sfx', { name: 'markFound', x: spot.pos.x, y: spot.pos.y, z: spot.pos.z });
+    effects.burst(spot.pos, { count: 10, color: '#efe6d2', dir: spot.normal, speed: 1.2, spread: 0.8, life: 0.9, size: [0.06, 0.16], opacity: 0.5, rise: 0.2 });
+    hud.toast(`Chalk mark "IV" \u00b7 ${n} of ${this.marks.total}`);
+    const lines = [
+      "'IV', in chalk. Somebody's been through here before me.",
+      "Another 'IV'. Same hand as the last one.",
+      'Somebody is leaving me a trail.',
+      "Whoever 'IV' is, they climb like a dredger crew.",
+      "All five. 'IV'... I know that hand.",
+    ];
+    dialogue.say('Mara', lines[Math.min(n, lines.length) - 1], 3.2);
+  }
+
+  /** A one-time area title (once per run). */
+  private showArea(id: string, title: string, sub: string): void {
+    if (this.ctx.progression.set(`area.${id}`)) this.ctx.hud.areaTitle(title, sub);
   }
 
   private later(seconds: number, run: () => void): void {
@@ -1173,6 +1386,7 @@ export class QuietCellLevel implements Level {
               title: 'Chapter One complete',
               body: 'Mara is out of the cell block, and the old seaplane is waiting in the hangar on the spur. Next: Chapter Two, <i>Wings in a Cage</i> (in development).',
               reward: true,
+              marks: { found: this.marks.foundCount, total: this.marks.total },
             });
           },
         },
@@ -1187,7 +1401,7 @@ export class QuietCellLevel implements Level {
     if (feet.y > HALL.tierY[2] - 1 && this.hangar.isLit) return this.hangar.focus;
     let best: THREE.Vector3 | null = null;
     let bestScore = Infinity;
-    for (const p of this.pois) {
+    for (const p of [...this.pois, ...this.marks.unfound]) {
       const dx = p.x - feet.x;
       const dz = p.z - feet.z;
       const d = Math.hypot(dx, dz);
@@ -1275,6 +1489,20 @@ export class QuietCellLevel implements Level {
       if (this.sequence.steps.every((s) => s.done)) this.sequence = null;
     }
 
+    // Chalk marks within reach of Mara's chest.
+    const mark = this.marks.collect(this.chest.copy(player.feet).setY(player.feet.y + 1.0));
+    if (mark) this.onMarkFound(mark);
+    // Standing on the boards: Mara notices them, and later says how to get through.
+    if (!this.boards.broken) {
+      const c = this.boards.centre;
+      if (player.grounded && Math.hypot(player.feet.x - c.x, player.feet.z - c.z) < 0.9) {
+        this.boardsNearT += dt;
+        if (progression.set('boards.seen')) dialogue.say('Mara', 'Boards nailed over a hatch. And a chalk arrow pointing right at them.', 3.6);
+        if (this.boardsNearT > 5 && progression.has('kicker.taken') && progression.set('boards.hint')) dialogue.say('Mara', "They won't pry up. Something heavier, from above...", 3.2);
+      } else this.boardsNearT = 0;
+    }
+    this.whistleT = Math.max(0, this.whistleT - dt);
+
     // Puzzle state.
     const pulse = enginePulse(time);
     const latchedNow = this.logic.update(dt, pulse);
@@ -1348,6 +1576,10 @@ export class QuietCellLevel implements Level {
     this.lookoutLight.update(dt, time);
     for (const l of this.lamps) l.update(dt, time);
     this.workshop.update(dt);
+    this.marks.update(dt);
+    this.boards.update(dt);
+    this.whistleSteam.update(dt);
+    this.whistleHandle.position.y = this.whistleHandleY - 0.16 * Math.min(1, Math.max(0, (this.whistleT - 1.2) / 0.4));
     // The cell lamp's light is the workshop's oil lamp during the opening.
     if (this.inWorkshop && this.cellLamp.light) this.cellLamp.light.intensity = 5.5 * this.workshop.lampBrightness;
     this.dripSteam.update(dt);
@@ -1391,6 +1623,11 @@ export class QuietCellLevel implements Level {
     this.hangar.setLit(false, true);
     this.kit.visible = true;
     this.setWorkshop(false);
+    this.marks.reset();
+    this.boards.reset();
+    this.boardsNearT = 0;
+    this.whistleT = 0;
+    this.whistlePulls = 0;
     this.startIntro();
   }
 
