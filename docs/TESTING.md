@@ -40,14 +40,53 @@ and fail.
 
 ### `tests/e2e/story.spec.ts`: Chapter One opening (2)
 
-1. **Watched.** Mara starts lying on the cell floor (pelvis under 0.35 m above her feet) with
-   control locked, the first card on screen, no objective and the skip prompt visible. Every
-   narration card, Mara's lines and the chapter title appear. Control returns after 27–32 s with
-   the objective "Open the service hatch", the cell checkpoint, the camera released, the cards
-   gone and Mara standing.
-2. **Skipped.** Space half a second in gives the same end state at once. The skip press neither
-   jumps nor moves her, skipped narration is not queued, and the gameplay line ("Fresh copper…")
-   plays exactly once.
+1. **Watched.** Mara starts sitting at her bench in the workshop (far from the prison; pelvis
+   0.3–0.8 m above her feet), control locked, letterboxed, the first caption ("Saltmere…") on
+   screen, no objective, the skip prompt visible. Every caption appears (the tide engines, the
+   flood diversion, staying up to prove it wrong, "She woke up somewhere else.", the chapter
+   title), she is seen lying on the cell floor after the cut (pelvis under 0.35 m), and Mara's
+   lines play. Control returns after 37–41 s with the objective "Open the service hatch", the cell
+   checkpoint, the camera released, the captions and letterbox gone, Mara standing, and the
+   workshop struck: hidden, the cell lamp's light back in its fixture, the sky light restored.
+2. **Skipped.** Space half a second in (in the workshop) gives the same end state at once, at the
+   cell spawn. The skip press neither jumps nor moves her, skipped narration is not queued, and
+   the gameplay line ("Fresh copper…") plays exactly once.
+
+### `tests/e2e/moves.spec.ts`: dash, sprint and the steam kicker (6)
+
+Before the kit there is no double jump or air dash, and picking it up enables them. The ground dash
+covers its distance; holding it sprints. The double jump adds height once per airtime and refills on
+landing. The air dash is a horizontal burst that holds height, once per airtime. The ground pound
+hovers, slams at speed and reports where it landed, but not right above the floor.
+
+### `tests/e2e/audio.spec.ts`: sound wiring (1)
+
+A real click unlocks audio; the samples load; every music and ambience bed decodes (and the
+workshop's generated rain is an 8 s loop); the title, cell and hall themes follow the place.
+
+### `tests/e2e/sequence.spec.ts`: no shortcuts past the route (5)
+
+Each test tries a shortcut with the real controller (run, jump, double jump, air dash) and checks
+that it fails: walking tier one the long way round (from the scaffold, and past the engine); walking
+tier three back round to the far side of the breach; reaching the exit gantry without riding the ram
+(from two spots, with double jump, double jump + dash, dash + double jump); jumping over the steam
+curtain; clearing the lookout's rope gate before the reveal. Without the fixes in `a957412` the
+first three fail.
+
+### `tests/e2e/secrets.spec.ts`: secrets and toys (5)
+
+The cell, lookout and bent-bar cell marks are found by going to them (not from the spawn or the way
+in); the bent-bar cell is walked into on its own floor. The shelf mark: a single jump lands back on
+the landing, a double jump lands on the shelf. The boards: standing and jumping on them does
+nothing (Mara notices them), a ground pound breaks them and the mark beneath is found. The whistle
+blows, ignores a second pull while blowing, and the third pull gets the Watch's line. Area titles,
+the end card's mark count ("2/5"), and "Restart section" puts every secret back.
+
+### `tests/e2e/grind.spec.ts`: the feed pipe (3)
+
+Walking off the lookout onto the pipe rides it (2–4.5 s) and lands Mara on the tier-one walkway at
+side 1, short of the gap, with the camera standing back while she rides. A jump leaves the pipe with
+height and the kicker refilled. Stepping off the left of the gate takes the scaffold way down.
 
 ### `tests/e2e/slice.spec.ts`: first slice (8)
 
@@ -214,23 +253,25 @@ expected vs actual, evidence, and acceptance criteria for the fix.
 
 ## Latest results
 
-At commit `326114e`, on Windows 11 Pro with Node 22.13.1. Edge runs on the RTX 2050 through the
-Windows setting.
+At commit `3e1b230` (Chapter One v2), on Windows 11 Pro with Node 22.13.1. Edge runs on the RTX
+2050 through the Windows setting.
 
 - `npx vitest run`: **54/54** unit tests in 8 files.
-- `PW_CHANNEL=msedge npm run test:e2e`: **62/62 passed in 9.3 min**:
+- `PW_CHANNEL=msedge npm run test:e2e`: **82/82 passed in 7.2 min**:
 
-  | Spec | Tests |
-  | --- | ---: |
-  | engine | 8 |
-  | input | 11 |
-  | jumps | 20 |
-  | parkour | 13 |
-  | slice | 8 |
-  | story | 2 |
+  | Spec | Tests | Spec | Tests |
+  | --- | ---: | --- | ---: |
+  | engine | 8 | moves | 6 |
+  | input | 11 | audio | 1 |
+  | jumps | 20 | sequence | 5 |
+  | parkour | 13 | secrets | 5 |
+  | slice | 8 | grind | 3 |
+  | story | 2 | | |
 
 - Running jump measured at **3.39 m**, apex 1.38 m.
-- Each commit on the branch type-checks.
+- Each commit on the branch type-checks (each built from a `git archive` copy).
 - Not run at this commit: Playwright's bundled Chromium e2e suite (software rendering).
-- Frame times and draw calls:
+- Frame times, load time and draw calls:
   [STATUS.md](STATUS.md#verification-this-pass).
+- `node scripts/capture-showcase.mjs` records a short real-time showcase (WebM, local, in
+  `artifacts/showcase/`): the opening, the moves, the grind, the boards and the whistle.

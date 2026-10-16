@@ -96,6 +96,10 @@ with each texture's real-world size; the game tiles every set at that size. Abou
 | Mara's scarf (knit wrap and Verlet tails) | `src/player/PlayerAvatar.ts`, `src/player/Scarf.ts` |
 | Sky, water, light shafts, dust, steam | Shaders and particles in `src/world/Atmosphere.ts` |
 | Steam, hiss, vent, drips, the engine's drone, the intercom, the horn | Web Audio synthesis, `src/audio/Audio.ts` (also the fallback for any sample that has not loaded) |
+| The steam whistle's chord, the grind's metal scrape, the lamp going out | Web Audio synthesis, `src/audio/Audio.ts` |
+| The workshop's rain (an 8 s seamless stereo loop: pink-noise wash, patter, drops on the glass) | Generated at run time, `rainBuffer()` in `src/audio/Audio.ts`; no recording |
+| Mara's workshop in Saltmere (the opening): room, bench, oil lamp, model tide engine, the harbour view, rain on the glass, the passing figure, the diversion plans and her notes | `src/levels/breakwater/Workshop.ts` (geometry and canvas drawings; original) |
+| Chalk "IV" marks and the chalk arrow, the boarded hatch, the feed pipe and its chains, the steam whistle, the bent-bar cell | `src/world/props/ChalkMarks.ts`, `src/world/props/BoardedHatch.ts`, `src/levels/breakwater/QuietCellLevel.ts`, `src/levels/breakwater/TurbineHall.ts` |
 | UI fonts | The player's system fonts; nothing is bundled |
 
 ## Libraries
