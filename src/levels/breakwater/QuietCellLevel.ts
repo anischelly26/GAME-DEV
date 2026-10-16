@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { Level, LevelContext, RouteStep } from '../Level';
-import { Batcher, boxProjectUVs, worldBox } from '../../world/geometry';
+import { Batcher, boxProjectUVs, mergeStatic, worldBox } from '../../world/geometry';
 import { Palette } from '../../world/materials';
 import { saltStainTexture } from '../../world/textures';
 import { PressureHatch, OPENING } from '../../world/props/PressureHatch';
@@ -24,6 +24,15 @@ import { buildTurbineHall, type TurbineHall } from './TurbineHall';
 import { EngineRoute, ROUTE_RAIL_GAPS, ROUTE_WALKWAY_OVERRIDES } from './EngineRoute';
 
 const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+/** Merged meshes start without shadow flags: cast and receive for everything under `root` except `skip`. */
+function castShadows(root: THREE.Object3D, skip: THREE.Object3D[]): void {
+  for (const child of root.children) {
+    if (skip.includes(child)) continue;
+    child.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) o.castShadow = o.receiveShadow = true;
+    });
+  }
+}
 /** Hall cells whose bars someone bent open ("tier:k"): tier three, side 9, before the ram. */
 const OPEN_CELLS = new Set(['2:9']);
 
@@ -611,6 +620,7 @@ export class QuietCellLevel implements Level {
     // once with everything else behind the loading screen and its shaders are ready.
     this.workshop = new Workshop(m, physics);
     this.workshop.visible = ctx.intro;
+    this.workshop.group.userData.skipWarmUp = !ctx.intro;
     scene.add(this.workshop.group);
     this.engine.onExit = () => this.finishEngine();
 
@@ -1169,6 +1179,12 @@ export class QuietCellLevel implements Level {
     const root = new THREE.Group();
     root.name = 'secrets';
     scene.add(root);
+    // Props are grouped by place and each group is merged on its own, so each still culls.
+    const shelfRoot = new THREE.Group();
+    const arrowRoot = new THREE.Group();
+    const cellRoot = new THREE.Group();
+    const whistleRoot = new THREE.Group();
+    root.add(shelfRoot, arrowRoot, cellRoot, whistleRoot);
 
     // A maintenance shelf high on the breach wall over the far landing. A single jump falls short
     // (with the controller's step-up) by about 0.4 m; a double jump clears it with 0.45 m to spare.
@@ -1179,18 +1195,18 @@ export class QuietCellLevel implements Level {
     const shelf = new THREE.Mesh(boxProjectUVs(new THREE.BoxGeometry(S.x1 - sx0, 0.12, sz1 - S.z0)), m.wood);
     shelf.position.copy(sc);
     shelf.castShadow = shelf.receiveShadow = true;
-    root.add(shelf);
+    shelfRoot.add(shelf);
     for (const x of [sx0 + 0.25, S.x1 - 0.3]) {
       const brace = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.95), m.ironDark);
       brace.position.set(x, shelfTop - 0.45, S.z0 + 0.36);
       brace.rotation.x = -0.72;
-      root.add(brace);
+      shelfRoot.add(brace);
     }
     const toolbox = new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.2, 0.22, 2, 0.02), m.iron);
     toolbox.position.set(3.25, shelfTop + 0.1, S.z0 + 0.3);
     toolbox.rotation.y = 0.2;
     toolbox.castShadow = true;
-    root.add(toolbox);
+    shelfRoot.add(toolbox);
     const shelfCol = physics.box(sc, v3((S.x1 - sx0) / 2, 0.06, (sz1 - S.z0) / 2));
     physics.setSurface(shelfCol, 'wood');
 
@@ -1208,7 +1224,7 @@ export class QuietCellLevel implements Level {
     const arrowAt = onSide(kB, HALL.aWall - 0.012, 0.9, T1 + 1.3);
     arrow.position.copy(arrowAt);
     arrow.lookAt(arrowAt.clone().sub(radial(kB)));
-    root.add(arrow);
+    arrowRoot.add(arrow);
     events.on('groundPound', (e) => {
       if (this.boards.broken) return;
       const c = this.boards.centre;
@@ -1222,15 +1238,15 @@ export class QuietCellLevel implements Level {
     bedroll.position.copy(onSide(9, cellBack - 0.5, 0.36, T3 + 0.2));
     bedroll.rotation.set(Math.PI / 2, 0, sideAngle(9) + Math.PI / 2);
     bedroll.scale.set(1, 1, 0.6);
-    root.add(bedroll);
+    cellRoot.add(bedroll);
     const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.12, 8), m.ceramic);
     const candleAt = onSide(9, cellBack - 0.35, 0.66, T3 + 0.06);
     candle.position.copy(candleAt);
-    root.add(candle);
+    cellRoot.add(candle);
     const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowSprite(), color: '#ffb46a', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.7 }));
     flame.position.copy(candleAt).setY(T3 + 0.2);
     flame.scale.setScalar(0.5);
-    root.add(flame);
+    cellRoot.add(flame);
 
     // The marks.
     this.marks = new ChalkMarks([
@@ -1262,7 +1278,7 @@ export class QuietCellLevel implements Level {
     arm.rotation.y = sideAngle(kW);
     for (const o of [pipe, bell, slot, cap, valve, arm]) {
       o.castShadow = true;
-      root.add(o);
+      whistleRoot.add(o);
     }
     this.whistleHandle = new THREE.Group();
     const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 0.78, 4), m.ironDark);
@@ -1280,6 +1296,14 @@ export class QuietCellLevel implements Level {
     this.whistleSteam = new SteamEmitter(this.whistleTop.clone().addScaledVector(out, 0.1), v3(0, 1.8, 0).addScaledVector(out, 1.1), 0, new THREE.Color('#e4eaec'));
     this.whistleSteam.peakOpacity = 0.32;
     root.add(this.whistleSteam.group);
+    // One draw per material for the static props (they also draw into the moon's shadow map).
+    mergeStatic(shelfRoot);
+    mergeStatic(arrowRoot);
+    mergeStatic(cellRoot, [flame]);
+    mergeStatic(whistleRoot);
+    // The shelf and the whistle are big enough to cast a shadow worth drawing.
+    castShadows(shelfRoot, []);
+    castShadows(whistleRoot, []);
     interactions.add({
       id: 'whistle',
       position: this.whistleAt,
@@ -1392,6 +1416,9 @@ export class QuietCellLevel implements Level {
       const chain = new Chain(m.ironDark, v3(p.x, HALL.roofY, p.z), p.clone().setY(p.y + radius), 0.12);
       root.add(chain.mesh);
     }
+    // Tube, collars, flanges and chains: one draw per material.
+    mergeStatic(root);
+    castShadows(root, []);
     traversal.addRail(rail);
     this.feedRail = rail;
     events.on('grind', (g) => {

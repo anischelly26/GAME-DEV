@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type RAPIER from '@dimforge/rapier3d-compat';
 import type { MaterialLibrary } from '../materials';
 import type { Physics } from '../../physics/Physics';
+import { mergeStatic } from '../geometry';
 
 /**
  * Old planks nailed over a floor hatch. Walking or jumping on them does nothing; a ground pound
@@ -44,17 +45,18 @@ export class BoardedHatch {
       const p = new THREE.Mesh(plank, m.wood);
       p.position.set(-0.39 + i * 0.26, 0.055, (i % 2 ? 0.02 : -0.02));
       p.rotation.y = (i - 1.5) * 0.02;
-      p.castShadow = p.receiveShadow = true;
+      // Flat on the floor their shadows don't show: no shadow-map draws for them.
+      p.receiveShadow = true;
       this.boards.add(p);
     }
     for (const z of [-0.32, 0.32]) {
       const b = new THREE.Mesh(new THREE.BoxGeometry(1.06, 0.04, 0.12), m.wood);
       b.position.set(0, 0.1, z);
       b.rotation.y = z * 0.08;
-      b.castShadow = true;
       this.boards.add(b);
     }
     this.group.add(this.boards);
+    mergeStatic(this.group, [this.boards]);
     this.group.updateMatrixWorld(true);
     for (const child of this.boards.children) {
       const mesh = child as THREE.Mesh;

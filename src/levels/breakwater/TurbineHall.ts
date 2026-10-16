@@ -219,7 +219,6 @@ export function buildTurbineHall(
           const bar = new THREE.Mesh(geo, m.iron);
           bar.applyMatrix4(sideMatrix(k, u, y0, HALL.aWall + HALL.wallT * 0.5));
           bar.rotateZ(lean);
-          bar.castShadow = true;
           root.add(bar);
         }
       }

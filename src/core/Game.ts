@@ -227,17 +227,30 @@ export class Game {
    * Draw everything once, with culling off, behind the loading screen. three.js uploads a mesh's
    * buffers and textures the first time it is drawn, so on an integrated GPU the first sight of
    * the hall (dropping from the lookout) stalled for up to a second on hundreds of small uploads.
+   * Hidden props are shown for this one draw too (never lights: that would change every shader):
+   * their shaders would otherwise link on first sight, which on the Intel GPU froze the game for
+   * about half a second when the steam kicker's canister first appeared. Subtrees marked
+   * `userData.skipWarmUp` (the opening's set when the opening is off) are left out.
    */
   private warmUp(): void {
     const culled: THREE.Object3D[] = [];
-    this.scene.traverse((o) => {
+    const shown: THREE.Object3D[] = [];
+    const visit = (o: THREE.Object3D) => {
+      if (o.userData.skipWarmUp) return;
+      if (!o.visible && !(o as THREE.Light).isLight) {
+        o.visible = true;
+        shown.push(o);
+      }
       if (((o as THREE.Mesh).isMesh || (o as THREE.Sprite).isSprite || (o as THREE.Points).isPoints) && o.frustumCulled) {
         o.frustumCulled = false;
         culled.push(o);
       }
-    });
+      for (const c of o.children) visit(c);
+    };
+    visit(this.scene);
     this.pipeline.render(0);
     for (const o of culled) o.frustumCulled = true;
+    for (const o of shown) o.visible = false;
   }
 
   private setupLights(): void {
