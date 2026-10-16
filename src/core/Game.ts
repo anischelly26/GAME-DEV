@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { EventBus, type GameEvents } from './Events';
-import { Input, BASE_RADIANS_PER_PIXEL } from './Input';
+import { Input, BASE_RADIANS_PER_PIXEL, DEFAULT_LOOK_SENSITIVITY } from './Input';
 import { Physics, RAPIER } from '../physics/Physics';
 import { RenderPipeline } from '../render/RenderPipeline';
 import { createTextureLibrary, type TextureLibrary } from '../world/textures';
@@ -23,7 +23,10 @@ import { Autopilot } from '../dev/Autopilot';
 import { TraversalSurfaces } from '../player/Traversal';
 import { smoothstep } from './math';
 
-export const FIXED_DT = 1 / 60;
+export /** Sounds that also shake the camera, and how hard (0..1 trauma) at the source. */
+const SHAKE_SFX: Record<string, number> = { latch: 0.3, piston: 0.35, engineThump: 0.07, lever: 0.08 };
+
+const FIXED_DT = 1 / 60;
 
 export interface GameOptions {
   /** Dev hotkeys, debug overlay, test API. */
@@ -176,6 +179,7 @@ export class Game {
     this.teleportToCheckpoint(startId);
     // Compile shaders up front to avoid a hitch on the first frame.
     this.pipeline.renderer.compile(this.scene, this.camera.camera);
+    this.warmUp();
 
     if (this.options.dev || this.options.test) this.installDevTools();
     this.lastFrame = performance.now();
@@ -190,6 +194,23 @@ export class Game {
       this.state = 'title';
       this.hud.showTitle(() => this.begin());
     }
+  }
+
+  /**
+   * Draw everything once, with culling off, behind the loading screen. three.js uploads a mesh's
+   * buffers and textures the first time it is drawn, so on an integrated GPU the first sight of
+   * the hall (dropping from the lookout) stalled for up to a second on hundreds of small uploads.
+   */
+  private warmUp(): void {
+    const culled: THREE.Object3D[] = [];
+    this.scene.traverse((o) => {
+      if (((o as THREE.Mesh).isMesh || (o as THREE.Sprite).isSprite || (o as THREE.Points).isPoints) && o.frustumCulled) {
+        o.frustumCulled = false;
+        culled.push(o);
+      }
+    });
+    this.pipeline.render(0);
+    for (const o of culled) o.frustumCulled = true;
   }
 
   private setupLights(): void {
@@ -249,8 +270,20 @@ export class Game {
     this.events.on('land', ({ impact }) => {
       this.avatar.onLand(impact);
       if (impact > 3) this.audio.play('land', this.player.feet, Math.min(1, impact / 10));
+      if (impact > 8) this.camera.shake(Math.min(0.45, 0.12 + (impact - 8) / 14));
     });
-    this.events.on('sfx', (e) => this.audio.play(e.name, e.x !== undefined ? { x: e.x, y: e.y ?? 0, z: e.z ?? 0 } : undefined, e.volume ?? 1));
+    this.events.on('sfx', (e) => {
+      this.audio.play(e.name, e.x !== undefined ? { x: e.x, y: e.y ?? 0, z: e.z ?? 0 } : undefined, e.volume ?? 1);
+      // Heavy machinery is felt as well as heard (camera shake, if enabled), fading with distance.
+      const weight = SHAKE_SFX[e.name];
+      if (!weight) return;
+      if (e.name === 'engineThump') {
+        if (this.camera.activeZone === 'hall') this.camera.shake(weight);
+        return;
+      }
+      const d = e.x !== undefined ? Math.hypot(e.x - this.player.feet.x, (e.y ?? 0) - this.player.feet.y, (e.z ?? 0) - this.player.feet.z) : 0;
+      this.camera.shake(weight * Math.max(0, 1 - d / 12));
+    });
     this.avatar.onFootstep = (speed) => this.audio.play('footstep', this.player.feet, Math.min(1, speed / 6) * 0.8);
 
     this.input.onPauseRequest = () => {
@@ -316,8 +349,14 @@ export class Game {
   }
 
   private applySettings(s: Settings): void {
-    this.input.mouseRadiansPerPixel = BASE_RADIANS_PER_PIXEL * s.sensitivity;
+    this.input.mouseRadiansPerPixel = BASE_RADIANS_PER_PIXEL;
+    this.input.lookScaleX = s.lookX / DEFAULT_LOOK_SENSITIVITY;
+    this.input.lookScaleY = s.lookY / DEFAULT_LOOK_SENSITIVITY;
+    this.input.invertX = s.invertX;
     this.input.invertY = s.invertY;
+    this.camera.settings.assist = s.cameraAssist;
+    this.camera.settings.shake = s.cameraShake;
+    this.camera.settings.fovHorizontal = s.fov;
     this.audio.setVolume(s.volume);
     if (!this.options.quality && !this.options.test) this.setQuality(s.quality === 'auto' ? this.pipeline.recommendedQuality : s.quality);
   }
@@ -326,6 +365,26 @@ export class Game {
   setQuality(level: 'high' | 'low'): void {
     this.pipeline.setQuality(level);
     this.avatar?.setDetail(level);
+    // Low: small props (rivets, bolts, cups, chain links; bounding radius under 0.25 m) stop
+    // casting moon shadows. At Low's shadow resolution they were a few texels each, yet they were
+    // 241 of the shadow pass's 392 draw calls every frame (scripts/count-draws.mjs). Mara keeps hers.
+    const avatarParts = new Set<THREE.Object3D>();
+    this.avatar?.root.traverse((o) => avatarParts.add(o));
+    const scale = new THREE.Vector3();
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || avatarParts.has(m)) return;
+      if (m.userData.smallCaster === undefined) {
+        if (!m.castShadow || (m as THREE.InstancedMesh).isInstancedMesh) {
+          m.userData.smallCaster = false;
+          return;
+        }
+        if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
+        m.getWorldScale(scale);
+        m.userData.smallCaster = m.geometry.boundingSphere!.radius * Math.max(scale.x, scale.y, scale.z) < 0.25;
+      }
+      if (m.userData.smallCaster) m.castShadow = level === 'high';
+    });
     this.scene.traverse((o) => {
       const light = o as THREE.Light & { shadow?: THREE.LightShadow };
       if (!light.isLight || !light.shadow) return;
@@ -383,7 +442,7 @@ export class Game {
     if (!this.options.test) this.input.requestPointerLock();
   }
 
-  private complete(card?: { title: string; body: string }): void {
+  private complete(card?: { title: string; body: string; reward?: boolean }): void {
     this.progression.complete = true;
     this.state = 'complete';
     this.input.setGameplayActive(false);
@@ -489,11 +548,16 @@ export class Game {
     this.autoProbeDone = true;
   }
 
+  /** The movement stick from the last fixed step (the camera assist reads it). */
+  private readonly lastMove = { x: 0, y: 0 };
+
   /** One deterministic simulation step. */
   fixedStep(): void {
     const dt = FIXED_DT;
     this.autopilot?.fixedUpdate(dt);
     const frame = this.input.sampleFixed();
+    this.lastMove.x = frame.moveX;
+    this.lastMove.y = frame.moveY;
     if (this.hud.documentOpen && (frame.interactPressed || Math.hypot(frame.moveX, frame.moveY) > 0.5)) {
       this.hud.hideDocument();
       frame.interactPressed = false;
@@ -532,13 +596,21 @@ export class Game {
       grounded: this.player.grounded,
       carrying: false,
       reach: this.player.isLocked && !this.player.frozen ? 0.5 : this.reachPulse,
-      lookAt: focus ? focus.position : null,
+      lookAt: focus ? focus.position : (this.level.pointOfInterest?.(feet, this.player.facing) ?? null),
       mode: this.player.mode,
       modeT: this.player.modeT,
       knockbacks: this.player.knockbacks,
     });
-    this.camera.update(dt, this.input.consumeLook(), feet, this.player.grounded, this.player.speed);
-    this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.5, 1.25, this.camera.distance));
+    const moveLen = Math.hypot(this.lastMove.x, this.lastMove.y);
+    this.camera.update(dt, this.input.consumeLook(), feet, {
+      grounded: this.player.grounded,
+      speed: this.player.speed,
+      mode: this.player.mode,
+      interacting: this.player.isLocked || !!this.hud.documentOpen,
+      forwardInput: moveLen > 0.2 ? this.lastMove.y / moveLen : 0,
+    });
+    // Fade only when the camera is right inside Mara's space: partial dithered opacity reads as grain.
+    this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.38, 0.72, this.camera.distance));
     this.dropShadow.update(this.physics, feet, this.player.grounded, this.player.collider, this.camera.inShot || this.camera.distance > 0.8);
     this.level.update(dt, this.time, alpha);
     this.sky.update(this.time, this.camera.camera.position);

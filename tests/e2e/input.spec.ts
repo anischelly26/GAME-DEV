@@ -9,7 +9,7 @@ import { test, expect, type Page } from '@playwright/test';
  * for animation frames after mouse motion. The simulation itself is still stepped explicitly.
  */
 
-const BASE = 0.0022; // radians per pixel at sensitivity 1 (BASE_RADIANS_PER_PIXEL)
+const BASE = 0.0022; // radians per pixel at the default sensitivity, 25 (BASE_RADIANS_PER_PIXEL)
 
 async function boot(page: Page, query = '?test=1&dev=1'): Promise<void> {
   await page.goto(`/${query}`);
@@ -34,28 +34,53 @@ async function drag(page: Page, dx: number, dy: number): Promise<void> {
   await frames(page, 4);
 }
 
-async function setSensitivity(page: Page, value: number): Promise<void> {
+/** Set a pause-menu setting through the real UI (range: fill; checkbox: check/uncheck; select: option). */
+async function setSetting(page: Page, key: string, value: number | boolean | string): Promise<void> {
   await page.keyboard.press('Escape');
-  await expect(page.locator('[data-s="sensitivity"]')).toBeVisible();
-  await page.locator('[data-s="sensitivity"]').fill(String(value));
+  const input = page.locator(`[data-s="${key}"]`);
+  await expect(input).toBeVisible();
+  if (typeof value === 'boolean') await (value ? input.check() : input.uncheck());
+  else if (typeof value === 'string') await input.selectOption(value);
+  else await input.fill(String(value));
   await page.locator('[data-a="resume"]').click();
   await expect(page.locator('.screen')).toHaveClass(/hidden/);
 }
 
 test.describe('mouse look (R1)', () => {
-  test('100 px of drag turns the camera by sensitivity x 0.0022 rad/px, at every setting', async ({ page }) => {
+  test('100 px of drag turns the camera by (setting / 25) x 0.0022 rad/px, at every horizontal setting', async ({ page }) => {
     await boot(page);
     await step(page, 10);
-    for (const setting of [1, 0.2, 3]) {
-      if (setting !== 1) await setSensitivity(page, setting);
+    for (const setting of [25, 5, 75]) {
+      if (setting !== 25) await setSetting(page, 'lookX', setting);
       await page.evaluate(() => (window as any).__GAME.setCamera(0, 0.32));
       await frames(page);
       const before = await cam(page);
       await drag(page, 100, 0);
       const after = await cam(page);
-      const expected = -100 * BASE * setting;
-      expect(after.yaw - before.yaw, `yaw delta at sensitivity ${setting}`).toBeCloseTo(expected, 3);
+      const expected = (-100 * BASE * setting) / 25;
+      expect(after.yaw - before.yaw, `yaw delta at horizontal sensitivity ${setting}`).toBeCloseTo(expected, 3);
     }
+  });
+
+  test('vertical sensitivity is independent of horizontal; invert-X flips only the yaw', async ({ page }) => {
+    await boot(page);
+    await step(page, 10);
+    await setSetting(page, 'lookY', 50);
+    await page.evaluate(() => (window as any).__GAME.setCamera(0, 0.2));
+    await frames(page);
+    let before = await cam(page);
+    await drag(page, 100, 100);
+    let after = await cam(page);
+    expect(after.yaw - before.yaw).toBeCloseTo(-100 * BASE, 3);
+    expect(after.pitch - before.pitch).toBeCloseTo(100 * BASE * 2, 3);
+    await setSetting(page, 'invertX', true);
+    await page.evaluate(() => (window as any).__GAME.setCamera(0, 0.2));
+    await frames(page);
+    before = await cam(page);
+    await drag(page, 100, 100);
+    after = await cam(page);
+    expect(after.yaw - before.yaw).toBeCloseTo(100 * BASE, 3);
+    expect(after.pitch - before.pitch).toBeCloseTo(100 * BASE * 2, 3);
   });
 
   test('one pixel is a tiny change; vertical limits clamp; invert-Y flips', async ({ page }) => {

@@ -61,6 +61,7 @@ export class PlayerAvatar {
   private airTime = 0;
   private landT = -1;
   private landWeight = 0;
+  private landDur = 0.35;
   private oneShot: { name: string; weight: number; target: number } | null = null;
   private lastKnockbacks = 0;
   private lastMode: AvatarState['mode'] = 'move';
@@ -219,7 +220,11 @@ export class PlayerAvatar {
   onLand(impact: number): void {
     if (impact < 3) return;
     this.landT = 0;
-    this.landWeight = clamp(impact / 10, 0.35, 0.85);
+    // A big drop lands heavier and takes a beat longer to straighten up (animation only: control
+    // is never held back).
+    const big = clamp((impact - 7) / 9, 0, 1);
+    this.landWeight = clamp(impact / 10, 0.35, 0.85) + big * 0.15;
+    this.landDur = 0.35 + big * 0.3;
     const land = this.actions.get('land');
     if (land) {
       land.reset();
@@ -337,7 +342,7 @@ export class PlayerAvatar {
     let land = 0;
     if (this.landT >= 0) {
       this.landT += dt;
-      land = this.landWeight * Math.max(0, 1 - this.landT / 0.35);
+      land = this.landWeight * Math.max(0, 1 - this.landT / this.landDur);
       if (this.landT > 0.35) this.landT = -1;
     }
 

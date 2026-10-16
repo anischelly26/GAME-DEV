@@ -64,6 +64,9 @@ with each texture's real-world size; the game tiles every set at that size. Abou
 | --- | --- |
 | Remaining procedural textures (brass, wool, fabric, iron fallback), diagram, gauge faces, valve and feed plates, stencilled signs, salt stains, tally marks, hazard stripes | `src/world/textures.ts`, `src/world/props/Maintenance.ts`, `src/levels/breakwater/QuietCellLevel.ts` |
 | Architecture, props, mechanisms | Procedural geometry in `src/levels`, `src/world/props` |
+| The seaplane hangar on its rock spur, the floatplane, slipway and windsock (Chapter One's ending) | `src/world/props/Hangar.ts` (original; no third-party models) |
+| Flow chevrons on the puzzle pipework | `src/world/props/FlowStrip.ts` |
+| The warden's transfer order and Ivo's note | Canvas drawing in `src/levels/breakwater/QuietCellLevel.ts` (`transferOrderCanvas`) |
 | Mara's scarf (knit wrap and Verlet tails) | `src/player/PlayerAvatar.ts`, `src/player/Scarf.ts` |
 | Sky, water, light shafts, dust, steam | Shaders and particles in `src/world/Atmosphere.ts` |
 | Sound effects and ambience | Web Audio synthesis, `src/audio/Audio.ts` (**placeholder** quality) |
@@ -79,3 +82,9 @@ with each texture's real-world size; the game tiles every set at that size. Abou
 
 When more third-party assets are added, record each one here with its source URL, author,
 licence and the files that use it. Only add assets whose licence permits use in this project.
+
+**Not used.** The Sketchfab models the owner suggested (prison rooms, an aircraft in a cell,
+Minion Rush scenes and characters) are not in the project. The Minion Rush and Resident Evil items
+are rips of copyrighted games and cannot be used. The CC-BY items (for example a prison room and an
+aircraft) could be used with credit, but this pass did not need them: the hangar and aircraft were
+built in code.

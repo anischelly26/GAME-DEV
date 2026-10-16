@@ -12,18 +12,22 @@ export const Layer = {
   NOCAM: 0x0004,
   PROP: 0x0008,
   CAMERA_QUERY: 0x0010,
+  /** Blocks only the camera: large visual machinery the player never touches (the flywheels). */
+  CAMONLY: 0x0020,
 } as const;
 
 export const groups = (membership: number, filter: number): number =>
   ((membership & 0xffff) << 16) | (filter & 0xffff);
 
 export const PLAYER_GROUPS = groups(Layer.PLAYER, Layer.WORLD | Layer.NOCAM | Layer.PROP);
-export const CAMERA_QUERY_GROUPS = groups(Layer.CAMERA_QUERY, Layer.WORLD);
+export const CAMERA_QUERY_GROUPS = groups(Layer.CAMERA_QUERY, Layer.WORLD | Layer.CAMONLY);
 export const GROUND_QUERY_GROUPS = groups(Layer.PLAYER, Layer.WORLD | Layer.NOCAM | Layer.PROP);
 
 export interface ColliderOptions {
   /** Defaults to true. Set false for bars and railings so the camera can see through them. */
   blocksCamera?: boolean;
+  /** Defaults to true. Set false for camera-only blockers (visual machinery out of the player's way). */
+  blocksPlayer?: boolean;
   friction?: number;
 }
 
@@ -45,9 +49,13 @@ export class Physics {
 
   private finish(desc: RAPIER.ColliderDesc, opts: ColliderOptions = {}, body?: RAPIER.RigidBody): RAPIER.Collider {
     const blocksCamera = opts.blocksCamera ?? true;
-    const membership = blocksCamera ? Layer.WORLD : Layer.NOCAM;
-    const filter = Layer.PLAYER | Layer.PROP | (blocksCamera ? Layer.CAMERA_QUERY : 0);
-    desc.setCollisionGroups(groups(membership, filter));
+    if (opts.blocksPlayer === false) {
+      desc.setCollisionGroups(groups(Layer.CAMONLY, Layer.CAMERA_QUERY));
+    } else {
+      const membership = blocksCamera ? Layer.WORLD : Layer.NOCAM;
+      const filter = Layer.PLAYER | Layer.PROP | (blocksCamera ? Layer.CAMERA_QUERY : 0);
+      desc.setCollisionGroups(groups(membership, filter));
+    }
     desc.setFriction(opts.friction ?? 0.6);
     return this.world.createCollider(desc, body);
   }
@@ -106,6 +114,11 @@ export class Physics {
   /**
    * Sphere sweep used by the camera. Returns the free distance along `dir` (unit vector) up to `maxDist`.
    */
+  /**
+   * Distance a sphere can travel from `origin` along `dir` before touching camera-blocking geometry.
+   * A sphere that starts against a surface and moves away from it is not stopped by it (otherwise
+   * the camera arm collapsed whenever Mara stood against a wall: hanging on a ledge, in the hatch).
+   */
   sphereCastDistance(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, radius: number, exclude?: RAPIER.Collider): number {
     const shape = new RAPIER.Ball(radius);
     const hit = this.world.castShape(
@@ -115,12 +128,21 @@ export class Physics {
       shape,
       0,
       maxDist,
-      true,
+      false,
       RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
       CAMERA_QUERY_GROUPS,
       exclude,
     );
     return hit ? hit.time_of_impact : maxDist;
+  }
+
+  /** Dev: what a camera sphere cast hits (collider centre and size), for diagnosing framing. */
+  debugSphereCast(origin: THREE.Vector3, dir: THREE.Vector3, maxDist: number, radius: number, exclude?: RAPIER.Collider): { toi: number; centre: number[]; half: number[] | null } | null {
+    const hit = this.world.castShape(origin, { x: 0, y: 0, z: 0, w: 1 }, dir, new RAPIER.Ball(radius), 0, maxDist, false, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, CAMERA_QUERY_GROUPS, exclude);
+    if (!hit) return null;
+    const t = hit.collider.translation();
+    const shape = hit.collider.shape as RAPIER.Cuboid;
+    return { toi: hit.time_of_impact, centre: [t.x, t.y, t.z], half: shape.halfExtents ? [shape.halfExtents.x, shape.halfExtents.y, shape.halfExtents.z] : null };
   }
 
   raycast(origin: THREE.Vector3Like, dir: THREE.Vector3Like, maxDist: number, filterGroups: number, exclude?: RAPIER.Collider): { distance: number; collider: RAPIER.Collider; normal: THREE.Vector3 } | null {

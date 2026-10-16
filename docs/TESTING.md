@@ -5,7 +5,7 @@
 | Command | What it checks |
 | --- | --- |
 | `npm run typecheck` | TypeScript strict type-check |
-| `npm test` | Unit tests (Vitest): puzzle rules (pressure hatch, split feed), progression/checkpoints/triggers, level dimensions vs movement capability, traversal eligibility against a real Rapier world, the camera's lazy follow (never in the air) |
+| `npm test` | Unit tests (Vitest): puzzle rules (pressure hatch, split feed), progression/checkpoints/triggers, level dimensions vs movement capability, traversal eligibility against a real Rapier world, every camera-assist condition, the spring arm and framing, the subtitle queue, the settings migration |
 | `npm run build` | Production bundle builds |
 | `npm run check` | All three above |
 | `npm run test:e2e` | Browser tests (Playwright) against a dev server it starts on port 5199. Set `PW_CHANNEL=msedge` to use installed Edge (GPU). The default is Playwright's bundled Chromium, which renders in software at roughly 2 s per frame for this game; its time limits are four times longer, and the real-time movement check skips itself there |
@@ -15,6 +15,28 @@ depend on the machine's frame rate. Inputs go through the real input pipeline (v
 button presses, or real browser mouse/keyboard events where stated), not through teleports, except
 where a test deliberately places the player. Test mode starts on Low quality, and without the story
 opening unless the URL has `&intro=1`.
+
+### `tests/e2e/jumps.spec.ts`: every route jump with the real keyboard (20)
+
+Real key events (`page.keyboard`), deterministic stepping. Each jump is played twice:
+
+- **camera still:** set once, then not touched;
+- **camera rotating:** the right mouse button drags it sideways throughout, about 15° a second.
+
+Where the space allows, each mode is also played with W, and with W+D on a 20° approach. The
+jumps:
+
+- the shaft's girder: a running vault, ending between the girder and the railing, never in the
+  channel;
+- the 2 m drainage gap, from the lit crossing;
+- tier one's broken walkway;
+- the barrier vault;
+- the gantry ledge catch and climb;
+- the broad jump from the raised ram to the exit gantry.
+
+Every case must land with no fall. While airborne, the direction the held keys ask for must not
+change by more than 6°. Without the airborne yaw latch, 6 of the 10 rotating cases bend 6.5–8°
+and fail.
 
 ### `tests/e2e/story.spec.ts`: Chapter One opening (2)
 
@@ -67,21 +89,22 @@ The full route ends on the completion card "Chapter One complete".
 ### `tests/e2e/input.spec.ts`: controls with real browser events (10)
 
 Look, menus and pacing (review `4979589` findings R1, R2, R3, R7), driven by Playwright's real
-mouse and keyboard. The two normal-play tests (3 and 10) load with `?intro=0`, since the opening
-deliberately locks control:
+mouse and keyboard. The two normal-play tests (4 and 11) load with `?intro=0`, since the opening
+deliberately locks control. There are 11 tests:
 
-1. 100 px of drag-look turns the camera by `sensitivity × 0.0022 rad/px` at settings 1, 0.2 and 3,
-   with the setting changed through the real pause-menu slider.
-2. One pixel is a tiny change; the pitch clamps at its limits; invert-Y (via the checkbox) flips it.
-3. Pointer-locked look in normal play mode (not test mode) uses the same scale.
-4. Space, E, Enter and F pressed while paused do nothing after Resume (standing at the lever).
-5. Space that activates the focused Resume button does not also jump.
-6. Pausing mid-jump and resuming continues that jump without a second one.
-7. The lookout reveal holds control for at most 3.5 s, and pausing during it keeps the lock.
-8. Space skips the reveal into the same valid state, without duplicated lines or a jump.
-9. Five idle minutes never reveal or repeat the solution; requested hints escalate to the explicit
-   one exactly once.
-10. Holding W in real time (normal mode) moves Mara.
+1. 100 px of drag-look turns the camera by `(setting / 25) × 0.0022 rad/px` at horizontal
+   sensitivity 25, 5 and 75, set through the real pause-menu slider.
+2. Vertical sensitivity (50) is independent of horizontal, and invert-X flips only the yaw.
+3. One pixel is a tiny change; the pitch clamps at its limits; invert-Y (via the checkbox) flips it.
+4. Pointer-locked look in normal play mode (not test mode) uses the same scale.
+5. Space, E, Enter and F pressed while paused do nothing after Resume (standing at the lever).
+6. Space that activates the focused Resume button does not also jump.
+7. Pausing mid-jump and resuming continues that jump without a second one.
+8. The lookout reveal holds control for at most 3.5 s, and pausing during it keeps the lock.
+9. Space skips the reveal into the same valid state, without duplicated lines or a jump.
+10. Five idle minutes never reveal or repeat the solution; requested hints escalate to the explicit
+    one exactly once.
+11. Holding W in real time (normal mode) moves Mara.
 
 ### `tests/e2e/parkour.spec.ts`: imperfect approach angles (13)
 
@@ -105,6 +128,8 @@ All of these need `npm run dev` running in another terminal. Output goes to `art
 | --- | --- |
 | `node scripts/capture.mjs --channel msedge --size 1280x720 --quality high` (or `low`) | Fixed viewpoints 01–07 (slice), 09–19 (increment, junction, ram), c1–c7 (Mara in game lighting; c1 repeats the framing of Codex's `probe-character-front.png`) |
 | `node scripts/capture-opening.mjs --channel msedge --size 1280x720` | The story opening at ten fixed story times: the three cards, Mara asleep, getting up, standing, looking around, recognising Breakwater, the chapter title, and control |
+| `node scripts/capture-ending.mjs --channel msedge --size 1280x720` | The ending: out of the breach, over the shoulder, the hangar named and lit, Ivo, the completion card |
+| `node scripts/audit-route.mjs --channel msedge` | The whole chapter from the normal gameplay camera, every 2 s (`--every`), with a log of checkpoint, objective, mode, camera zone, arm length and subtitle (see [CHAPTER_ONE_AUDIT.md](CHAPTER_ONE_AUDIT.md)) |
 | `node scripts/capture-character.mjs --channel msedge` | Turntable of Mara in the dev viewer: front, three-quarter, side, back, face, hands, boots, walk, jog, jump, climb |
 | `node scripts/capture-video.mjs --channel msedge --quality high` | Real-time WebM clips of the autopilot: cell and shaft, tier-one vault and climb, split feed and exit |
 | `node scripts/normal-mode-run.mjs --channel msedge --quality high` (or `low`) | Plays the whole route in normal mode (title, Begin, real-time loop) and reports completion, falls, time and console errors |
@@ -122,6 +147,8 @@ and load with `?intro=0`.
 | --- | --- |
 | `node scripts/trace-stalls.mjs --quality low --runs 3` (or `high`) | Plays the whole route with the autopilot through the input pipeline. Prints the GPU, frame count, mean, p95 and longest frame, plus every frame over 100 ms with the WebGL calls over 2 ms inside it (shader programs named), and three.js program and texture counts |
 | `node scripts/trace-stalls.mjs --quality high --gpu discrete` | The same on the high-performance GPU of a dual-GPU laptop (`--force_high_performance_gpu`) |
+| `node scripts/trace-stalls.mjs --channel chromium` | Playwright's bundled Chromium. Windows' per-app GPU setting does not cover it, so on the test laptop it runs on the integrated Intel GPU even when Edge is set to the NVIDIA one (`--force_low_power_gpu` does not override that setting) |
+| `node scripts/count-draws.mjs [--root artifacts/base-xxxx]` | Draw calls and triangles per frame (all passes) at each checkpoint, from the player's camera: a deterministic cost proxy, independent of the machine's load. `--root` measures another build, e.g. an older commit built with `git archive <sha> \| tar -x -C artifacts/base-<sha>` and `vite build --base ./` inside it |
 | `node scripts/profile-render.mjs --quality low` | Frame times at six checkpoints with one rendering feature off at a time (shadows, MSAA, AO, bloom, resolution 0.75, all post-processing). `--only name,name` picks configurations, and `--headless 1` runs without a window (it still renders on the GPU, and gave the same Low preset numbers here). The four `no-msaa+…` configurations have not been run yet |
 
 Close other GPU work and keep the window in front: a hidden window is throttled. Edge on a
@@ -139,10 +166,12 @@ mouse.
 | 0 | Watch the opening (do not skip) | Three cards over black explain who Mara is and how she fell asleep; she wakes on the cell floor, gets up, looks around and names Breakwater; the "Chapter One, The Quiet Cell" title; then control. About 30 s. Restart and press Space during it: the same end state at once |
 | 1 | Look around the cell | Objective "Open the service hatch". Mara notices the fresh copper. Supply pipe, gauge, diagram, piston, hatch and LIFT lever all visible. Mouse look is smooth at sensitivity 1; the slider and invert-Y in the pause menu take effect at once |
 | 2 | Walk to the scratched diagram, press **E** | Full-screen diagram; E or moving closes it |
+| 2b | Read the notice on the cell door (right wall) | The warden's transfer order; Mara's line about being carried in asleep |
 | 3 | Pull the lever (right of the hatch) | Hiss and steam at the piston top, hatch shudders, nothing opens |
-| 4 | Turn the bypass valve (left, low) | Pointer bar goes across, vent goes quiet, needle climbs into LIFT |
+| 4 | Turn the bypass valve (left, low) | Pointer bar goes across, vent goes quiet, the amber chevrons move from the vent branch to the piston branch, needle climbs into LIFT |
 | 5 | Pull the lever | Hatch rises and latches |
-| 6 | Go through the hatch, jump the girder and the 2 m gap | Landing light, jump tip once, clean landing on the far side |
+| 6 | Go through the hatch, run at the girder and press Space; keep holding W | A vault over the girder; the railing along the channel stops you. Standing still at the girder for 7 s shows the jump key once |
+| 6b | Walk to the lit crossing at the right (broken catwalk, striped lip) and jump the channel | Clean landing on the far side |
 | 7 | Enter the lookout, light the lamp | Control returns after about 3 s (Space/E skips); lamps come on, the rope gate drops, the intercom plays while you move |
 | 8 | Drop to the scaffold, then to tier 1 | Two safe drops; "Tier one" light |
 | 9 | Jump the broken walkway | Striped lips mark takeoff and landing; drop shadow shows where you will land |
@@ -150,15 +179,18 @@ mouse.
 | 11 | At the spares rack, jump at the gantry's painted end edge while pushing toward it | Catch and pull-up, also from an angle; walk along it and drop beyond the rack |
 | 12 | Shuttle, BRAKE, RIDE | As before: no timing needed |
 | 13 | Walk into the steam on tier 3 | Pushed back at the hazard band; Mara says something feeds the line |
-| 14 | Turn the feed to the ram | Steam stops; the ram at the breach rises empty: "Without me." |
+| 14 | Turn the feed to the ram | Steam stops; the chevrons leave the cracked main and run along the feed pipe round to the ram; the ram rises empty: "Without me." |
 | 15 | Feed back to the vent, set the CATCH, feed to the ram | Ram drops, steam returns; then the ram waits, shuddering, RAM gauge in the red, steam off |
 | 16 | Walk to the ram, stand on it, **E** "Release the catch" | Ram carries you up; jump to the exit gantry |
-| 17 | On the exit gantry | Camera turns to the harbour; the intercom points to the hangar cell; "End of Chapter One" card; completion card "Chapter One complete" |
+| 17 | On the exit gantry | Over the shoulder to sea; the intercom points left to the hangar on the spur, whose lights come up behind a floatplane; "Chapter One complete" over that view, with the choices fading in |
 
 Also check: **Hint** in the pause menu three times while stuck in the cell, then three times at the
 split feed (each escalates, nothing repeats automatically); pausing mid-jump; alt-tabbing;
 interacting from slightly different angles; gamepad if available; the Graphics setting (Auto
-names the choice it made; High and Low switch at once).
+names the choice it made; High and Low switch at once). Camera: with the mouse untouched and W
+held, the camera drifts behind Mara on Weak, faster on Strong, never on Off, and never in the air;
+jump a gap while turning the mouse (the jump keeps its line); stand against a wall or on the
+gantry top (the camera looks under or over a shoulder instead of through anything).
 
 ## Acceptance criteria for this section
 
@@ -182,12 +214,23 @@ expected vs actual, evidence, and acceptance criteria for the fix.
 
 ## Latest results
 
-At commit `4bd9d1b`, on Windows 11 Pro with the Intel UHD Graphics GPU, Node 22.13.1:
+At commit `326114e`, on Windows 11 Pro with Node 22.13.1. Edge runs on the RTX 2050 through the
+Windows setting.
 
-- `npm run check`: typecheck passes; **40/40** unit tests in 6 files; the production build
-  succeeds.
-- `PW_CHANNEL=msedge npm run test:e2e` (headless Edge): **41/41 passed in 7.0 min**: engine 8,
-  input 10, parkour 13, slice 8, story 2. Running jump measured at 3.39 m, apex 1.38 m.
-- Not run at this commit: Playwright's bundled Chromium (software rendering). Its last run was
-  before the CC0 Mara, and one failure there was never investigated.
-- Frame times and stall traces: [STATUS.md](STATUS.md#response-to-review-492bce4-finding-by-finding).
+- `npx vitest run`: **54/54** unit tests in 8 files.
+- `PW_CHANNEL=msedge npm run test:e2e`: **62/62 passed in 9.3 min**:
+
+  | Spec | Tests |
+  | --- | ---: |
+  | engine | 8 |
+  | input | 11 |
+  | jumps | 20 |
+  | parkour | 13 |
+  | slice | 8 |
+  | story | 2 |
+
+- Running jump measured at **3.39 m**, apex 1.38 m.
+- Each commit on the branch type-checks.
+- Not run at this commit: Playwright's bundled Chromium e2e suite (software rendering).
+- Frame times and draw calls:
+  [STATUS.md](STATUS.md#verification-this-pass).

@@ -9,8 +9,8 @@
  *   npm run build
  *   node scripts/trace-stalls.mjs [--channel msedge] [--port 5232] [--quality low|high] [--runs 1]
  *
- * Prints frames over 100 ms with the slow WebGL calls inside them. `--gpu discrete` asks for the
- * high-performance GPU on dual-GPU laptops.
+ * Prints frames over 100 ms with the slow WebGL calls inside them. `--gpu discrete` or
+ * `--gpu integrated` asks for the high-performance or low-power GPU on dual-GPU laptops.
  */
 import { preview } from 'vite';
 import { chromium } from 'playwright';
@@ -23,9 +23,11 @@ const quality = args.quality || 'low';
 const runs = Number(args.runs || 1);
 const route = args.route ?? '';
 
-const server = await preview({ preview: { host: '127.0.0.1', port, strictPort: true } });
+// --root serves another build (e.g. an older commit built into artifacts/) for comparisons.
+const server = await preview({ ...(args.root ? { root: args.root, configFile: false } : {}), preview: { host: '127.0.0.1', port, strictPort: true } });
 // --gpu discrete asks Chromium for the high-performance GPU on dual-GPU laptops (Windows).
-const gpuArgs = args.gpu === 'discrete' ? ['--force_high_performance_gpu'] : [];
+// --gpu integrated asks for the low-power one (the Windows per-app setting otherwise decides).
+const gpuArgs = args.gpu === 'discrete' ? ['--force_high_performance_gpu'] : args.gpu === 'integrated' ? ['--force_low_power_gpu'] : [];
 const browser = await chromium.launch({ channel: args.channel || 'msedge', headless: false, args: ['--window-size=1320,820', ...gpuArgs] });
 
 function instrument() {
@@ -107,9 +109,13 @@ try {
     });
     const ds = data.frames.map((f) => f.dt).sort((a, b) => a - b);
     console.log(`run ${run + 1}: ${gpu}; ${quality}; ${data.frames.length} frames; mean ${(ds.reduce((a, b) => a + b, 0) / ds.length).toFixed(1)} ms; p95 ${ds[Math.floor(ds.length * 0.95)].toFixed(1)} ms; max ${ds[ds.length - 1].toFixed(0)} ms; complete ${data.state.complete}; slow GL calls during load ${loadSlow}`);
-    for (let i = 1; i < data.frames.length; i++) {
-      const f = data.frames[i];
-      if (f.dt < 100) continue;
+    // The longest frames first (at most ten), with what was happening in them.
+    const long = data.frames
+      .map((f, i) => ({ f, i }))
+      .filter(({ f, i }) => i > 0 && f.dt >= 100)
+      .sort((a, b) => b.f.dt - a.f.dt)
+      .slice(0, 10);
+    for (const { f, i } of long) {
       const prev = data.frames[i - 1];
       const inside = data.slow.filter((s) => s.t >= f.start && s.t < f.start + f.dt);
       const byName = {};

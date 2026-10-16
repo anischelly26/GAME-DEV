@@ -70,7 +70,7 @@ Measured by the automated test `measure jump capability` at the tested revision.
 
 | Quantity | Value |
 | --- | --- |
-| Run speed | 5.5 m/s, reached in about 0.17 s |
+| Run speed | 5.5 m/s: a quick first step (52 m/s² to 45% of top speed), then smooth (30 m/s²); stops in about 0.12 s / 0.35 m |
 | Jump apex (held) | 1.38–1.45 m (released early: noticeably lower) |
 | Running jump, same height | 3.39 m |
 | Coyote time / jump buffer | 0.15 s / 0.16 s |
@@ -84,9 +84,23 @@ The 2.0 m gap in the drainage channel sits at that limit since the run speed was
 autopilot clears it in every full-route test, and the 1.9 m tier-one gap is also cleared from 20°
 and 30° approaches with one fixed input. Whether it feels fair to a person is untested.
 
-**Camera.** Third person, about 4.9 m behind. With no mouse or stick input for a second, it drifts
-behind the direction of travel, but only on the ground: never in the air, hanging or climbing,
-because movement is camera-relative.
+**Air control and the camera.** Movement is camera-relative. In the air, a held direction keeps the
+camera yaw it had at takeoff, so turning the camera mid-jump does not bend the jump. Releasing the
+stick, or pushing a clearly different direction, reads the camera again.
+
+**Camera rules** (`src/camera/ThirdPersonCamera.ts`):
+
+1. Mouse and right stick always apply immediately, with no smoothing.
+2. Assist (Off/Weak/Strong) only runs on the ground for 0.3 s, in normal movement, with the stick
+   pushed forward, not interacting, outside the precision volumes around every jump, vault, ledge
+   and moving platform, and after the player has left the camera alone (1.5 s / 0.8 s).
+3. Spring arm: never through geometry. It shortens on the same frame and eases back out. When
+   blocked it looks under the obstruction (a lower angle), then over a shoulder (pivot shifted up
+   to 0.9 m). It never changes yaw.
+4. Framing: the view aims above Mara and a little ahead of travel, so she sits low in the frame
+   with the route above her.
+5. Camera zones per space: the cell 3.4 m, the shaft 5.0 m, the lookout 3.8 m, the hall 5.6 m,
+   tier three 4.4 m, the gantry top 3.0 m with a low pivot.
 
 ## Chapter One, *The Quiet Cell* (implemented)
 
@@ -104,20 +118,34 @@ because movement is camera-relative.
 
 Space, E or A skips to step 5 in the same state.
 
+### Rhythm
+
+Chapter One follows the owner's five-part rhythm:
+
+| Part | Where | What it gives the player |
+| --- | --- | --- |
+| 1. Quiet Cell | The cell | The story, then an observation puzzle. Inspectable details: the diagram, the fresh copper line, the transfer order on the door (why she is here; someone expected her), and the engine felt through the wall. |
+| 2. Service Route | The shaft | Movement without tutorial text: a low lit girder (jump or vault), a railing that stops a running player at the channel's lip, a lit crossing at the broken catwalk, and the landing's service light coming on. |
+| 3. Machinery Well | Lookout → tier one → collar | The reveal of the hall from the lookout. Drops, the broken walkway, the barrier vault, the gantry climb, the shuttle, then the collar ride up. |
+| 4. Pressure Breach | Tier three | The split feed: gauges, levers and chevrons on the pipes that run toward wherever the steam goes. The steam curtain, the visibly blocked route, clears when the feed goes to the ram. |
+| 5. Escape Ride | The breach | The ram carries Mara up and she jumps to the exit gantry over the sea. The intercom points to the seaplane hangar, whose lights come up. "Chapter One complete" is a title card over that view. |
+
 ### Beats
 
 | Beat | Space | Player does | Recovery |
 | --- | --- | --- | --- |
 | Wake | Mara's cell (4.6 × 5 × 4.4 m) | Gets up (opening); sees the hatch wall | — |
 | Puzzle | Hatch wall | Reads the diagram, tries the lever, shuts the bypass, raises the hatch | Nothing can be lost |
-| Practice | Maintenance landing | Jumps a fallen girder (0.6 m, safe) | Landing service light lit automatically |
-| Gap | Drainage channel | Jumps a 2.0 m gap to a lit landing | Falling recovers at the landing in under a second |
+| Practice | Maintenance landing | Jumps (or, at a run, vaults) a fallen girder (0.6 m, safe); a railing along the channel's lip stops a player who keeps running | Landing service light lit automatically |
+| Gap | Drainage channel | Walks to the lit crossing where the old catwalk broke away and jumps the 2.0 m gap | Falling recovers at the landing in under a second |
 | Reveal | Lookout (ruined tier-2 cell) | Sees the turbine hall, lights the lookout lamp | Lookout becomes the checkpoint |
 | Reveal beat | — | The service lights come on across the hall; Ivo: "The tide turns soon. Follow the service lights." The rope gate drops and increment 2 begins | — |
 
 ### Puzzle specification: the pressure hatch
 
 - **Goal:** open the service hatch.
+- **Flow on the pipes:** amber chevrons painted along the pipework run down the vent branch while
+  the bypass is open, and along the branch and up the piston once it is shut.
 - **Visible clue:** a scratched diagram beside the hatch shows the same pipework in two states.
   Bypass *open* sends the flow into the vent and the hatch stays shut (crossed out). Bypass *shut*
   sends it up the piston and the hatch rises (ticked). Inspecting it shows it full-screen. The
@@ -197,11 +225,14 @@ engine collar, a railed ring deck around the column, heaves ±2.6 m with the eng
    breach ram carry her up 2.4 m, then makes a broad jump of about 2 m onto the exit gantry.
    Missing the jump costs a few seconds: recovery is at the "Breach" service light with the ram
    waiting primed again.
-6. **Ending of Chapter One.** Ivo on the intercom: "You made the engine carry you. You're out of
-   the cells, not off the rock." Mara: "Who are you? Who brought me here?" Intercom: "Sorn wants
-   your signature, or your silence. The only thing on Breakwater that still flies is in the
-   hangar cell. Get there." Mara: "Ivo. It has to be." Then an "End of Chapter One" card and the
-   completion screen "Chapter One complete".
+6. **Ending of Chapter One.** Over Mara's shoulder, out to sea. Ivo on the intercom: "You made the
+   engine carry you. You're out of the cells, not off the rock." Mara: "Who are you? Who brought
+   me here?" Intercom: "Sorn wants your signature, or your silence. Look left, past the breach.
+   The old hangar on the spur." Its work lights come up and silhouette a floatplane, and the
+   camera frames it past her. Intercom: "There's a seaplane in there. The only thing on Breakwater
+   that still flies. Get to it before the tide turns." Mara: "Ivo. It has to be." Then "Chapter
+   One complete", a title card over that view with the time, falls, "Play Chapter One again" and
+   "Keep exploring".
 
 ### Puzzle specification: the split feed
 
@@ -246,6 +277,12 @@ the puzzle twice. "Restart section" restores everything.
 
 ## Deviations from the prompt packs (flagged for the owner)
 
+- **The ending's destination** is a seaplane hangar on a rock spur outside the prison, seen from
+  the breach. The earlier text said "the hangar cell"; the intercom now points to "the old hangar
+  on the spur". It is a distant set piece only; Chapter Two decides how Mara gets there.
+- **The shaft railing.** A running jump over the practice girder carried Mara into the channel.
+  The railing and the crossing at the broken catwalk change the route through the shaft, not the
+  gap.
 - **The opening.** The prompt packs start in the cell. At the owner's request the game now opens
   the night before, with Mara falling asleep in her workshop and waking up in prison. Her home
   town is named **Saltmere**; the packs leave it unnamed.
