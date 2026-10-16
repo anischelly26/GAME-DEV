@@ -7,7 +7,7 @@ import { saltStainTexture } from '../../world/textures';
 import { PressureHatch, OPENING } from '../../world/props/PressureHatch';
 import { hazardStripeTexture } from '../../world/props/Maintenance';
 import { Hangar } from '../../world/props/Hangar';
-import { ServiceLight, WorkLamp } from '../../world/props/Lanterns';
+import { ServiceLight, WorkLamp, glowSprite } from '../../world/props/Lanterns';
 import { LightShaft, SteamEmitter, Water } from '../../world/Atmosphere';
 import { PressureHatchLogic, enginePulse, LIFT_THRESHOLD } from '../../gameplay/puzzles/PressureHatchLogic';
 import { boxVolume } from '../../gameplay/Progression';
@@ -456,6 +456,51 @@ export class QuietCellLevel implements Level {
     this.landingLight = new ServiceLight(m, v3(-2.6, S.floorY, 25.7), Math.PI / 2);
     scene.add(this.landingLight.group);
 
+    // Ivo's kit, on a crate by the hatch: a canvas tool roll and a brass steam kicker, chalked "IV".
+    {
+      const kx = 2.95;
+      const kz = 26.05;
+      const crate = new THREE.Mesh(boxProjectUVs(new RoundedBoxGeometry(0.66, 0.5, 0.5, 2, 0.03)), m.wood);
+      crate.position.set(kx, S.floorY + 0.25, kz);
+      crate.castShadow = crate.receiveShadow = true;
+      root.add(crate);
+      physics.box(v3(kx, S.floorY + 0.25, kz), v3(0.33, 0.25, 0.25));
+      const chalk = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.22), new THREE.MeshStandardMaterial({ map: chalkMarkTexture(), transparent: true, roughness: 1, polygonOffset: true, polygonOffsetFactor: -2 }));
+      chalk.position.set(kx - 0.335, S.floorY + 0.27, kz);
+      chalk.rotation.y = -Math.PI / 2;
+      root.add(chalk);
+      const kit = new THREE.Group();
+      const canvas = new THREE.MeshStandardMaterial({ color: '#8a7a58', roughness: 1 });
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.52, 14), canvas);
+      roll.rotation.z = Math.PI / 2;
+      roll.position.y = 0.09;
+      kit.add(roll);
+      for (const x of [-0.15, 0.15]) {
+        const strap = new THREE.Mesh(new THREE.TorusGeometry(0.094, 0.012, 6, 16), m.ironDark);
+        strap.rotation.y = Math.PI / 2;
+        strap.position.set(x, 0.09, 0);
+        kit.add(strap);
+      }
+      const brass = new THREE.MeshStandardMaterial({ color: '#b08a4a', metalness: 0.85, roughness: 0.35 });
+      const can = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.26, 16), brass);
+      can.position.set(0.05, 0.31, 0.06);
+      kit.add(can);
+      const gauge = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.012, 16), new THREE.MeshStandardMaterial({ color: '#3a2a12', emissive: '#ffb347', emissiveIntensity: 2.4 }));
+      gauge.rotation.x = Math.PI / 2;
+      gauge.position.set(0.05, 0.33, -0.017);
+      kit.add(gauge);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowSprite(), color: '#ffc46b', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.55 }));
+      glow.scale.setScalar(0.7);
+      glow.position.set(0.05, 0.33, -0.05);
+      kit.add(glow);
+      kit.traverse((o) => ((o as THREE.Mesh).isMesh ? (o.castShadow = true) : null));
+      kit.position.set(kx, S.floorY + 0.5, kz);
+      kit.rotation.y = 0.3;
+      root.add(kit);
+      this.kit = kit;
+      this.kitPos.set(kx, S.floorY + 0.7, kz);
+    }
+
     // ------------------------------------------------------------ breach + lookout
     const L = LOOKOUT;
     const breach = { x0: -1.1, x1: 1.1, top: L.y + 2.75 };
@@ -549,6 +594,8 @@ export class QuietCellLevel implements Level {
   }
 
   private channelSteam: SteamEmitter;
+  private kit!: THREE.Group;
+  private readonly kitPos = new THREE.Vector3();
   private readonly pois: THREE.Vector3[] = [];
   /** Dust shaken off the hatch wall by each breath of the engine (felt in the cell). */
   private wallDust!: SteamEmitter;
@@ -580,7 +627,7 @@ export class QuietCellLevel implements Level {
       label: 'Lookout',
       feet: v3(SPAWNS.lookout.x, SPAWNS.lookout.y, SPAWNS.lookout.z),
       facing: SPAWNS.lookout.facing,
-      impliesFlags: ['hatch.open', 'gap.crossed'],
+      impliesFlags: ['hatch.open', 'gap.crossed', 'kicker.taken'],
       recoverBelowY: -3,
     });
   }
@@ -600,6 +647,39 @@ export class QuietCellLevel implements Level {
         const first = progression.set('clue.read');
         if (first) dialogue.say('Mara', 'Two ways for the pressure to go. Out the vent... or up into the piston.', undefined, { story: true, maxWait: 6 });
         events.emit('sfx', { name: 'paper' });
+      },
+    });
+
+    interactions.add({
+      id: 'kicker',
+      position: this.kitPos,
+      radius: 1.7,
+      prompt: () => (progression.has('kicker.taken') ? null : 'Pick up the tool roll'),
+      interact: () => {
+        if (progression.has('kicker.taken')) return;
+        player.lockFor(1.2, this.kitPos);
+        this.ctx.avatar.cinematic('pickup', 1.1);
+        this.later(0.45, () => {
+          this.kit.visible = false;
+          progression.set('kicker.taken');
+          events.emit('sfx', { name: 'pickup', x: this.kitPos.x, y: this.kitPos.y, z: this.kitPos.z });
+        });
+        this.later(0.95, () => {
+          hud.abilityCard(
+            {
+              eyebrow: 'Found: a steam kicker',
+              title: 'Pressure in a can',
+              rows: [
+                { key: 'Space', pad: 'A', text: 'In the air: a second jump' },
+                { key: 'Shift', pad: 'B', text: 'In the air: a steam dash' },
+                { key: 'Ctrl', pad: 'RB', text: 'In the air: slam down' },
+              ],
+            },
+            this.ctx.input.usingGamepad,
+          );
+          dialogue.say('Mara', "A steam kicker. The kind I build for the dredger crews... chalked 'IV'.", undefined, { story: true });
+          progression.setObjective('Cross the maintenance shaft');
+        });
       },
     });
 
@@ -683,7 +763,7 @@ export class QuietCellLevel implements Level {
         if (checkpoints.reach('landing')) {
           this.landingLight.ignite();
           events.emit('sfx', { name: 'ignite', x: this.landingLight.lampWorld.x, y: this.landingLight.lampWorld.y, z: this.landingLight.lampWorld.z });
-          progression.setObjective('Cross the maintenance shaft');
+          progression.setObjective(progression.has('kicker.taken') ? 'Cross the maintenance shaft' : 'Check the tool roll on the crate');
         }
       },
     });
@@ -1029,6 +1109,9 @@ export class QuietCellLevel implements Level {
     const { progression, player, dialogue, events } = this.ctx;
     this.engine.fixedUpdate(dt);
 
+    // Ivo's steam kicker powers the double jump, air dash and ground pound.
+    player.steam = progression.has('kicker.taken');
+
     // Hesitation hints.
     if (this.jumpHintAt !== null && this.time > this.jumpHintAt && player.grounded && !player.frozen) {
       this.jumpHintAt = null;
@@ -1168,6 +1251,7 @@ export class QuietCellLevel implements Level {
     this.fadeLevel = 0;
     this.jumpHintAt = this.ropeHintAt = null;
     this.hangar.setLit(false, true);
+    this.kit.visible = true;
     this.startIntro();
   }
 
@@ -1227,6 +1311,8 @@ function buildRoute(): RouteStep[] {
     { kind: 'interact', id: 'lever', standAt: [1.75, y, 27.95], expectFlag: 'hatch.lifting' },
     { kind: 'wait', until: 'hatchOpen', timeout: 5 },
     { kind: 'move', to: [1.05, y, 27.6], precise: true },
+    { kind: 'move', to: [1.05, S.floorY, 26.0], precise: true },
+    { kind: 'interact', id: 'kicker', standAt: [2.3, S.floorY, 26.0], expectFlag: 'kicker.taken' },
     { kind: 'move', to: [1.05, S.floorY, 26.0], precise: true },
     { kind: 'jump', from: [1.0, S.floorY, S.girder.z + 0.75], to: [0.9, S.floorY, S.girder.z - 0.9] },
     { kind: 'move', to: [2.5, S.floorY, S.gapNear + 1.3], precise: true },
@@ -1314,4 +1400,36 @@ function transferOrderCanvas(): HTMLCanvasElement {
   g.fillText("Line's fixed. Read the wall.  - I.", 0, 0);
   g.restore();
   return c;
+}
+
+/** Ivo's chalk mark, "IV" with a little arrow, as a transparent texture. */
+function chalkMarkTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 96;
+  const g = c.getContext('2d')!;
+  g.strokeStyle = 'rgba(232, 228, 214, 0.85)';
+  g.lineWidth = 7;
+  g.lineCap = 'round';
+  g.beginPath();
+  // I
+  g.moveTo(30, 18);
+  g.lineTo(28, 70);
+  // V
+  g.moveTo(48, 18);
+  g.lineTo(66, 72);
+  g.lineTo(86, 16);
+  g.stroke();
+  // Underline arrow.
+  g.lineWidth = 4;
+  g.beginPath();
+  g.moveTo(24, 84);
+  g.lineTo(100, 82);
+  g.lineTo(90, 75);
+  g.moveTo(100, 82);
+  g.lineTo(90, 90);
+  g.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }

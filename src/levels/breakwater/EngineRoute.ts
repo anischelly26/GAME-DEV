@@ -551,7 +551,7 @@ export class EngineRoute {
       const feet = sidePos(c.k, 10.6, uAt(10.6, c.f), c.y);
       // Face along the route, except at the engine gantry: face the collar.
       const facing = c.id === 'engine' ? sideAngle(c.k) + Math.PI : Math.atan2(sideTangent(c.k).x, sideTangent(c.k).z);
-      ctx.checkpoints.register({ id: c.id, order: c.order, label: c.label, feet, facing, impliesFlags: [], recoverBelowY: c.y - 3 });
+      ctx.checkpoints.register({ id: c.id, order: c.order, label: c.label, feet, facing, impliesFlags: ['kicker.taken'], recoverBelowY: c.y - 3 });
       ctx.triggers.add({
         id: `cp-${c.id}`,
         contains: (p) => p.distanceTo(feet) < 1.8 && Math.abs(p.y - c.y) < 1.2,
@@ -563,7 +563,7 @@ export class EngineRoute {
         },
       });
     }
-    ctx.checkpoints.register({ id: 'exit', order: 8, label: 'Exit gantry', feet: this.exitCenter.clone(), facing: sideAngle(10), impliesFlags: [], recoverBelowY: this.exitCenter.y - 3 });
+    ctx.checkpoints.register({ id: 'exit', order: 8, label: 'Exit gantry', feet: this.exitCenter.clone(), facing: sideAngle(10), impliesFlags: ['kicker.taken'], recoverBelowY: this.exitCenter.y - 3 });
 
     this.registerInteractions();
     this.registerTriggers();

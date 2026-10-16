@@ -117,6 +117,50 @@ html, body {
 }
 .tip.hidden { opacity: 0; transform: translateY(8px); }
 
+/* ---------- new gadget card (right, mid height) */
+.ability {
+  right: 26px;
+  top: 34%;
+  width: min(330px, 80vw);
+  padding: 14px 18px 12px;
+  border: 1px solid rgba(255, 196, 107, 0.35);
+  border-radius: 8px;
+  background: linear-gradient(160deg, rgba(42, 30, 16, 0.92), rgba(12, 14, 16, 0.9));
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 0 24px rgba(255, 170, 70, 0.08);
+  transition: opacity 0.5s, transform 0.5s;
+}
+.ability.hidden { opacity: 0; transform: translateX(16px); }
+.ability .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--amber); }
+.ability h3 { margin: 4px 0 10px; font-family: var(--serif); font-weight: 400; font-size: 24px; }
+.ability .row { display: grid; grid-template-columns: 112px 1fr; gap: 10px; align-items: center; margin: 6px 0; font-size: 14px; color: var(--ink-dim); }
+.ability .keys { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* ---------- area title (top centre) */
+.area {
+  top: 9vh;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  transition: opacity 0.9s, letter-spacing 1.6s;
+  letter-spacing: 0.32em;
+}
+.area.hidden { opacity: 0; letter-spacing: 0.2em; }
+.area .name { font-family: var(--serif); font-size: clamp(22px, 2.6vw, 34px); text-transform: uppercase; text-shadow: 0 2px 16px #000; }
+.area .sub { margin-top: 4px; font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--amber); text-shadow: 0 1px 8px #000; }
+
+/* ---------- toast (top right) */
+.toast {
+  right: 26px;
+  top: 22px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 196, 107, 0.4);
+  font-size: 14px;
+  transition: opacity 0.4s, transform 0.4s;
+}
+.toast.hidden { opacity: 0; transform: translateY(-8px); }
+
 /* ---------- cinematic skip hint */
 .skip {
   right: 26px;

@@ -78,6 +78,22 @@ export class RenderPipeline {
     this.ao = new GTAOPass(scene, camera, size.w, size.h);
     this.ao.updateGtaoMaterial({ radius: 0.6, distanceExponent: 1.5, thickness: 1.2, scale: 1.0 });
     this.ao.blendIntensity = 0.85;
+    // The AO pass draws the scene into its own depth and normal buffers with an override material,
+    // so sprites (steam, dust, glows) and see-through effect surfaces came out as solid squares
+    // there, and the AO shaded them as black squares. Hide them for that pass, as it already does
+    // for points and lines.
+    const ao = this.ao as unknown as { _overrideVisibility: () => void; _visibilityCache: THREE.Object3D[]; scene: THREE.Scene };
+    ao._overrideVisibility = function (this: typeof ao) {
+      this.scene.traverse((o) => {
+        const mat = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+        const seeThrough = !!mat && !Array.isArray(mat) && mat.transparent && !mat.depthWrite;
+        const hide = (o as THREE.Points).isPoints || (o as THREE.Line).isLine || (o as THREE.Sprite).isSprite || seeThrough;
+        if (hide && o.visible) {
+          o.visible = false;
+          this._visibilityCache.push(o);
+        }
+      });
+    };
     this.composer.addPass(this.ao);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.w, size.h), 0.55, 0.6, 0.82);
     this.composer.addPass(this.bloom);

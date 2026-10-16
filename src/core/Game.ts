@@ -1,3 +1,4 @@
+import { Effects } from '../world/Effects';
 import * as THREE from 'three';
 import { EventBus, type GameEvents } from './Events';
 import { Input, BASE_RADIANS_PER_PIXEL, DEFAULT_LOOK_SENSITIVITY } from './Input';
@@ -65,6 +66,8 @@ export class Game {
   pipeline!: RenderPipeline;
   player!: PlayerController;
   avatar!: PlayerAvatar;
+  /** Pooled steam, dust and shockwave effects. */
+  readonly effects = new Effects();
   dropShadow!: DropShadow;
   camera!: ThirdPersonCamera;
   level!: Level;
@@ -130,6 +133,7 @@ export class Game {
     this.player = new PlayerController(this.physics, this.events, spawn, 0);
     this.player.traversal = this.traversal;
     this.avatar = new PlayerAvatar(this.scene, this.textures);
+    this.scene.add(this.effects.group);
     this.dropShadow = new DropShadow(this.scene);
     this.camera = new ThirdPersonCamera(this.physics, this.player.collider);
     this.pipeline = new RenderPipeline(this.container, this.scene, this.camera.camera);
@@ -271,6 +275,30 @@ export class Game {
       this.avatar.onLand(impact);
       if (impact > 3) this.audio.play('land', this.player.feet, Math.min(1, impact / 10));
       if (impact > 8) this.camera.shake(Math.min(0.45, 0.12 + (impact - 8) / 14));
+      if (impact > 9 && this.player.pound === 'none') this.effects.burst(this.player.feet, { count: 6, color: '#9d907e', speed: 1.2, spread: 2.2, life: 0.6, size: [0.2, 0.7], opacity: 0.35 });
+    });
+    // The steam kicker's moves: steam, dust, a ring, a sound and a camera response for each.
+    this.events.on('doubleJump', (p) => {
+      this.effects.burst(p, { count: 12, color: '#eef3f4', dir: { x: 0, y: -1, z: 0 }, speed: 2.4, spread: 1.8, life: 0.65, size: [0.18, 0.75], opacity: 0.55 });
+      this.audio.play('doubleJump', p);
+      this.camera.kick(2);
+    });
+    this.events.on('dash', (p) => {
+      const back = { x: -Math.sin(this.player.facing), y: 0.1, z: -Math.cos(this.player.facing) };
+      if (p.air) {
+        this.effects.burst({ x: p.x, y: p.y + 1.1, z: p.z }, { count: 6, color: '#eef3f4', dir: back, speed: 3.4, spread: 0.7, life: 0.5, size: [0.14, 0.55], opacity: 0.32 });
+        this.audio.play('airDash', p);
+        this.camera.kick(6);
+      } else {
+        this.effects.burst(p, { count: 6, color: '#9d907e', dir: back, speed: 1.4, spread: 1.4, life: 0.5, size: [0.15, 0.6], opacity: 0.35, rise: 0.5 });
+        this.audio.play('roll', p);
+        this.camera.kick(3);
+      }
+    });
+    this.events.on('groundPound', (p) => {
+      this.effects.ring(p, 2.4);
+      this.effects.burst(p, { count: 14, color: '#a49684', speed: 2.6, spread: 2.6, life: 0.7, size: [0.25, 0.9], opacity: 0.4, rise: 0.4 });
+      this.audio.play('groundPound', p);
     });
     this.events.on('sfx', (e) => {
       this.audio.play(e.name, e.x !== undefined ? { x: e.x, y: e.y ?? 0, z: e.z ?? 0 } : undefined, e.volume ?? 1);
@@ -600,7 +628,23 @@ export class Game {
       mode: this.player.mode,
       modeT: this.player.modeT,
       knockbacks: this.player.knockbacks,
+      moves: {
+        steam: this.player.steam,
+        doubleJumps: this.player.doubleJumps,
+        dashes: this.player.dashes,
+        dashing: this.player.dashT > 0,
+        dashAir: this.player.dashAir,
+        sprinting: this.player.sprinting,
+        pound: this.player.pound,
+        airLeft: this.player.steam ? this.player.airJumps + this.player.airDashes : 0,
+      },
     });
+    // A steam trail behind the canister for the length of an air dash.
+    if (this.player.dashT > 0 && this.player.dashAir && Math.random() < 0.7) {
+      const f = this.player.facing;
+      this.effects.burst({ x: feet.x - Math.sin(f) * 0.3, y: feet.y + 1.15, z: feet.z - Math.cos(f) * 0.3 }, { count: 1, color: '#eef3f4', dir: { x: -Math.sin(f), y: 0, z: -Math.cos(f) }, speed: 0.6, spread: 0.6, life: 0.45, size: [0.15, 0.55], opacity: 0.4 });
+    }
+    this.effects.update(dt);
     const moveLen = Math.hypot(this.lastMove.x, this.lastMove.y);
     this.camera.update(dt, this.input.consumeLook(), feet, {
       grounded: this.player.grounded,
@@ -703,7 +747,7 @@ export class Game {
       setInput: (v: { moveX: number; moveY: number; jumpHeld: boolean } | null) => {
         game.input.virtual = v;
       },
-      press: (a: 'jump' | 'interact') => game.input.press(a),
+      press: (a: 'jump' | 'interact' | 'dash' | 'pound') => game.input.press(a),
       setCamera: (yaw: number, pitch?: number) => {
         game.camera.yaw = yaw;
         if (pitch !== undefined) game.camera.pitch = pitch;

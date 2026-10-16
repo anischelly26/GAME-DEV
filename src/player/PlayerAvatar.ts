@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
-import { clamp, damp, dampAngle, wrapAngle } from '../core/math';
+import { clamp, damp, dampAngle, smoothstep, wrapAngle } from '../core/math';
 import type { TextureLibrary } from '../world/textures';
 import { MOVEMENT } from './movement';
 import { TRAVERSAL } from './Traversal';
@@ -22,7 +22,27 @@ export interface AvatarState {
   modeT?: number;
   /** Increments each time the controller applies a knockback. */
   knockbacks?: number;
+  /** Movement 2.0 state from the controller (steam kicker, dash, sprint, ground pound). */
+  moves?: AvatarMoves;
 }
+
+export interface AvatarMoves {
+  /** Mara carries the steam kicker (the canister on her back is shown). */
+  steam: boolean;
+  /** Counters: each increment starts the move's animation. */
+  doubleJumps: number;
+  dashes: number;
+  dashing: boolean;
+  dashAir: boolean;
+  sprinting: boolean;
+  pound: 'none' | 'hover' | 'fall' | 'land';
+  /** Air moves left this airtime (0..2): the canister's gauge glows with it. */
+  airLeft: number;
+}
+
+/** The double jump's front flip: duration, and the pivot height (Mara's hips). */
+const FLIP_TIME = 0.42;
+const FLIP_PIVOT = 0.92;
 
 /** Mara's standing height in metres (to the top of her hair). */
 const HEIGHT = 1.7;
@@ -73,6 +93,16 @@ export class PlayerAvatar {
   private headPitch = 0;
   private opacity = 1;
   private time = 0;
+  // Movement 2.0 animation state.
+  private lastDoubleJumps = 0;
+  private lastDashes = 0;
+  private flipT = -1;
+  private tuck = 0;
+  private dashPitch = 0;
+  private spin = 0;
+  private canister: THREE.Group | null = null;
+  private canisterGauge: THREE.MeshStandardMaterial | null = null;
+  private gaugeLevel = 1;
 
   /** Called when a foot plants; used for footstep audio. */
   onFootstep: ((speed: number) => void) | null = null;
@@ -121,11 +151,59 @@ export class PlayerAvatar {
     }
     this.root.updateMatrixWorld(true);
     this.measureLocomotion(gltf.animations);
-    for (const n of ['idle', ...LOCOMOTION, 'jumpLoop', 'land']) this.actions.get(n)?.play();
+    for (const n of ['idle', ...LOCOMOTION, 'jumpLoop', 'land', 'crouch']) this.actions.get(n)?.play();
     this.actions.get('idle')?.setEffectiveWeight(1);
     this.mixer.update(0);
     this.root.updateMatrixWorld(true);
     this.addScarf();
+    this.addCanister();
+  }
+
+  /**
+   * Ivo's steam kicker: a brass pressure canister strapped high on Mara's back, with a glass gauge
+   * that glows amber with the air left for a double jump and an air dash, and dims as she spends it.
+   */
+  private addCanister(): void {
+    const spine = this.bones.get('spine_03');
+    if (!spine) return;
+    const g = new THREE.Group();
+    const brass = new THREE.MeshStandardMaterial({ color: '#b08a4a', metalness: 0.85, roughness: 0.35 });
+    const dark = new THREE.MeshStandardMaterial({ color: '#2b2622', metalness: 0.6, roughness: 0.55 });
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.058, 0.2, 16), brass);
+    const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.058, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), brass);
+    capTop.position.y = 0.1;
+    const capBottom = capTop.clone();
+    capBottom.rotation.x = Math.PI;
+    capBottom.position.y = -0.1;
+    for (const y of [-0.06, 0.06]) {
+      const band = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.008, 6, 20), dark);
+      band.rotation.x = Math.PI / 2;
+      band.position.y = y;
+      g.add(band);
+    }
+    this.canisterGauge = new THREE.MeshStandardMaterial({ color: '#3a2a12', emissive: '#ffb347', emissiveIntensity: 1, roughness: 0.2 });
+    const gauge = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.01, 16), this.canisterGauge);
+    gauge.rotation.x = Math.PI / 2;
+    gauge.position.set(0, 0.015, -0.06);
+    // Two nozzles at the bottom, angled down and out (where the steam comes from).
+    for (const side of [-1, 1]) {
+      const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.02, 0.07, 8), dark);
+      nozzle.position.set(side * 0.028, -0.155, 0);
+      nozzle.rotation.z = side * 0.4;
+      g.add(nozzle);
+    }
+    g.add(body, capTop, capBottom, gauge);
+    g.traverse((o) => ((o as THREE.Mesh).isMesh ? (o.castShadow = true) : null));
+    // Place it in world space against her back in the bind pose (facing +Z), then hang it on the spine.
+    this.root.updateMatrixWorld(true);
+    const at = spine.getWorldPosition(new THREE.Vector3());
+    g.position.set(at.x, at.y - 0.05, at.z - 0.17);
+    g.rotation.x = -0.12;
+    this.scene.add(g);
+    spine.attach(g);
+    g.visible = false;
+    this.canister = g;
+    for (const m of [brass, dark, this.canisterGauge]) this.addFadeable(m);
   }
 
   /** Ground speed of each locomotion clip, from how far a planted foot travels per cycle. */
@@ -318,6 +396,22 @@ export class PlayerAvatar {
     if (s.reach > 0 && this.lastReach <= 0 && mode === 'move' && s.grounded) this.play('interact', 1.7, 0.15);
     this.lastReach = s.reach;
 
+    // --- Movement 2.0: the steam kicker's moves, dash and sprint
+    const mv = s.moves;
+    if (mv) {
+      if (this.canister) this.canister.visible = mv.steam && this.opacity > 0.02;
+      if (mv.doubleJumps > this.lastDoubleJumps) {
+        this.lastDoubleJumps = mv.doubleJumps;
+        this.flipT = 0;
+      }
+      if (mv.dashes > this.lastDashes) {
+        this.lastDashes = mv.dashes;
+        if (!mv.dashAir && mode === 'move') this.play('roll', 2.6, 0.05);
+      }
+      this.gaugeLevel = damp(this.gaugeLevel, mv.airLeft / 2, 10, dt);
+      if (this.canisterGauge) this.canisterGauge.emissiveIntensity = 0.1 + this.gaugeLevel * 1.1;
+    }
+
     // --- one-shot weight: fade in quickly, out when finished or released
     if (this.oneShot) {
       const a = this.actions.get(this.oneShot.name)!;
@@ -384,11 +478,35 @@ export class PlayerAvatar {
     this.actions.get('jumpLoop')?.setEffectiveWeight(this.airBlend * (1 - shot));
     this.actions.get('land')?.setEffectiveWeight(land * (1 - shot));
 
+    // --- tuck (the double jump's flip, the ground pound) and the flip itself
+    let tuckTarget = 0;
+    let flip = 0;
+    if (this.flipT >= 0) {
+      this.flipT += dt;
+      const k = clamp(this.flipT / FLIP_TIME, 0, 1);
+      flip = smoothstep(0, 1, k) * Math.PI * 2;
+      tuckTarget = Math.sin(k * Math.PI);
+      // Only a real landing cuts the flip short (brushing past a ledge while rising does not).
+      if (k >= 1 || (s.grounded && s.verticalSpeed <= 0.5 && this.flipT > 0.12) || mode !== 'move') this.flipT = -1;
+    }
+    const pound = mv?.pound ?? 'none';
+    if (pound === 'hover' || pound === 'fall') tuckTarget = 1;
+    this.tuck = damp(this.tuck, tuckTarget, tuckTarget > this.tuck ? 22 : 9, dt);
+    this.actions.get('crouch')?.setEffectiveWeight(this.tuck * (1 - shot) * 1.6);
+    // The pound's wind-up: one quick turn in the air.
+    this.spin = pound === 'hover' ? this.spin + dt * ((Math.PI * 2) / MOVEMENT.poundHover) : pound === 'fall' ? Math.round(this.spin / (Math.PI * 2)) * Math.PI * 2 : 0;
+    this.visual.rotation.y = pound === 'hover' ? this.spin : 0;
+
     this.mixer.update(dt);
 
-    // --- body lean with speed and into turns (subtle on a realistic figure)
-    this.lean = damp(this.lean, clamp(v / MOVEMENT.maxSpeed, 0, 1) * 0.06 * (1 - shot), 6, dt);
-    this.visual.rotation.x = this.lean;
+    // --- body lean with speed and into turns (subtle on a realistic figure), the air dash's dive
+    const sprintLean = mv?.sprinting && s.grounded ? 0.1 : 0;
+    this.lean = damp(this.lean, (clamp(v / MOVEMENT.maxSpeed, 0, 1) * 0.06 + sprintLean) * (1 - shot), 6, dt);
+    this.dashPitch = damp(this.dashPitch, mv?.dashing && mv.dashAir ? 0.6 : pound === 'fall' ? 0.15 : 0, 14, dt);
+    // Rotate about the hips (not the feet) for the flip and the dive.
+    const a = flip + this.dashPitch;
+    this.visual.rotation.x = this.lean + a;
+    this.visual.position.set(0, FLIP_PIVOT - FLIP_PIVOT * Math.cos(a), -FLIP_PIVOT * Math.sin(a));
     this.visual.rotation.z = damp(this.visual.rotation.z, clamp(-this.turnRate * 0.02, -0.12, 0.12) * clamp(v / 4, 0, 1), 8, dt);
 
     // --- head: glance at points of interest, otherwise a slow idle look-around

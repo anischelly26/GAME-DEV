@@ -28,6 +28,10 @@ export interface GameEvents {
   respawn: { id: string };
   fall: { y: number };
   jump: { speed: number };
+  /** Steam kicker moves (the avatar, audio and effects respond). */
+  doubleJump: { x: number; y: number; z: number };
+  dash: { air: boolean; x: number; y: number; z: number };
+  groundPound: { x: number; y: number; z: number; collider: number | null };
   land: { impact: number };
   footstep: { speed: number };
   interact: { id: string };

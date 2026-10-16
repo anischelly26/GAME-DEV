@@ -105,6 +105,7 @@ export class ThirdPersonCamera {
   private readonly velocity = new THREE.Vector3();
   private readonly lookAhead = new THREE.Vector3();
   private trauma = 0;
+  private fovKick = 0;
   private time = 0;
   /** Whether the assist turned the camera on the last update (debug overlay, tests). */
   assisting = false;
@@ -157,6 +158,11 @@ export class ThirdPersonCamera {
     return this.currentDist;
   }
 
+  /** Widen the view for a moment (degrees): dashes and boosts read as speed. */
+  kick(degrees: number): void {
+    this.fovKick = Math.max(this.fovKick, degrees);
+  }
+
   /** Add camera shake (0..1); ignored when the player has turned shake off. */
   shake(amount: number): void {
     if (this.settings.shake) this.trauma = Math.min(1, this.trauma + amount);
@@ -175,6 +181,7 @@ export class ThirdPersonCamera {
       typeof context === 'boolean' ? { grounded: context, speed: speedArg, mode: 'move', interacting: false, forwardInput: 1 } : context;
     this.time += dt;
     this.trauma = Math.max(0, this.trauma - dt * 1.6);
+    this.fovKick = damp(this.fovKick, 0, 5, dt);
 
     if (this.shot) {
       const s = this.shot;
@@ -323,9 +330,10 @@ export class ThirdPersonCamera {
     const aspect = this.camera.aspect || 16 / 9;
     const base = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(this.settings.fovHorizontal) / 2) / (16 / 9)));
     const portrait = aspect < 16 / 9 ? THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(this.settings.fovHorizontal) / 2) / aspect)) : base;
-    const fov = clamp(Math.min(portrait, base + 12) + (this.zoneFov - CAMERA_DEFAULTS.fov) + clamp(c.speed / 6, 0, 1) * 3, 35, 100);
+    const fov = clamp(Math.min(portrait, base + 12) + (this.zoneFov - CAMERA_DEFAULTS.fov) + clamp(c.speed / 6, 0, 1) * 3 + this.fovKick, 35, 105);
     if (Math.abs(this.camera.fov - fov) > 0.01) {
-      this.camera.fov = lerp(this.camera.fov, fov, 1 - Math.exp(-6 * dt));
+      // A kick snaps out quickly and eases back; everything else eases both ways.
+      this.camera.fov = fov > this.camera.fov + 1 && this.fovKick > 1 ? lerp(this.camera.fov, fov, 1 - Math.exp(-20 * dt)) : lerp(this.camera.fov, fov, 1 - Math.exp(-6 * dt));
       this.camera.updateProjectionMatrix();
     }
   }

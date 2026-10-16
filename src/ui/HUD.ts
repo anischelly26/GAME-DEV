@@ -99,6 +99,12 @@ export class HUD {
   private readonly prompt: HTMLElement;
   private readonly subtitle: HTMLElement;
   private readonly tipEl: HTMLElement;
+  private readonly abilityEl: HTMLElement;
+  private readonly areaEl: HTMLElement;
+  private readonly toastEl: HTMLElement;
+  private abilityTimer = 0;
+  private areaTimer = 0;
+  private toastTimer = 0;
   private readonly fadeEl: HTMLElement;
   private readonly fallFadeEl: HTMLElement;
   private readonly documentEl: HTMLElement;
@@ -124,6 +130,9 @@ export class HUD {
     this.prompt = el('div', 'prompt hidden', this.root);
     this.subtitle = el('div', 'subtitle hidden', this.root);
     this.tipEl = el('div', 'tip hidden', this.root);
+    this.abilityEl = el('div', 'ability hidden', this.root);
+    this.areaEl = el('div', 'area hidden', this.root);
+    this.toastEl = el('div', 'toast hidden', this.root);
     this.documentEl = el('div', 'document hidden', this.root);
     this.debugEl = el('div', 'debug hidden', this.root);
     this.skipEl = el('div', 'skip hidden', this.root, '<span class="key">Space</span> or <span class="key">E</span> skip');
@@ -281,6 +290,37 @@ export class HUD {
     this.subtitle.classList.remove('hidden');
   }
 
+  /**
+   * A new gadget's card: what it is and its buttons, shown once when it is picked up (the way a
+   * new ability is introduced), then it fades.
+   */
+  abilityCard(card: { eyebrow: string; title: string; rows: Array<{ key: string; pad: string; text: string }> }, gamepad = false): void {
+    const keys = (k: string) => k.split(' ').map((x) => `<span class="key${gamepad ? ' pad' : ''}">${x}</span>`).join(' ');
+    this.abilityEl.innerHTML = `<div class="eyebrow">${card.eyebrow}</div><h3>${card.title}</h3>${card.rows
+      .map((r) => `<div class="row"><span class="keys">${keys(gamepad ? r.pad : r.key)}</span><span>${r.text}</span></div>`)
+      .join('')}`;
+    this.abilityEl.classList.remove('hidden');
+    this.abilityTimer = 9;
+  }
+
+  /** The name of the space Mara has just entered, briefly, top centre. */
+  areaTitle(title: string, sub = ''): void {
+    this.areaEl.innerHTML = `<div class="name">${title}</div>${sub ? `<div class="sub">${sub}</div>` : ''}`;
+    this.areaEl.classList.remove('hidden');
+    this.areaTimer = 3.6;
+  }
+
+  get areaText(): string {
+    return this.areaEl.classList.contains('hidden') ? '' : (this.areaEl.textContent ?? '');
+  }
+
+  /** A small confirmation (a collectible found), top right. */
+  toast(text: string): void {
+    this.toastEl.textContent = text;
+    this.toastEl.classList.remove('hidden');
+    this.toastTimer = 2.8;
+  }
+
   /** Short contextual tip. With a `key`, it is shown only once per run. */
   tip(text: string, key?: string): void {
     if (key) {
@@ -352,6 +392,12 @@ export class HUD {
   }
 
   update(dt: number): void {
+    for (const [el, key] of [[this.abilityEl, 'abilityTimer'], [this.areaEl, 'areaTimer'], [this.toastEl, 'toastTimer']] as const) {
+      if (this[key] > 0) {
+        this[key] -= dt;
+        if (this[key] <= 0) el.classList.add('hidden');
+      }
+    }
     if (this.tipTimer > 0) {
       this.tipTimer -= dt;
       if (this.tipTimer <= 0) this.tipEl.classList.add('hidden');

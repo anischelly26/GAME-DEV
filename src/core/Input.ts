@@ -20,6 +20,11 @@ export interface InputFrame {
   jumpHeld: boolean;
   jumpPressed: boolean;
   interactPressed: boolean;
+  /** Dash (Shift / gamepad B); held after a ground dash, it keeps a sprint. */
+  dashPressed: boolean;
+  dashHeld: boolean;
+  /** Ground pound (Ctrl / gamepad RB), in the air. */
+  poundPressed: boolean;
   /** Jump/Interact pressed while a cinematic holds control. */
   skipPressed: boolean;
 }
@@ -35,9 +40,10 @@ export interface VirtualInput {
   moveX: number;
   moveY: number;
   jumpHeld: boolean;
+  dashHeld?: boolean;
 }
 
-type Action = 'jump' | 'interact';
+type Action = 'jump' | 'interact' | 'dash' | 'pound';
 
 const MOVE_CODES = {
   forward: ['KeyW', 'ArrowUp'],
@@ -48,7 +54,11 @@ const MOVE_CODES = {
 const ACTION_CODES: Record<Action, string[]> = {
   jump: ['Space'],
   interact: ['KeyE', 'KeyF', 'Enter'],
+  dash: ['ShiftLeft', 'ShiftRight'],
+  pound: ['ControlLeft', 'ControlRight'],
 };
+/** Only these become skip requests while a cinematic holds control. */
+const SKIP_ACTIONS: Action[] = ['jump', 'interact'];
 
 /** Base mouse look rate: radians of camera rotation per pixel at the default sensitivity (25). */
 export const BASE_RADIANS_PER_PIXEL = 0.0022;
@@ -77,7 +87,7 @@ export class Input {
 
   private gameplay = false;
   private keys = new Set<string>();
-  private pending: Record<Action, number> = { jump: 0, interact: 0 };
+  private pending: Record<Action, number> = { jump: 0, interact: 0, dash: 0, pound: 0 };
   private skipPending = 0;
   private lookYaw = 0;
   private lookPitch = 0;
@@ -85,6 +95,7 @@ export class Input {
   private padButtonsPrev: boolean[] = [];
   private padMove = { x: 0, y: 0 };
   private padJumpHeld = false;
+  private padDashHeld = false;
 
   /** Called for Escape / P / gamepad Start. */
   onPauseRequest: (() => void) | null = null;
@@ -121,7 +132,7 @@ export class Input {
 
   /** Drop queued presses and look motion, keeping which keys are physically held. */
   discardQueued(): void {
-    this.pending.jump = this.pending.interact = 0;
+    this.pending.jump = this.pending.interact = this.pending.dash = this.pending.pound = 0;
     this.skipPending = 0;
     this.virtualPresses.length = 0;
     this.lookYaw = this.lookPitch = 0;
@@ -165,10 +176,13 @@ export class Input {
     const edge = (i: number) => buttons[i] && !this.padButtonsPrev[i];
     if (buttons.some(Boolean) || lx !== 0 || ly !== 0 || rx !== 0 || ry !== 0) this.usingGamepad = true;
     if (edge(0)) this.queue('jump');
-    if (edge(2) || edge(1)) this.queue('interact');
+    if (edge(2)) this.queue('interact');
+    if (edge(1)) this.queue('dash');
+    if (edge(5) || edge(7)) this.queue('pound');
     if (edge(9)) this.onPauseRequest?.();
     if ((edge(10) || edge(11)) && this.lookAllowed) this.onRecenter?.();
     this.padJumpHeld = !!buttons[0];
+    this.padDashHeld = !!buttons[1];
     this.padButtonsPrev = buttons;
   }
 
@@ -182,11 +196,12 @@ export class Input {
 
   /** Sampled once per fixed simulation step. Consumes queued presses. */
   sampleFixed(): InputFrame {
-    const frame: InputFrame = { moveX: 0, moveY: 0, jumpHeld: false, jumpPressed: false, interactPressed: false, skipPressed: false };
+    const frame: InputFrame = { moveX: 0, moveY: 0, jumpHeld: false, jumpPressed: false, interactPressed: false, dashPressed: false, dashHeld: false, poundPressed: false, skipPressed: false };
     if (this.virtual) {
       frame.moveX = this.virtual.moveX;
       frame.moveY = this.virtual.moveY;
       frame.jumpHeld = this.virtual.jumpHeld;
+      frame.dashHeld = !!this.virtual.dashHeld;
     } else {
       const k = (codes: string[]) => codes.some((c) => this.keys.has(c));
       let x = (k(MOVE_CODES.right) ? 1 : 0) - (k(MOVE_CODES.left) ? 1 : 0);
@@ -202,17 +217,21 @@ export class Input {
       frame.moveX = x;
       frame.moveY = y;
       frame.jumpHeld = k(ACTION_CODES.jump) || this.padJumpHeld;
+      frame.dashHeld = k(ACTION_CODES.dash) || this.padDashHeld;
     }
     for (const a of this.virtualPresses) this.queue(a);
     this.virtualPresses.length = 0;
     frame.jumpPressed = this.pending.jump > 0;
     frame.interactPressed = this.pending.interact > 0;
+    frame.dashPressed = this.pending.dash > 0;
+    frame.poundPressed = this.pending.pound > 0;
     frame.skipPressed = this.skipPending > 0;
-    this.pending.jump = this.pending.interact = 0;
+    this.pending.jump = this.pending.interact = this.pending.dash = this.pending.pound = 0;
     this.skipPending = 0;
     if (!this.enabled || !this.gameplay) {
       frame.moveX = frame.moveY = 0;
       frame.jumpHeld = frame.jumpPressed = frame.interactPressed = false;
+      frame.dashHeld = frame.dashPressed = frame.poundPressed = false;
     }
     if (!this.gameplay) frame.skipPressed = false;
     return frame;
@@ -236,7 +255,7 @@ export class Input {
   private queue(action: Action): void {
     if (!this.gameplay) return; // menu-owned: never becomes a gameplay action
     if (this.enabled) this.pending[action]++;
-    else this.skipPending++;
+    else if (SKIP_ACTIONS.includes(action)) this.skipPending++;
   }
 
   private handleKeyDown = (e: KeyboardEvent): void => {

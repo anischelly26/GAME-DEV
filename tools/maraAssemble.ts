@@ -30,6 +30,14 @@ export const CLIPS: Record<string, [1 | 2, string]> = {
   // Chapter One opening: lying on the bunk, then getting up.
   wake: [2, 'LayToIdle'],
   shakeHead: [2, 'Idle_No_Loop'],
+  // Chapter One v2: the workshop intro, the steam kicker's moves, grinding, fidgets and work.
+  sitIdle: [1, 'Sitting_Idle_Loop'],
+  crouch: [1, 'Crouch_Idle_Loop'],
+  slide: [2, 'Slide_Loop'],
+  fix: [1, 'Fixing_Kneeling'],
+  pickup: [1, 'PickUp_Table'],
+  foldArms: [2, 'Idle_FoldArms_Loop'],
+  nod: [2, 'Yes'],
 };
 
 export function bonesOf(root: THREE.Object3D): Map<string, THREE.Bone> {

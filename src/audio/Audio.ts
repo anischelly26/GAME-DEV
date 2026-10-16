@@ -253,6 +253,25 @@ export class AudioSystem {
         this.burst('bandpass', 2200, 2, 0.35, 0.12, o());
         this.tone('square', 880, 880, 0.12, 0.04, o(), 0.002, 0.35);
         break;
+      // Movement 2.0 (synthesised stand-ins until a sample is loaded for the name).
+      case 'doubleJump':
+        this.burst('bandpass', 1400, 0.9, 0.35, 0.16, o(), 0.004, 0, 500);
+        this.tone('sine', 300, 520, 0.18, 0.05, o(), 0.004);
+        break;
+      case 'airDash':
+        this.burst('bandpass', 900, 0.7, 0.4, 0.2, o(), 0.003, 0, 2600);
+        break;
+      case 'roll':
+        this.burst('lowpass', 700, 0.7, 0.3, 0.12, o(), 0.01, 0, 250);
+        break;
+      case 'poundStart':
+        this.burst('bandpass', 500, 1.2, 0.2, 0.08, o(), 0.004, 0, 1600);
+        break;
+      case 'groundPound':
+        this.tone('sine', 90, 38, 0.5, 0.3, o(), 0.004);
+        this.burst('lowpass', 900, 0.7, 0.45, 0.28, o(), 0.002, 0, 180);
+        this.metal(140, 0.4, 0.08, o(), 0.01);
+        break;
       case 'horn':
         // The prison's pressure horn: a low, slightly detuned two-note blast.
         this.tone('sawtooth', 92, 88, 2.6, 0.07, o(), 0.3);
