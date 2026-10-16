@@ -255,6 +255,26 @@ export function trs(x: number, y: number, z: number, rotY = 0, rotX = 0, rotZ = 
 }
 
 /**
+ * The shared materials multiply by vertex colours (the batcher tints and darkens with them). A mesh
+ * built straight from one of them has no colour attribute, and WebGL then reads (0, 0, 0): the
+ * mesh draws black, lit only by reflections. Give every such geometry white vertex colours.
+ * Returns how many geometries were fixed.
+ */
+export function ensureVertexColors(root: THREE.Object3D): number {
+  let fixed = 0;
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    if (!materials.some((m) => m.vertexColors) || mesh.geometry.getAttribute('color')) return;
+    const count = mesh.geometry.getAttribute('position').count;
+    mesh.geometry.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(count * 3).fill(1), 3));
+    fixed++;
+  });
+  return fixed;
+}
+
+/**
  * Merge every static mesh under `root` into one mesh per material (fewer draw calls for set pieces
  * built from many small parts). Meshes under any object in `keep` (animated parts) are left alone.
  */

@@ -20,6 +20,7 @@ import { HUD, type Settings } from '../ui/HUD';
 import { AudioSystem } from '../audio/Audio';
 import type { Level, LevelContext } from '../levels/Level';
 import { QuietCellLevel } from '../levels/breakwater/QuietCellLevel';
+import { ensureVertexColors } from '../world/geometry';
 import { Autopilot } from '../dev/Autopilot';
 import { TraversalSurfaces } from '../player/Traversal';
 import { smoothstep } from './math';
@@ -171,6 +172,8 @@ export class Game {
       },
     };
     this.level = new QuietCellLevel(ctx);
+    // Props built straight from the shared (vertex-coloured) materials would otherwise draw black.
+    ensureVertexColors(this.scene);
     this.wireEvents();
     this.hud.autoQualityLabel = this.pipeline.recommendedQuality === 'low' ? 'Low on this GPU' : 'High on this GPU';
     this.applySettings(this.hud.settings);
@@ -509,7 +512,7 @@ export class Game {
     if (!this.options.test) this.input.requestPointerLock();
   }
 
-  private complete(card?: { title: string; body: string; reward?: boolean }): void {
+  private complete(card?: { title: string; body: string; reward?: boolean; marks?: { found: number; total: number } }): void {
     this.progression.complete = true;
     this.state = 'complete';
     this.input.setGameplayActive(false);
