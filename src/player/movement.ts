@@ -25,6 +25,37 @@ export const MOVEMENT = {
   capsuleHalfHeight: 0.45,
   /** Max height (above the feet) of a ledge the player is boosted onto when a jump falls just short. */
   ledgeAssist: 0.42,
+
+  // --- Movement 2.0 ---------------------------------------------------------------------------
+  /** Top speed while sprinting: hold dash after a ground dash. */
+  sprintSpeed: 7.4,
+  /** Ground dash: a quick roll in the stick's direction (always available). */
+  dashSpeed: 10.5,
+  dashTime: 0.18,
+  dashCooldown: 0.4,
+  /** Steam kicker: a horizontal burst in the air that holds height, once per airtime. */
+  airDashSpeed: 11,
+  airDashTime: 0.2,
+  /** Steam kicker: a second jump in the air, once per airtime, with a flip. */
+  doubleJumpHeight: 1.15,
+  /** Steam kicker: hover for a moment, then slam straight down. */
+  poundHover: 0.16,
+  poundSpeed: 24,
+  poundRecover: 0.22,
+  /** No ground pound closer than this above the ground (it would be a stumble, not a slam). */
+  poundMinHeight: 0.9,
+  /** Grinding a pipe: speed limits, how strongly the slope pulls, friction (m/s^2). */
+  grindMinSpeed: 5.5,
+  grindMaxSpeed: 12,
+  grindSlope: 0.55,
+  grindFriction: 1.2,
+  /** Feet this close to the top of a pipe (in the air) land on it, except on its last metres. */
+  grindAttach: 0.5,
+  grindNoCatchEnd: 2,
+  /** A jump off a pipe. */
+  grindJumpHeight: 1.3,
+  /** After leaving a pipe, momentum carries this long before normal air control takes over. */
+  grindCarry: 0.7,
 };
 
 export const PLAYER_CENTER_OFFSET = MOVEMENT.capsuleHalfHeight + MOVEMENT.capsuleRadius;

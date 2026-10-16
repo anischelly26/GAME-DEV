@@ -1,17 +1,74 @@
 import * as THREE from 'three';
 
 /**
- * Procedural sound: every effect is synthesised with Web Audio at runtime, so there are no audio
- * assets to license. These are honest placeholders designed to communicate state (pressure, latch,
- * landing) until recorded sounds replace them.
+ * A game sound made of recorded CC0 samples (public/assets/audio, sources in docs/ASSETS.md):
+ * each layer picks a random variation of a sample set, at a gain and a random pitch in a range.
+ */
+type Layer = [set: string, gain: number, pitchMin: number, pitchMax: number];
+const SAMPLED: Record<string, Layer[]> = {
+  'footstep:stone': [['step.stone', 0.55, 0.92, 1.08]],
+  'footstep:wood': [['step.wood', 0.6, 0.92, 1.08]],
+  'footstep:metal': [['step.metal', 0.32, 0.95, 1.1]],
+  jump: [['cloth', 0.45, 0.95, 1.12]],
+  land: [['land', 0.75, 0.92, 1.05]],
+  'land:metal': [['land.metal', 0.5, 0.92, 1.05], ['land', 0.4, 0.95, 1.05]],
+  'land:heavy': [['land.heavy', 0.85, 0.85, 0.95]],
+  doubleJump: [['thruster', 0.3, 1.25, 1.4], ['cloth', 0.35, 1.05, 1.15]],
+  airDash: [['thruster', 0.45, 0.95, 1.08], ['cloth', 0.35, 0.9, 1.0]],
+  roll: [['cloth', 0.6, 0.82, 0.92], ['land', 0.25, 1.1, 1.2]],
+  poundStart: [['cloth', 0.5, 1.2, 1.35]],
+  groundPound: [['metal.heavy', 0.6, 0.75, 0.85], ['boom', 0.55, 1.0, 1.1], ['land.heavy', 0.5, 0.8, 0.9]],
+  latch: [['latch', 0.8, 0.95, 1.05], ['metal.heavy', 0.45, 0.85, 0.95]],
+  lever: [['click', 0.7, 0.9, 1.1], ['metal.light', 0.35, 0.9, 1.1]],
+  valveOpen: [['creak', 0.6, 0.95, 1.1]],
+  valveClose: [['creak', 0.6, 0.85, 0.95]],
+  grab: [['cloth', 0.45, 1.0, 1.1], ['metal.light', 0.22, 1.1, 1.25]],
+  climb: [['cloth', 0.45, 0.88, 0.98]],
+  vault: [['cloth', 0.55, 1.05, 1.15], ['metal.light', 0.2, 1.2, 1.3]],
+  pickup: [['belt', 0.8, 1.0, 1.05], ['jingle.gadget', 0.45, 1, 1]],
+  markFound: [['jingle.found', 0.5, 1, 1], ['glass', 0.25, 1.0, 1.1]],
+  piston: [['metal.heavy', 0.45, 0.6, 0.7]],
+  whistlePull: [['click', 0.6, 0.8, 0.9]],
+  thunk: [['wood.medium', 0.6, 0.9, 1.05]],
+  pot: [['pot', 0.6, 0.95, 1.05]],
+  uiSelect: [['ui.select', 0.35, 1, 1]],
+  doorCreak: [['creak', 0.55, 0.62, 0.68]],
+  boardsBreak: [['wood.medium', 0.9, 0.7, 0.8], ['land.heavy', 0.45, 1.15, 1.25], ['wood.medium', 0.6, 1.1, 1.2]],
+};
+/** These keep their synthesised layer too (steam, hiss and machinery read better with it). */
+const ALSO_SYNTH = new Set(['latch', 'lever', 'piston', 'groundPound', 'airDash']);
+
+/** Music and ambience beds (public/assets/audio/manifest.json "beds"), and their levels. */
+const BED_GAIN: Record<string, number> = { title: 0.55, workshop: 0.6, cell: 0.42, hall: 0.5, ending: 0.62, tomb: 0.38, waves: 0.5, rain: 0.55 };
+/** Beds made here rather than recorded (no file, no licence): generated on first use. */
+const GENERATED_BEDS: Record<string, (ctx: BaseAudioContext) => AudioBuffer> = { rain: rainBuffer };
+
+/**
+ * Game audio. Recorded CC0 samples (with random variations and pitch) for footsteps, impacts,
+ * cloth, metal and the steam kicker; music and ambience beds that crossfade with the place; and
+ * Web Audio synthesis where it reads better or no sample fits (steam, hiss, the engine's drone,
+ * the intercom), or until the samples have loaded.
  */
 export class AudioSystem {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
   private sfxBus!: GainNode;
   private ambBus!: GainNode;
+  private musicBus!: GainNode;
   private noiseBuffer!: AudioBuffer;
   private volume = 0.8;
+  private musicVolume = 0.7;
+  private manifest: { sfx: Record<string, string[]>; beds: Record<string, { file: string; loop: boolean }> } | null = null;
+  private readonly samples = new Map<string, AudioBuffer[]>();
+  private readonly bedBuffers = new Map<string, Promise<AudioBuffer | null>>();
+  private readonly playing: Record<'music' | 'ambience', { name: string; src: AudioBufferSourceNode | null; gain: GainNode } | null> = { music: null, ambience: null };
+  /** The scrape of a pipe being ground (built on first use, then only its level changes). */
+  private grindGain: GainNode | null = null;
+  /** The prison's own drone and surf (synthesised), off away from Breakwater. */
+  private prisonGain: GainNode | null = null;
+  private prisonOn = true;
+  private readonly wanted: Record<'music' | 'ambience', string | null> = { music: null, ambience: null };
+  private readonly base = `${import.meta.env.BASE_URL}assets/audio/`;
   private readonly listenerPos = new THREE.Vector3();
   private readonly listenerRight = new THREE.Vector3(1, 0, 0);
 
@@ -32,6 +89,10 @@ export class AudioSystem {
     this.ambBus = this.ctx.createGain();
     this.ambBus.gain.value = 0.55;
     this.ambBus.connect(this.master);
+    this.musicBus = this.ctx.createGain();
+    this.musicBus.gain.value = this.musicVolume;
+    this.musicBus.connect(this.master);
+    void this.loadSamples();
     const len = this.ctx.sampleRate * 2;
     this.noiseBuffer = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const data = this.noiseBuffer.getChannelData(0);
@@ -44,9 +105,195 @@ export class AudioSystem {
     if (this.ctx) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
   }
 
+  setMusicVolume(v: number): void {
+    this.musicVolume = v;
+    if (this.ctx) this.musicBus.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+  }
+
   suspend(paused: boolean): void {
     if (!this.ctx) return;
     this.ambBus.gain.setTargetAtTime(paused ? 0.12 : 0.55, this.ctx.currentTime, 0.2);
+    this.musicBus.gain.setTargetAtTime(paused ? this.musicVolume * 0.35 : this.musicVolume, this.ctx.currentTime, 0.3);
+  }
+
+  /** Whether the recorded samples have loaded (tests, debug overlay). */
+  get samplesReady(): boolean {
+    return this.samples.size > 0;
+  }
+
+  /** The music bed now wanted (null: silence), crossfading over `fade` seconds. */
+  setMusic(name: string | null, fade = 2.5): void {
+    this.setBed('music', name, fade);
+  }
+
+  /** The ambience bed now wanted (null: none). */
+  setAmbience(name: string | null, fade = 3): void {
+    this.setBed('ambience', name, fade);
+  }
+
+  get currentMusic(): string | null {
+    return this.wanted.music;
+  }
+
+  get currentAmbience(): string | null {
+    return this.wanted.ambience;
+  }
+
+  private async loadSamples(): Promise<void> {
+    try {
+      this.manifest = await (await fetch(`${this.base}manifest.json`)).json();
+    } catch {
+      return; // no samples: everything stays synthesised
+    }
+    const ctx = this.ctx!;
+    await Promise.all(
+      Object.entries(this.manifest!.sfx).map(async ([name, files]) => {
+        const buffers: AudioBuffer[] = [];
+        for (const f of files) {
+          try {
+            buffers.push(await ctx.decodeAudioData(await (await fetch(this.base + f)).arrayBuffer()));
+          } catch {
+            /* skip a file that fails to load */
+          }
+        }
+        if (buffers.length) this.samples.set(name, buffers);
+      }),
+    );
+    // Beds requested before the manifest arrived.
+    for (const slot of ['music', 'ambience'] as const) if (this.wanted[slot]) this.startBed(slot, this.wanted[slot]!, 2);
+  }
+
+  /**
+   * Grinding a pipe: a metal scrape (noise through a wobbling resonant band) over the faint ring of
+   * the pipe. `level` 0 fades it out; otherwise it follows the speed (0..1).
+   */
+  grind(level: number): void {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    if (!this.grindGain) {
+      if (level <= 0) return;
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
+      gain.connect(this.sfxBus);
+      const src = ctx.createBufferSource();
+      src.buffer = this.noiseBuffer;
+      src.loop = true;
+      const band = ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 2300;
+      band.Q.value = 2.4;
+      const wobble = ctx.createOscillator();
+      wobble.frequency.value = 6.5;
+      const depth = ctx.createGain();
+      depth.gain.value = 520;
+      wobble.connect(depth).connect(band.frequency);
+      src.connect(band).connect(gain);
+      const ring = ctx.createGain();
+      ring.gain.value = 0.18;
+      for (const f of [912, 1418, 2290]) {
+        const o = ctx.createOscillator();
+        o.frequency.value = f;
+        o.connect(ring);
+        o.start();
+      }
+      ring.connect(gain);
+      src.start();
+      wobble.start();
+      this.grindGain = gain;
+    }
+    this.grindGain.gain.setTargetAtTime(level > 0 ? 0.2 * level : 0.0001, ctx.currentTime, level > 0 ? 0.04 : 0.09);
+  }
+
+  /** The engine drone and distant surf under every bed (on in Breakwater, off in Saltmere). */
+  setPrisonDrone(on: boolean, fade = 1.5): void {
+    this.prisonOn = on;
+    if (this.ctx && this.prisonGain) {
+      const t = this.ctx.currentTime;
+      this.prisonGain.gain.cancelScheduledValues(t);
+      this.prisonGain.gain.setValueAtTime(this.prisonGain.gain.value, t);
+      this.prisonGain.gain.linearRampToValueAtTime(on ? 1 : 0.0001, t + fade);
+    }
+  }
+
+  private bed(name: string): Promise<AudioBuffer | null> {
+    let p = this.bedBuffers.get(name);
+    if (!p && GENERATED_BEDS[name] && this.ctx) {
+      p = Promise.resolve(GENERATED_BEDS[name](this.ctx));
+      this.bedBuffers.set(name, p);
+    }
+    if (!p) {
+      const entry = this.manifest?.beds[name];
+      p = entry
+        ? fetch(this.base + entry.file)
+            .then((r) => r.arrayBuffer())
+            .then((b) => this.ctx!.decodeAudioData(b))
+            .catch(() => null)
+        : Promise.resolve(null);
+      this.bedBuffers.set(name, p);
+    }
+    return p;
+  }
+
+  private setBed(slot: 'music' | 'ambience', name: string | null, fade: number): void {
+    if (this.wanted[slot] === name) return;
+    this.wanted[slot] = name;
+    if (!this.ctx) return;
+    const old = this.playing[slot];
+    if (old) {
+      const t = this.ctx.currentTime;
+      old.gain.gain.cancelScheduledValues(t);
+      old.gain.gain.setValueAtTime(old.gain.gain.value, t);
+      old.gain.gain.linearRampToValueAtTime(0.0001, t + fade);
+      old.src?.stop(t + fade + 0.1);
+      this.playing[slot] = null;
+    }
+    if (name && this.manifest) this.startBed(slot, name, fade);
+  }
+
+  private startBed(slot: 'music' | 'ambience', name: string, fade: number): void {
+    const ctx = this.ctx!;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.0001;
+    gain.connect(slot === 'music' ? this.musicBus : this.ambBus);
+    const entry = { name, src: null as AudioBufferSourceNode | null, gain };
+    this.playing[slot] = entry;
+    void this.bed(name).then((buf) => {
+      if (!buf || this.playing[slot] !== entry) return;
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const loop = this.manifest!.beds[name]?.loop ?? name in GENERATED_BEDS;
+      if (loop) {
+        // Loop past the recording's silent lead-in and tail.
+        const [a, b] = audibleRange(buf);
+        src.loop = true;
+        src.loopStart = a;
+        src.loopEnd = b;
+      }
+      src.connect(gain);
+      src.start(ctx.currentTime, loop ? audibleRange(buf)[0] : 0);
+      entry.src = src;
+      const t = ctx.currentTime;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.linearRampToValueAtTime(BED_GAIN[name] ?? 0.5, t + fade);
+    });
+  }
+
+  /** Play a sampled sound if its samples are loaded. Returns false if it should be synthesised. */
+  private playSample(name: string, pos: THREE.Vector3Like | undefined, volume: number): boolean {
+    const layers = SAMPLED[name];
+    if (!layers) return false;
+    let played = false;
+    for (const [set, gain, p0, p1] of layers) {
+      const buffers = this.samples.get(set);
+      if (!buffers) continue;
+      const src = this.ctx!.createBufferSource();
+      src.buffer = buffers[Math.floor(Math.random() * buffers.length)];
+      src.playbackRate.value = p0 + Math.random() * (p1 - p0);
+      src.connect(this.out(pos, gain * volume));
+      src.start();
+      played = true;
+    }
+    return played;
   }
 
   setListener(camera: THREE.Camera): void {
@@ -135,6 +382,10 @@ export class AudioSystem {
 
   private startAmbience(): void {
     const ctx = this.ctx!;
+    const prison = ctx.createGain();
+    prison.gain.value = this.prisonOn ? 1 : 0.0001;
+    prison.connect(this.ambBus);
+    this.prisonGain = prison;
     // Engine drone: two detuned low oscillators through a slowly breathing low-pass.
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
@@ -154,7 +405,7 @@ export class AudioSystem {
     lfoGain.gain.value = 60;
     lfo.connect(lfoGain).connect(lp.frequency);
     lfo.start();
-    lp.connect(droneGain).connect(this.ambBus);
+    lp.connect(droneGain).connect(prison);
     // Distant surf: band-passed noise swelling slowly.
     const surf = ctx.createBufferSource();
     surf.buffer = this.noiseBuffer;
@@ -170,7 +421,7 @@ export class AudioSystem {
     swellGain.gain.value = 0.04;
     swell.connect(swellGain).connect(surfGain.gain);
     swell.start();
-    surf.connect(bp).connect(surfGain).connect(this.ambBus);
+    surf.connect(bp).connect(surfGain).connect(prison);
     surf.start();
   }
 
@@ -178,6 +429,10 @@ export class AudioSystem {
 
   play(name: string, pos?: THREE.Vector3Like, volume = 1): void {
     if (!this.ctx || this.ctx.state !== 'running') return;
+    if (this.playSample(name, pos, volume) && !ALSO_SYNTH.has(name)) return;
+    // Surface variants fall back to the plain synthesised sound.
+    if (name.startsWith('footstep:')) name = 'footstep';
+    else if (name.startsWith('land:')) name = 'land';
     const o = (g = 1) => this.out(pos, g * volume);
     switch (name) {
       case 'footstep':
@@ -253,6 +508,25 @@ export class AudioSystem {
         this.burst('bandpass', 2200, 2, 0.35, 0.12, o());
         this.tone('square', 880, 880, 0.12, 0.04, o(), 0.002, 0.35);
         break;
+      // Movement 2.0 (synthesised stand-ins until a sample is loaded for the name).
+      case 'doubleJump':
+        this.burst('bandpass', 1400, 0.9, 0.35, 0.16, o(), 0.004, 0, 500);
+        this.tone('sine', 300, 520, 0.18, 0.05, o(), 0.004);
+        break;
+      case 'airDash':
+        this.burst('bandpass', 900, 0.7, 0.4, 0.2, o(), 0.003, 0, 2600);
+        break;
+      case 'roll':
+        this.burst('lowpass', 700, 0.7, 0.3, 0.12, o(), 0.01, 0, 250);
+        break;
+      case 'poundStart':
+        this.burst('bandpass', 500, 1.2, 0.2, 0.08, o(), 0.004, 0, 1600);
+        break;
+      case 'groundPound':
+        this.tone('sine', 90, 38, 0.5, 0.3, o(), 0.004);
+        this.burst('lowpass', 900, 0.7, 0.45, 0.28, o(), 0.002, 0, 180);
+        this.metal(140, 0.4, 0.08, o(), 0.01);
+        break;
       case 'horn':
         // The prison's pressure horn: a low, slightly detuned two-note blast.
         this.tone('sawtooth', 92, 88, 2.6, 0.07, o(), 0.3);
@@ -268,6 +542,40 @@ export class AudioSystem {
       case 'paper':
         this.burst('highpass', 2500, 0.7, 0.18, 0.06, o());
         break;
+      case 'whistle': {
+        // A steam whistle: three pipes sounding together, a pressure swoop up at the start and a
+        // sag at the end, over a breath of hissing steam.
+        const ctx = this.ctx!;
+        const t = ctx.currentTime;
+        const out = o(0.9);
+        for (const [f, amp] of [
+          [466, 0.06],
+          [587, 0.05],
+          [698, 0.045],
+        ]) {
+          const osc = ctx.createOscillator();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(f * 0.93, t);
+          osc.frequency.exponentialRampToValueAtTime(f, t + 0.14);
+          osc.frequency.setValueAtTime(f, t + 1.35);
+          osc.frequency.exponentialRampToValueAtTime(f * 0.96, t + 1.8);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(amp, t + 0.08);
+          g.gain.setValueAtTime(amp, t + 1.35);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 1.85);
+          osc.connect(g).connect(out);
+          osc.start(t);
+          osc.stop(t + 1.9);
+        }
+        this.burst('bandpass', 2600, 0.8, 1.8, 0.05, out, 0.06);
+        break;
+      }
+      case 'lampOut':
+        // The flame gutters and goes: a soft breath of air and a tiny tick of the cooling glass.
+        this.burst('lowpass', 700, 0.6, 0.55, 0.12, o(), 0.04, 0, 180);
+        this.tone('sine', 2400, 2300, 0.05, 0.01, o(), 0.002, 0.5);
+        break;
       case 'respawn':
         this.tone('sine', 440, 660, 0.4, 0.05, o(), 0.05);
         break;
@@ -275,4 +583,67 @@ export class AudioSystem {
         break;
     }
   }
+}
+
+/**
+ * Rain on a roof and a window, generated (8 s, stereo, loops without a seam): a soft pink-noise
+ * wash, a steady patter of small ticks and now and then a heavier drop on the glass.
+ */
+function rainBuffer(ctx: BaseAudioContext): AudioBuffer {
+  const rate = ctx.sampleRate;
+  const len = Math.floor(rate * 8);
+  const fade = Math.floor(rate * 0.5);
+  const buf = ctx.createBuffer(2, len, rate);
+  let peak = 0;
+  const channels: Float32Array<ArrayBuffer>[] = [];
+  for (let ch = 0; ch < 2; ch++) {
+    const raw = new Float32Array(len + fade);
+    let b0 = 0;
+    let b1 = 0;
+    let b2 = 0;
+    let soft = 0;
+    for (let i = 0; i < raw.length; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99765 * b0 + w * 0.099046;
+      b1 = 0.963 * b1 + w * 0.2965164;
+      b2 = 0.57 * b2 + w * 1.0526913;
+      soft += ((b0 + b1 + b2 + w * 0.1848) * 0.05 - soft) * 0.35;
+      raw[i] = soft;
+    }
+    const drops = 8 * 150;
+    for (let k = 0; k < drops; k++) {
+      const big = Math.random() < 0.05;
+      const dur = Math.floor(rate * (big ? 0.035 : 0.006 + Math.random() * 0.012));
+      const at = Math.floor(Math.random() * (raw.length - dur));
+      const amp = (big ? 0.3 : 0.07) * (0.35 + Math.random() * 0.65);
+      let lo = 0;
+      for (let j = 0; j < dur; j++) {
+        const w = Math.random() * 2 - 1;
+        lo += (w - lo) * (big ? 0.12 : 0.3);
+        raw[at + j] += (big ? lo * 2.2 : w - lo) * amp * Math.exp(-j / (dur * 0.28));
+      }
+    }
+    // Crossfade the tail into the head so the loop point is seamless.
+    const out = new Float32Array(len);
+    for (let i = 0; i < len; i++) out[i] = i < fade ? raw[i] * (i / fade) + raw[len + i] * (1 - i / fade) : raw[i];
+    for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(out[i]));
+    channels.push(out);
+  }
+  const scale = peak > 0 ? 0.8 / peak : 1;
+  channels.forEach((c, ch) => {
+    for (let i = 0; i < c.length; i++) c[i] *= scale;
+    buf.copyToChannel(c, ch);
+  });
+  return buf;
+}
+
+/** Seconds where a recording becomes audible and stops being audible (silent lead-in and tail). */
+function audibleRange(buf: AudioBuffer): [number, number] {
+  const d = buf.getChannelData(0);
+  const thr = 0.004;
+  let a = 0;
+  while (a < d.length && Math.abs(d[a]) < thr) a++;
+  let b = d.length - 1;
+  while (b > a && Math.abs(d[b]) < thr) b--;
+  return [a / buf.sampleRate, (b + 1) / buf.sampleRate];
 }

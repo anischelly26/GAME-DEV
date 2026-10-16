@@ -28,10 +28,18 @@ export interface GameEvents {
   respawn: { id: string };
   fall: { y: number };
   jump: { speed: number };
+  /** Steam kicker moves (the avatar, audio and effects respond). */
+  doubleJump: { x: number; y: number; z: number };
+  /** Mara got on (`on`) or off a grind pipe. */
+  grind: { on: boolean; x: number; y: number; z: number };
+  dash: { air: boolean; x: number; y: number; z: number };
+  groundPound: { x: number; y: number; z: number; collider: number | null };
   land: { impact: number };
   footstep: { speed: number };
   interact: { id: string };
   line: { speaker: string; text: string };
   complete: { timeSeconds: number; falls: number };
   sfx: { name: string; x?: number; y?: number; z?: number; volume?: number };
+  /** Change the music and/or ambience bed (undefined: leave as is; null: silence). */
+  music: { music?: string | null; ambience?: string | null; drone?: boolean };
 }

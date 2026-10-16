@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Screenshots of Chapter One's opening (Mara wakes up in the cell) at fixed story times.
+ * Screenshots of Chapter One's opening (the workshop the night before, then the cell) at fixed story times.
  *
  *   npm run dev            (in another terminal)
  *   node scripts/capture-opening.mjs [--url http://localhost:5173] [--channel msedge] [--size 1600x900] [--out artifacts/opening] [--format jpg]
@@ -33,16 +33,19 @@ await page.waitForFunction(() => window.__GAME?.ready, null, { timeout: 120000 }
 
 // Story time (seconds) -> shot name. Times follow QuietCellLevel.playOpening.
 const shots = [
-  [2.5, '01-card-saltmere'],
-  [8.5, '02-card-asleep'],
-  [13.0, '03-card-woke-up'],
-  [15.6, '04-cell-asleep'],
-  [17.4, '05-getting-up'],
-  [19.0, '06-standing'],
-  [20.6, '07-looking-around'],
-  [23.0, '08-breakwater'],
-  [27.5, '09-chapter-title'],
-  [31.5, '10-control'],
+  [2.5, '01-workshop-wide'],
+  [7.6, '02-the-plans'],
+  [12.0, '03-dozing'],
+  [14.8, '04-asleep'],
+  [17.5, '05-figure-at-window'],
+  [20.9, '06-lamp-out'],
+  [22.6, '07-woke-up-card'],
+  [24.9, '08-cell-asleep'],
+  [27.8, '09-getting-up'],
+  [30.2, '10-looking-around'],
+  [32.4, '11-breakwater'],
+  [37.0, '12-chapter-title'],
+  [40.4, '13-control'],
 ];
 let t = 0;
 for (const [at, name] of shots) {

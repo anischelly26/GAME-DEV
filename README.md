@@ -6,15 +6,19 @@ Breakwater, an island prison that runs on the sea.
 
 The current build is **Chapter One, *The Quiet Cell***, a short escape from the cell block:
 
-- a skippable story opening (Mara wakes up on the cell floor);
-- the pressure-hatch puzzle and the maintenance shaft;
-- a parkour practice route through the turbine hall;
+- a skippable story opening, played in the engine: Mara's workshop the night before, then she
+  wakes up on the cell floor;
+- the pressure-hatch puzzle and the maintenance shaft, where she finds Ivo's steam kicker (double
+  jump, air dash, ground pound; a dash and sprint from the start);
+- a parkour practice route through the turbine hall, entered by grinding a broken feed pipe (or by
+  the scaffold);
 - *The Breathing Engine* ride and the split-feed puzzle at the breach;
+- five hidden chalk marks, boards to slam, a steam whistle to pull;
 - the chapter ending, which points to Chapter Two (the hangar cell and an old aircraft, not built
   yet).
 
 First-play length has not been measured with a player yet. The autopilot, which never hesitates,
-plays the route in about a minute; the opening adds about 30 seconds unless it is skipped.
+plays the route in about a minute; the opening adds about 40 seconds unless it is skipped.
 
 - Creative direction and chapter plan: [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md)
 - What works, what doesn't, what's temporary: [docs/STATUS.md](docs/STATUS.md)
@@ -27,7 +31,7 @@ plays the route in about a minute; the opening adds about 30 seconds unless it i
 - Node.js 20 or newer (tested with Node 22.13)
 - A desktop browser with WebGL 2: current Chrome, Edge or Firefox. A dedicated graphics card is not
   required. The **Auto** graphics setting (the default) picks Low on integrated graphics: on an
-  Intel UHD laptop GPU, Low runs the route at about 49 FPS and High at about 9 FPS (see
+  Intel UHD laptop GPU, Low runs the route at about 45 FPS in Playwright's bundled Chromium (see
   [docs/STATUS.md](docs/STATUS.md)).
 
 ## Run it
@@ -54,7 +58,11 @@ npm run preview      # serves dist/ at http://localhost:4173
 | Move | W A S D or arrow keys (physical keys: Z Q S D on AZERTY) | Left stick |
 | Look | Mouse (click the view to capture; drag also works) | Right stick |
 | Jump | Space (hold for a higher jump) | A / Cross |
-| Interact | E (also F, Enter) | X / Square (B / Circle also works) |
+| Dash (a roll); hold to sprint | Shift | B / Circle |
+| Double jump, air dash (after finding the steam kicker) | Space / Shift in the air | A / B in the air |
+| Ground pound (after the kicker) | Ctrl in the air | RB or RT |
+| Grind | Land on a pipe (the feed pipe from the lookout); Space jumps off | A jumps off |
+| Interact | E (also F, Enter) | X / Square |
 | Recenter camera | C or middle mouse | R3 / L3 |
 | Pause / settings | Esc or P | Start / Options |
 | Skip a cinematic beat | Space or E (prompt bottom right) | A / Cross |

@@ -117,6 +117,50 @@ html, body {
 }
 .tip.hidden { opacity: 0; transform: translateY(8px); }
 
+/* ---------- new gadget card (right, mid height) */
+.ability {
+  right: 26px;
+  top: 34%;
+  width: min(330px, 80vw);
+  padding: 14px 18px 12px;
+  border: 1px solid rgba(255, 196, 107, 0.35);
+  border-radius: 8px;
+  background: linear-gradient(160deg, rgba(42, 30, 16, 0.92), rgba(12, 14, 16, 0.9));
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), inset 0 0 24px rgba(255, 170, 70, 0.08);
+  transition: opacity 0.5s, transform 0.5s;
+}
+.ability.hidden { opacity: 0; transform: translateX(16px); }
+.ability .eyebrow { font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--amber); }
+.ability h3 { margin: 4px 0 10px; font-family: var(--serif); font-weight: 400; font-size: 24px; }
+.ability .row { display: grid; grid-template-columns: 112px 1fr; gap: 10px; align-items: center; margin: 6px 0; font-size: 14px; color: var(--ink-dim); }
+.ability .keys { display: flex; gap: 4px; flex-wrap: wrap; }
+
+/* ---------- area title (top centre) */
+.area {
+  top: 9vh;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  transition: opacity 0.9s, letter-spacing 1.6s;
+  letter-spacing: 0.32em;
+}
+.area.hidden { opacity: 0; letter-spacing: 0.2em; }
+.area .name { font-family: var(--serif); font-size: clamp(22px, 2.6vw, 34px); text-transform: uppercase; text-shadow: 0 2px 16px #000; }
+.area .sub { margin-top: 4px; font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--amber); text-shadow: 0 1px 8px #000; }
+
+/* ---------- toast (top right) */
+.toast {
+  right: 26px;
+  top: 22px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid rgba(255, 196, 107, 0.4);
+  font-size: 14px;
+  transition: opacity 0.4s, transform 0.4s;
+}
+.toast.hidden { opacity: 0; transform: translateY(-8px); }
+
 /* ---------- cinematic skip hint */
 .skip {
   right: 26px;
@@ -147,6 +191,17 @@ html, body {
 .story h1 { margin: 10px 0 6px; font-family: var(--serif); font-weight: 400; font-size: clamp(34px, 6vw, 64px); letter-spacing: 0.03em; text-shadow: 0 2px 18px #000; }
 .story p { margin: 14px 0 0; font-family: var(--serif); font-size: clamp(19px, 2.4vw, 27px); line-height: 1.55; color: var(--ink); text-shadow: 0 1px 10px #000; }
 @keyframes story-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+/* A caption in the lower left of a shot (the opening's scenes), above the letterbox bar. */
+.story.lower { place-items: end start; padding: 0 8vw 17vh; text-align: left; background: linear-gradient(to top, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0) 42%); }
+.story.lower .inner { max-width: 620px; animation-duration: 1.4s; }
+.story.lower p { margin-top: 8px; font-size: clamp(17px, 2vw, 24px); line-height: 1.5; }
+
+/* ---------- cinematic letterbox */
+.letterbox { inset: 0; }
+.letterbox::before, .letterbox::after { content: ''; position: absolute; left: 0; right: 0; height: 10.5vh; background: #000; transition: transform 1s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.letterbox::before { top: 0; transform: translateY(-100%); }
+.letterbox::after { bottom: 0; transform: translateY(100%); }
+.letterbox.on::before, .letterbox.on::after { transform: none; }
 
 /* ---------- fades */
 .fade { inset: 0; background: #000; opacity: 0; }

@@ -13,6 +13,8 @@ export interface Settings {
   /** How much the camera follows on its own: never in the air, climbing or interacting. */
   cameraAssist: 'off' | 'weak' | 'strong';
   volume: number; // 0..1
+  /** Music level, 0..1, under the master volume. */
+  music: number;
   /** 'auto' picks Low on integrated and mobile GPUs, High otherwise (see RenderPipeline). */
   quality: 'auto' | 'high' | 'low';
   version?: number;
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cameraShake: true,
   cameraAssist: 'weak',
   volume: 0.8,
+  music: 0.7,
   quality: 'auto',
   version: SETTINGS_VERSION,
 };
@@ -69,10 +72,12 @@ const CONTROLS_HTML = `
     <dt>W A S D / Arrows</dt><dd>Move (physical keys: Z Q S D on AZERTY)</dd>
     <dt>Mouse</dt><dd>Look (click the game to capture the mouse; drag also works)</dd>
     <dt>Space</dt><dd>Jump (hold for higher)</dd>
+    <dt>Shift</dt><dd>Dash (a roll); hold after it to sprint</dd>
     <dt>E / F</dt><dd>Interact</dd>
     <dt>C / Middle mouse</dt><dd>Recenter camera behind Mara</dd>
     <dt>Esc / P</dt><dd>Pause</dd>
-    <dt>Gamepad</dt><dd>Left stick move, right stick look, A jump, X interact, R3 recenter, Start pause</dd>
+    <dt>Later</dt><dd>A steam kicker: Space again in the air, Shift in the air, Ctrl to slam down. Land on pipes to ride them.</dd>
+    <dt>Gamepad</dt><dd>Left stick move, right stick look, A jump, B dash, X interact, RB slam, R3 recenter, Start pause</dd>
   </dl>`;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, parent: HTMLElement, html = ''): HTMLElementTagNameMap[K] {
@@ -99,12 +104,19 @@ export class HUD {
   private readonly prompt: HTMLElement;
   private readonly subtitle: HTMLElement;
   private readonly tipEl: HTMLElement;
+  private readonly abilityEl: HTMLElement;
+  private readonly areaEl: HTMLElement;
+  private readonly toastEl: HTMLElement;
+  private abilityTimer = 0;
+  private areaTimer = 0;
+  private toastTimer = 0;
   private readonly fadeEl: HTMLElement;
   private readonly fallFadeEl: HTMLElement;
   private readonly documentEl: HTMLElement;
   private readonly debugEl: HTMLElement;
   private readonly skipEl: HTMLElement;
   private readonly storyEl: HTMLElement;
+  private readonly letterboxEl: HTMLElement;
   private readonly screen: HTMLElement;
   private readonly card: HTMLElement;
   private tipTimer = 0;
@@ -118,12 +130,16 @@ export class HUD {
   constructor(container: HTMLElement) {
     this.root = el('div', 'hud', container);
     this.fallFadeEl = el('div', 'fade', this.root);
+    this.letterboxEl = el('div', 'letterbox', this.root);
     this.storyEl = el('div', 'story hidden', this.root);
     this.objective = el('div', 'objective hidden', this.root, '<div class="label">Objective</div><div class="text"></div>');
     this.objectiveText = this.objective.querySelector('.text')!;
     this.prompt = el('div', 'prompt hidden', this.root);
     this.subtitle = el('div', 'subtitle hidden', this.root);
     this.tipEl = el('div', 'tip hidden', this.root);
+    this.abilityEl = el('div', 'ability hidden', this.root);
+    this.areaEl = el('div', 'area hidden', this.root);
+    this.toastEl = el('div', 'toast hidden', this.root);
     this.documentEl = el('div', 'document hidden', this.root);
     this.debugEl = el('div', 'debug hidden', this.root);
     this.skipEl = el('div', 'skip hidden', this.root, '<span class="key">Space</span> or <span class="key">E</span> skip');
@@ -188,6 +204,7 @@ export class HUD {
         <label>Camera shake <input type="checkbox" ${s.cameraShake ? 'checked' : ''} data-s="cameraShake"></label>
         <div class="group">Sound and graphics</div>
         <label>Volume <input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-s="volume"></label>
+        <label>Music <input type="range" min="0" max="1" step="0.05" value="${s.music}" data-s="music"></label>
         <label>Graphics <select data-s="quality"><option value="auto" ${s.quality === 'auto' ? 'selected' : ''}>Auto (${this.autoQualityLabel})</option><option value="high" ${s.quality === 'high' ? 'selected' : ''}>High (dedicated graphics card)</option><option value="low" ${s.quality === 'low' ? 'selected' : ''}>Low (faster)</option></select></label>
       </div>
       ${CONTROLS_HTML}`;
@@ -220,7 +237,7 @@ export class HUD {
    * The completion screen. With `reward` it is laid over the current view (the vista the ending
    * framed) as a title card, with the choices fading in after a moment, rather than a menu.
    */
-  showComplete(stats: { time: number; falls: number; title?: string; body?: string; reward?: boolean }, onRestart: () => void, onContinue: () => void): void {
+  showComplete(stats: { time: number; falls: number; title?: string; body?: string; reward?: boolean; marks?: { found: number; total: number } }, onRestart: () => void, onContinue: () => void): void {
     this.screen.classList.remove('hidden');
     this.screen.classList.toggle('reward', !!stats.reward);
     const mins = Math.floor(stats.time / 60);
@@ -234,7 +251,7 @@ export class HUD {
         stats.body ??
         'The service lights lead down into the turbine hall, where the Breathing Engine heaves with the tide. That is the next destination. It is not built yet: this is the end of the first playable section.'
       }</p>
-      <div class="stats"><div><b>${mins}:${secs}</b>time</div><div><b>${stats.falls}</b>falls</div></div>
+      <div class="stats"><div><b>${mins}:${secs}</b>time</div><div><b>${stats.falls}</b>falls</div>${stats.marks ? `<div><b>${stats.marks.found}/${stats.marks.total}</b>chalk marks</div>` : ''}</div>
       <div class="buttons">
         <button class="primary" data-a="restart">${stats.reward ? 'Play Chapter One again' : 'Restart section'}</button>
         <button data-a="continue">Keep exploring</button>
@@ -281,6 +298,37 @@ export class HUD {
     this.subtitle.classList.remove('hidden');
   }
 
+  /**
+   * A new gadget's card: what it is and its buttons, shown once when it is picked up (the way a
+   * new ability is introduced), then it fades.
+   */
+  abilityCard(card: { eyebrow: string; title: string; rows: Array<{ key: string; pad: string; text: string }> }, gamepad = false): void {
+    const keys = (k: string) => k.split(' ').map((x) => `<span class="key${gamepad ? ' pad' : ''}">${x}</span>`).join(' ');
+    this.abilityEl.innerHTML = `<div class="eyebrow">${card.eyebrow}</div><h3>${card.title}</h3>${card.rows
+      .map((r) => `<div class="row"><span class="keys">${keys(gamepad ? r.pad : r.key)}</span><span>${r.text}</span></div>`)
+      .join('')}`;
+    this.abilityEl.classList.remove('hidden');
+    this.abilityTimer = 9;
+  }
+
+  /** The name of the space Mara has just entered, briefly, top centre. */
+  areaTitle(title: string, sub = ''): void {
+    this.areaEl.innerHTML = `<div class="name">${title}</div>${sub ? `<div class="sub">${sub}</div>` : ''}`;
+    this.areaEl.classList.remove('hidden');
+    this.areaTimer = 3.6;
+  }
+
+  get areaText(): string {
+    return this.areaEl.classList.contains('hidden') ? '' : (this.areaEl.textContent ?? '');
+  }
+
+  /** A small confirmation (a collectible found), top right. */
+  toast(text: string): void {
+    this.toastEl.textContent = text;
+    this.toastEl.classList.remove('hidden');
+    this.toastTimer = 2.8;
+  }
+
   /** Short contextual tip. With a `key`, it is shown only once per run. */
   tip(text: string, key?: string): void {
     if (key) {
@@ -307,20 +355,31 @@ export class HUD {
   /** Respawn / transition fade (0..1). */
   /**
    * Full-screen story card: the opening's narration and chapter titles. `backdrop` blacks out the
-   * view (narration); without it the text sits over the scene (titles). null fades it away.
+   * view (narration); without it the text sits over the scene (titles); `lower` sets it as a
+   * caption in the lower left of a shot. null fades it away.
    */
-  story(card: { eyebrow?: string; title?: string; text?: string; backdrop?: boolean } | null): void {
+  story(card: { eyebrow?: string; title?: string; text?: string; backdrop?: boolean; lower?: boolean } | null): void {
     if (!card) {
       this.storyEl.classList.add('hidden');
       return;
     }
     this.storyEl.classList.toggle('backdrop', card.backdrop ?? false);
+    this.storyEl.classList.toggle('lower', card.lower ?? false);
     this.storyEl.innerHTML = `<div class="inner">${card.eyebrow ? `<div class="eyebrow">${card.eyebrow}</div>` : ''}${card.title ? `<h1>${card.title}</h1>` : ''}${card.text ? `<p>${card.text}</p>` : ''}</div>`;
     this.storyEl.classList.remove('hidden');
   }
 
   get storyText(): string {
     return this.storyEl.classList.contains('hidden') ? '' : (this.storyEl.textContent ?? '');
+  }
+
+  /** Cinematic bars, top and bottom, while a story scene holds the camera. */
+  letterbox(on: boolean): void {
+    this.letterboxEl.classList.toggle('on', on);
+  }
+
+  get letterboxed(): boolean {
+    return this.letterboxEl.classList.contains('on');
   }
 
   setFade(v: number): void {
@@ -345,6 +404,7 @@ export class HUD {
 
   resetRun(): void {
     this.story(null);
+    this.letterbox(false);
     this.shownTips.clear();
     this.tipEl.classList.add('hidden');
     this.hideDocument();
@@ -352,6 +412,12 @@ export class HUD {
   }
 
   update(dt: number): void {
+    for (const [el, key] of [[this.abilityEl, 'abilityTimer'], [this.areaEl, 'areaTimer'], [this.toastEl, 'toastTimer']] as const) {
+      if (this[key] > 0) {
+        this[key] -= dt;
+        if (this[key] <= 0) el.classList.add('hidden');
+      }
+    }
     if (this.tipTimer > 0) {
       this.tipTimer -= dt;
       if (this.tipTimer <= 0) this.tipEl.classList.add('hidden');

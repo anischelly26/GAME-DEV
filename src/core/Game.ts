@@ -1,3 +1,4 @@
+import { Effects } from '../world/Effects';
 import * as THREE from 'three';
 import { EventBus, type GameEvents } from './Events';
 import { Input, BASE_RADIANS_PER_PIXEL, DEFAULT_LOOK_SENSITIVITY } from './Input';
@@ -8,6 +9,7 @@ import { applySurfaces, createMaterials, Palette, type MaterialLibrary } from '.
 import { loadSurfaces } from '../world/surfaces';
 import { Sky } from '../world/Atmosphere';
 import { PlayerController } from '../player/PlayerController';
+import { MOVEMENT } from '../player/movement';
 import { PlayerAvatar } from '../player/PlayerAvatar';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DropShadow } from '../player/DropShadow';
@@ -19,6 +21,7 @@ import { HUD, type Settings } from '../ui/HUD';
 import { AudioSystem } from '../audio/Audio';
 import type { Level, LevelContext } from '../levels/Level';
 import { QuietCellLevel } from '../levels/breakwater/QuietCellLevel';
+import { ensureVertexColors } from '../world/geometry';
 import { Autopilot } from '../dev/Autopilot';
 import { TraversalSurfaces } from '../player/Traversal';
 import { smoothstep } from './math';
@@ -65,6 +68,8 @@ export class Game {
   pipeline!: RenderPipeline;
   player!: PlayerController;
   avatar!: PlayerAvatar;
+  /** Pooled steam, dust and shockwave effects. */
+  readonly effects = new Effects();
   dropShadow!: DropShadow;
   camera!: ThirdPersonCamera;
   level!: Level;
@@ -75,6 +80,8 @@ export class Game {
   private sky!: Sky;
   /** Toward the moon: low over the sea behind the harbour beacon, so it shines in through the breach. */
   private readonly moonDir = new THREE.Vector3(-0.38, 0.33, -0.86).normalize();
+  private hemi!: THREE.HemisphereLight;
+  private moon!: THREE.DirectionalLight;
   private accumulator = 0;
   private lastFrame = 0;
   time = 0;
@@ -130,6 +137,7 @@ export class Game {
     this.player = new PlayerController(this.physics, this.events, spawn, 0);
     this.player.traversal = this.traversal;
     this.avatar = new PlayerAvatar(this.scene, this.textures);
+    this.scene.add(this.effects.group);
     this.dropShadow = new DropShadow(this.scene);
     this.camera = new ThirdPersonCamera(this.physics, this.player.collider);
     this.pipeline = new RenderPipeline(this.container, this.scene, this.camera.camera);
@@ -155,11 +163,19 @@ export class Game {
       hud: this.hud,
       moonDir: this.moonDir,
       traversal: this.traversal,
+      effects: this.effects,
       respawn: (reason) => this.respawn(reason),
       complete: (card) => this.complete(card),
       setControl: (enabled) => this.setControl(enabled),
+      setOutdoorLight: (level) => {
+        this.hemi.intensity = 1.25 * level;
+        this.moon.intensity = 2.1 * level;
+        this.scene.environmentIntensity = 0.95 * level;
+      },
     };
     this.level = new QuietCellLevel(ctx);
+    // Props built straight from the shared (vertex-coloured) materials would otherwise draw black.
+    ensureVertexColors(this.scene);
     this.wireEvents();
     this.hud.autoQualityLabel = this.pipeline.recommendedQuality === 'low' ? 'Low on this GPU' : 'High on this GPU';
     this.applySettings(this.hud.settings);
@@ -193,6 +209,17 @@ export class Game {
     } else {
       this.state = 'title';
       this.hud.showTitle(() => this.begin());
+      // Browsers only allow sound after a click or key: the title theme starts on the first one.
+      const wake = () => {
+        this.audio.unlock();
+        this.audio.setVolume(this.hud.settings.volume);
+        this.audio.setMusicVolume(this.hud.settings.music);
+        if (this.state === 'title') this.audio.setMusic('title', 1.5);
+        removeEventListener('pointerdown', wake);
+        removeEventListener('keydown', wake);
+      };
+      addEventListener('pointerdown', wake);
+      addEventListener('keydown', wake);
     }
   }
 
@@ -200,23 +227,38 @@ export class Game {
    * Draw everything once, with culling off, behind the loading screen. three.js uploads a mesh's
    * buffers and textures the first time it is drawn, so on an integrated GPU the first sight of
    * the hall (dropping from the lookout) stalled for up to a second on hundreds of small uploads.
+   * Hidden props are shown for this one draw too (never lights: that would change every shader):
+   * their shaders would otherwise link on first sight, which on the Intel GPU froze the game for
+   * about half a second when the steam kicker's canister first appeared. Subtrees marked
+   * `userData.skipWarmUp` (the opening's set when the opening is off) are left out.
    */
   private warmUp(): void {
     const culled: THREE.Object3D[] = [];
-    this.scene.traverse((o) => {
+    const shown: THREE.Object3D[] = [];
+    const visit = (o: THREE.Object3D) => {
+      if (o.userData.skipWarmUp) return;
+      if (!o.visible && !(o as THREE.Light).isLight) {
+        o.visible = true;
+        shown.push(o);
+      }
       if (((o as THREE.Mesh).isMesh || (o as THREE.Sprite).isSprite || (o as THREE.Points).isPoints) && o.frustumCulled) {
         o.frustumCulled = false;
         culled.push(o);
       }
-    });
+      for (const c of o.children) visit(c);
+    };
+    visit(this.scene);
     this.pipeline.render(0);
     for (const o of culled) o.frustumCulled = true;
+    for (const o of shown) o.visible = false;
   }
 
   private setupLights(): void {
     const hemi = new THREE.HemisphereLight('#5d7f99', '#2e261d', 1.25);
     this.scene.add(hemi);
+    this.hemi = hemi;
     const moon = new THREE.DirectionalLight(Palette.moon, 2.1);
+    this.moon = moon;
     moon.position.copy(this.moonDir).multiplyScalar(60);
     moon.target.position.set(0, 0, 8);
     moon.castShadow = true;
@@ -267,10 +309,50 @@ export class Game {
       this.avatar.onJump();
       this.audio.play('jump', this.player.feet, 0.8);
     });
+    this.events.on('music', (m) => {
+      if (m.music !== undefined) this.levelBeds.music = m.music;
+      if (m.ambience !== undefined) this.levelBeds.ambience = m.ambience;
+      if (m.drone !== undefined) this.audio.setPrisonDrone(m.drone);
+      // On the title screen the title theme plays; the level's beds start with play.
+      if (this.state !== 'title') this.applyLevelBeds();
+    });
     this.events.on('land', ({ impact }) => {
       this.avatar.onLand(impact);
-      if (impact > 3) this.audio.play('land', this.player.feet, Math.min(1, impact / 10));
+      const surface = this.physics.surfaceOf(this.player.groundCollider?.handle);
+      if (impact > 3) this.audio.play(impact > 12 ? 'land:heavy' : surface === 'metal' ? 'land:metal' : 'land', this.player.feet, Math.min(1, impact / 10));
       if (impact > 8) this.camera.shake(Math.min(0.45, 0.12 + (impact - 8) / 14));
+      if (impact > 9 && this.player.pound === 'none') this.effects.burst(this.player.feet, { count: 6, color: '#9d907e', speed: 1.2, spread: 2.2, life: 0.6, size: [0.2, 0.7], opacity: 0.35 });
+    });
+    // The steam kicker's moves: steam, dust, a ring, a sound and a camera response for each.
+    this.events.on('grind', (p) => {
+      this.audio.grind(p.on ? 1 : 0);
+      if (p.on) {
+        this.effects.sparks(p, { x: 0, y: 1, z: 0 }, 14, 3.5);
+        this.audio.play('grab', p, 0.8);
+        this.camera.kick(3);
+      }
+    });
+    this.events.on('doubleJump', (p) => {
+      this.effects.burst(p, { count: 12, color: '#eef3f4', dir: { x: 0, y: -1, z: 0 }, speed: 2.4, spread: 1.8, life: 0.65, size: [0.18, 0.75], opacity: 0.55 });
+      this.audio.play('doubleJump', p);
+      this.camera.kick(2);
+    });
+    this.events.on('dash', (p) => {
+      const back = { x: -Math.sin(this.player.facing), y: 0.1, z: -Math.cos(this.player.facing) };
+      if (p.air) {
+        this.effects.burst({ x: p.x, y: p.y + 1.1, z: p.z }, { count: 6, color: '#eef3f4', dir: back, speed: 3.4, spread: 0.7, life: 0.5, size: [0.14, 0.55], opacity: 0.32 });
+        this.audio.play('airDash', p);
+        this.camera.kick(6);
+      } else {
+        this.effects.burst(p, { count: 6, color: '#9d907e', dir: back, speed: 1.4, spread: 1.4, life: 0.5, size: [0.15, 0.6], opacity: 0.35, rise: 0.5 });
+        this.audio.play('roll', p);
+        this.camera.kick(3);
+      }
+    });
+    this.events.on('groundPound', (p) => {
+      this.effects.ring(p, 2.4);
+      this.effects.burst(p, { count: 14, color: '#a49684', speed: 2.6, spread: 2.6, life: 0.7, size: [0.25, 0.9], opacity: 0.4, rise: 0.4 });
+      this.audio.play('groundPound', p);
     });
     this.events.on('sfx', (e) => {
       this.audio.play(e.name, e.x !== undefined ? { x: e.x, y: e.y ?? 0, z: e.z ?? 0 } : undefined, e.volume ?? 1);
@@ -284,7 +366,7 @@ export class Game {
       const d = e.x !== undefined ? Math.hypot(e.x - this.player.feet.x, (e.y ?? 0) - this.player.feet.y, (e.z ?? 0) - this.player.feet.z) : 0;
       this.camera.shake(weight * Math.max(0, 1 - d / 12));
     });
-    this.avatar.onFootstep = (speed) => this.audio.play('footstep', this.player.feet, Math.min(1, speed / 6) * 0.8);
+    this.avatar.onFootstep = (speed) => this.audio.play(`footstep:${this.physics.surfaceOf(this.player.groundCollider?.handle)}`, this.player.feet, Math.min(1, speed / 6) * 0.8);
 
     this.input.onPauseRequest = () => {
       if (this.hud.documentOpen) this.hud.hideDocument();
@@ -306,9 +388,19 @@ export class Game {
 
   // ---------------------------------------------------------------- state changes
 
+  /** The music and ambience the level has asked for (it may ask before the game listens). */
+  private readonly levelBeds: { music: string | null; ambience: string | null } = { music: null, ambience: null };
+
+  private applyLevelBeds(): void {
+    this.audio.setMusic(this.levelBeds.music);
+    this.audio.setAmbience(this.levelBeds.ambience);
+  }
+
   private begin(): void {
     this.audio.unlock();
     this.audio.setVolume(this.hud.settings.volume);
+    this.audio.setMusicVolume(this.hud.settings.music);
+    this.applyLevelBeds();
     this.state = 'playing';
     this.input.setGameplayActive(true);
     this.input.requestPointerLock();
@@ -358,6 +450,7 @@ export class Game {
     this.camera.settings.shake = s.cameraShake;
     this.camera.settings.fovHorizontal = s.fov;
     this.audio.setVolume(s.volume);
+    this.audio.setMusicVolume(s.music);
     if (!this.options.quality && !this.options.test) this.setQuality(s.quality === 'auto' ? this.pipeline.recommendedQuality : s.quality);
   }
 
@@ -442,7 +535,7 @@ export class Game {
     if (!this.options.test) this.input.requestPointerLock();
   }
 
-  private complete(card?: { title: string; body: string; reward?: boolean }): void {
+  private complete(card?: { title: string; body: string; reward?: boolean; marks?: { found: number; total: number } }): void {
     this.progression.complete = true;
     this.state = 'complete';
     this.input.setGameplayActive(false);
@@ -600,7 +693,30 @@ export class Game {
       mode: this.player.mode,
       modeT: this.player.modeT,
       knockbacks: this.player.knockbacks,
+      moves: {
+        steam: this.player.steam,
+        doubleJumps: this.player.doubleJumps,
+        dashes: this.player.dashes,
+        dashing: this.player.dashT > 0,
+        dashAir: this.player.dashAir,
+        sprinting: this.player.sprinting,
+        pound: this.player.pound,
+        airLeft: this.player.steam ? this.player.airJumps + this.player.airDashes : 0,
+      },
     });
+    // Sparks off the pipe while grinding, more the faster she goes; the scrape follows the speed.
+    if (this.player.mode === 'grind') {
+      const f = this.player.facing;
+      const k = this.player.railSpeed / MOVEMENT.grindMaxSpeed;
+      this.effects.sparks({ x: feet.x, y: feet.y - 0.08, z: feet.z }, { x: -Math.sin(f), y: 0.35, z: -Math.cos(f) }, Math.random() < 0.5 + k * 0.5 ? 2 : 1, 2.5 + k * 3);
+      this.audio.grind(0.45 + 0.55 * k);
+    }
+    // A steam trail behind the canister for the length of an air dash.
+    if (this.player.dashT > 0 && this.player.dashAir && Math.random() < 0.7) {
+      const f = this.player.facing;
+      this.effects.burst({ x: feet.x - Math.sin(f) * 0.3, y: feet.y + 1.15, z: feet.z - Math.cos(f) * 0.3 }, { count: 1, color: '#eef3f4', dir: { x: -Math.sin(f), y: 0, z: -Math.cos(f) }, speed: 0.6, spread: 0.6, life: 0.45, size: [0.15, 0.55], opacity: 0.4 });
+    }
+    this.effects.update(dt);
     const moveLen = Math.hypot(this.lastMove.x, this.lastMove.y);
     this.camera.update(dt, this.input.consumeLook(), feet, {
       grounded: this.player.grounded,
@@ -703,7 +819,7 @@ export class Game {
       setInput: (v: { moveX: number; moveY: number; jumpHeld: boolean } | null) => {
         game.input.virtual = v;
       },
-      press: (a: 'jump' | 'interact') => game.input.press(a),
+      press: (a: 'jump' | 'interact' | 'dash' | 'pound') => game.input.press(a),
       setCamera: (yaw: number, pitch?: number) => {
         game.camera.yaw = yaw;
         if (pitch !== undefined) game.camera.pitch = pitch;

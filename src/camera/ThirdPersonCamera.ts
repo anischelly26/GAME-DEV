@@ -56,6 +56,9 @@ interface Shot {
   look: THREE.Vector3;
   t: number;
   duration: number;
+  /** Lens for the shot (vertical degrees), eased from the current one; undefined keeps it. */
+  fromFov: number;
+  fov?: number;
 }
 
 /** Radius of the spring arm's collision probe: wider than the near plane, so walls never clip. */
@@ -105,6 +108,7 @@ export class ThirdPersonCamera {
   private readonly velocity = new THREE.Vector3();
   private readonly lookAhead = new THREE.Vector3();
   private trauma = 0;
+  private fovKick = 0;
   private time = 0;
   /** Whether the assist turned the camera on the last update (debug overlay, tests). */
   assisting = false;
@@ -131,16 +135,23 @@ export class ThirdPersonCamera {
     this.recenterTarget = facing + Math.PI;
   }
 
-  /** Cinematic shot. The camera eases from its current pose to the shot over `duration`. */
-  playShot(pos: THREE.Vector3, look: THREE.Vector3, duration: number): void {
+  /**
+   * Cinematic shot. The camera eases from its current pose to the shot over `duration`; with
+   * `from` it cuts to that pose first (a cut and a slow dolly in one call). `fov` sets the lens
+   * (vertical degrees) for the shot.
+   */
+  playShot(pos: THREE.Vector3, look: THREE.Vector3, duration: number, opts: { from?: { pos: THREE.Vector3; look: THREE.Vector3 }; fov?: number } = {}): void {
     this.shot = {
-      fromPos: this.camera.position.clone(),
-      fromLook: this.lookPoint.clone(),
+      fromPos: (opts.from?.pos ?? this.camera.position).clone(),
+      fromLook: (opts.from?.look ?? this.lookPoint).clone(),
       pos: pos.clone(),
       look: look.clone(),
       t: 0,
       duration: Math.max(0.001, duration),
+      fromFov: this.camera.fov,
+      fov: opts.fov,
     };
+    if (opts.from && opts.fov !== undefined) this.shot.fromFov = opts.fov;
   }
 
   clearShot(): void {
@@ -155,6 +166,11 @@ export class ThirdPersonCamera {
   /** Distance from the camera to the player's pivot (used to fade the avatar). */
   get distance(): number {
     return this.currentDist;
+  }
+
+  /** Widen the view for a moment (degrees): dashes and boosts read as speed. */
+  kick(degrees: number): void {
+    this.fovKick = Math.max(this.fovKick, degrees);
   }
 
   /** Add camera shake (0..1); ignored when the player has turned shake off. */
@@ -175,6 +191,7 @@ export class ThirdPersonCamera {
       typeof context === 'boolean' ? { grounded: context, speed: speedArg, mode: 'move', interacting: false, forwardInput: 1 } : context;
     this.time += dt;
     this.trauma = Math.max(0, this.trauma - dt * 1.6);
+    this.fovKick = damp(this.fovKick, 0, 5, dt);
 
     if (this.shot) {
       const s = this.shot;
@@ -184,6 +201,10 @@ export class ThirdPersonCamera {
       this.camera.position.lerpVectors(s.fromPos, s.pos, e);
       this.lookPoint.lerpVectors(s.fromLook, s.look, e);
       this.camera.lookAt(this.lookPoint);
+      if (s.fov !== undefined) {
+        this.camera.fov = lerp(s.fromFov, s.fov, e);
+        this.camera.updateProjectionMatrix();
+      }
       this.applyShake();
       this.assisting = false;
       return;
@@ -233,6 +254,17 @@ export class ThirdPersonCamera {
       }
     }
 
+    // --- grinding: Mara is along for the ride, so the camera swings behind the direction of travel
+    // (yielding to the mouse or stick for a moment) and pulls back to show the drop.
+    const grinding = c.mode === 'grind';
+    if (grinding && this.recenterTarget === null && this.sinceLook > 0.6 && v > 1) {
+      const behind = Math.atan2(-this.velocity.x, -this.velocity.z);
+      const ramp = clamp((this.sinceLook - 0.6) / 0.5, 0, 1);
+      this.yaw = dampAngle(this.yaw, behind, 2.8 * ramp, dt);
+      this.pitch = damp(this.pitch, 0.36, 1.6 * ramp, dt);
+      this.assisting = true;
+    }
+
     // --- zone (highest priority wins)
     let zone: CameraZone | null = null;
     for (const z of this.zones) {
@@ -240,9 +272,10 @@ export class ThirdPersonCamera {
     }
     this.activeZone = zone?.id ?? 'default';
     const zl = this.initialised ? 3 : 1000;
-    this.zoneDist = damp(this.zoneDist, zone?.distance ?? CAMERA_DEFAULTS.distance, zl, dt);
-    this.zoneHeight = damp(this.zoneHeight, zone?.height ?? CAMERA_DEFAULTS.height, zl, dt);
-    this.zoneFov = damp(this.zoneFov, zone?.fov ?? CAMERA_DEFAULTS.fov, zl, dt);
+    const gl = grinding ? 2 : zl;
+    this.zoneDist = damp(this.zoneDist, (zone?.distance ?? CAMERA_DEFAULTS.distance) + (grinding ? 1.2 : 0), gl, dt);
+    this.zoneHeight = damp(this.zoneHeight, (zone?.height ?? CAMERA_DEFAULTS.height) + (grinding ? 0.4 : 0), gl, dt);
+    this.zoneFov = damp(this.zoneFov, (zone?.fov ?? CAMERA_DEFAULTS.fov) + (grinding ? 6 : 0), gl, dt);
 
     // --- pivot: tight horizontally; vertically steady through jumps, quick when climbing or falling
     const targetY = feet.y + this.zoneHeight;
@@ -323,9 +356,10 @@ export class ThirdPersonCamera {
     const aspect = this.camera.aspect || 16 / 9;
     const base = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(this.settings.fovHorizontal) / 2) / (16 / 9)));
     const portrait = aspect < 16 / 9 ? THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(this.settings.fovHorizontal) / 2) / aspect)) : base;
-    const fov = clamp(Math.min(portrait, base + 12) + (this.zoneFov - CAMERA_DEFAULTS.fov) + clamp(c.speed / 6, 0, 1) * 3, 35, 100);
+    const fov = clamp(Math.min(portrait, base + 12) + (this.zoneFov - CAMERA_DEFAULTS.fov) + clamp(c.speed / 6, 0, 1) * 3 + this.fovKick, 35, 105);
     if (Math.abs(this.camera.fov - fov) > 0.01) {
-      this.camera.fov = lerp(this.camera.fov, fov, 1 - Math.exp(-6 * dt));
+      // A kick snaps out quickly and eases back; everything else eases both ways.
+      this.camera.fov = fov > this.camera.fov + 1 && this.fovKick > 1 ? lerp(this.camera.fov, fov, 1 - Math.exp(-20 * dt)) : lerp(this.camera.fov, fov, 1 - Math.exp(-6 * dt));
       this.camera.updateProjectionMatrix();
     }
   }

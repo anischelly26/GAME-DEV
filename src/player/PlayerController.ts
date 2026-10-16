@@ -5,9 +5,10 @@ import type { EventBus, GameEvents } from '../core/Events';
 import { dampAngle, smoothstep } from '../core/math';
 import { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
 import { findLedge, findVault, TRAVERSAL, type Ledge, type TraversalSurfaces, type Vault } from './Traversal';
+import type { GrindRail } from './GrindRail';
 
-/** Traversal state: normal movement, hanging from a ledge, pulling up, or vaulting. */
-export type MoveMode = 'move' | 'hang' | 'climb' | 'vault';
+/** Traversal state: normal movement, hanging from a ledge, pulling up, vaulting, or grinding a pipe. */
+export type MoveMode = 'move' | 'hang' | 'climb' | 'vault' | 'grind';
 
 export { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
 
@@ -56,6 +57,27 @@ export class PlayerController {
   /** Current horizontal input in world space (for animation). */
   readonly wish = new THREE.Vector3();
 
+  // --- Movement 2.0 ------------------------------------------------------------------------------
+  /** Moves powered by Ivo's steam kicker: double jump, air dash, ground pound. */
+  steam = false;
+  /** Double jumps and air dashes left this airtime (refilled on landing, ledges, grinding). */
+  airJumps = 1;
+  airDashes = 1;
+  /** Seconds left in the current dash, its direction, and whether it started in the air. */
+  dashT = 0;
+  dashAir = false;
+  private readonly dashDir = new THREE.Vector3();
+  private dashCooldown = 0;
+  /** Sprinting: dash held after a ground dash. */
+  sprinting = false;
+  /** Ground pound phase: hovering, slamming down, recovering on the ground. */
+  pound: 'none' | 'hover' | 'fall' | 'land' = 'none';
+  private poundT = 0;
+  /** Counters the avatar watches to start one-shot animations. */
+  doubleJumps = 0;
+  dashes = 0;
+  pounds = 0;
+
   readonly platforms = new Map<number, MovingPlatform>();
 
   mode: MoveMode = 'move';
@@ -71,6 +93,16 @@ export class PlayerController {
   private vaultSpeed = 0;
   private regrabTimer = 0;
   private regrabCollider = -1;
+  /** Grinding: the pipe, the distance along it, which way, and how fast. */
+  private rail: GrindRail | null = null;
+  private railS = 0;
+  private railDir = 1;
+  railSpeed = 0;
+  private railCooldown = 0;
+  /** Seconds of carried momentum after leaving a pipe (air control is light meanwhile). */
+  private carryT = 0;
+  /** Pipes ridden so far (tests, the avatar). */
+  grinds = 0;
 
   constructor(
     private readonly physics: Physics,
@@ -116,15 +148,21 @@ export class PlayerController {
   /** Push the player (steam, impacts). Never damage; briefly removes control. */
   knockback(v: THREE.Vector3, lockSeconds: number): void {
     if (this.mode !== 'move') return;
+    this.dashT = 0;
+    this.pound = 'none';
     this.knockbacks++;
     this.velocity.copy(v);
     this.lockTimer = Math.max(this.lockTimer, lockSeconds);
   }
 
   teleport(feet: THREE.Vector3, facing: number): void {
+    // Taken off a pipe mid-grind (respawn, restart, a dev teleport): end it like any other exit.
+    if (this.mode === 'grind') this.events.emit('grind', { on: false, x: this.feet.x, y: this.feet.y, z: this.feet.z });
     this.mode = 'move';
     this.ledge = null;
     this.vault = null;
+    this.rail = null;
+    this.carryT = 0;
     const c = { x: feet.x, y: feet.y + PLAYER_CENTER_OFFSET + 0.02, z: feet.z };
     this.body.setTranslation(c, true);
     this.body.setNextKinematicTranslation(c);
@@ -140,6 +178,18 @@ export class PlayerController {
     this.timeSinceGrounded = 0;
     this.lockTimer = 0;
     this.faceTarget = null;
+    this.resetMoves();
+  }
+
+  /** Cancel any dash or ground pound and refill the air moves (teleports, respawns, ledges). */
+  resetMoves(): void {
+    this.dashT = 0;
+    this.dashAir = false;
+    this.sprinting = false;
+    this.pound = 'none';
+    this.poundT = 0;
+    this.airJumps = 1;
+    this.airDashes = 1;
   }
 
   /**
@@ -172,6 +222,8 @@ export class PlayerController {
     this.time += dt;
     this.prevFeet.copy(this.feet);
     this.regrabTimer = Math.max(0, this.regrabTimer - dt);
+    this.railCooldown = Math.max(0, this.railCooldown - dt);
+    this.carryT = Math.max(0, this.carryT - dt);
     if (this.mode !== 'move') {
       this.updateTraversal(dt, input, cameraYaw);
       return;
@@ -184,8 +236,15 @@ export class PlayerController {
     const platform = onGround && this.groundCollider ? this.platforms.get(this.groundCollider.handle) : undefined;
     const carried = !!platform;
 
-    if (onGround) this.timeSinceGrounded = 0;
-    else this.timeSinceGrounded += dt;
+    if (onGround) {
+      this.timeSinceGrounded = 0;
+      this.carryT = 0;
+    } else this.timeSinceGrounded += dt;
+    if (onGround && this.pound !== 'fall') {
+      this.airJumps = 1;
+      this.airDashes = 1;
+    }
+    this.dashCooldown = Math.max(0, this.dashCooldown - dt);
     this.jumpBufferTimer = input.jumpPressed ? MOVEMENT.jumpBuffer : Math.max(0, this.jumpBufferTimer - dt);
     this.lockTimer = Math.max(0, this.lockTimer - dt);
 
@@ -198,7 +257,9 @@ export class PlayerController {
     this.wish.set(fx * input.moveY + rx * input.moveX, 0, fz * input.moveY + rz * input.moveX);
     if (this.isLocked) this.wish.set(0, 0, 0);
     const wishLen = Math.min(1, this.wish.length());
-    const maxSpeed = MOVEMENT.maxSpeed * (this.carrying ? MOVEMENT.carrySpeedFactor : 1);
+    // Sprint lasts while dash is held after a ground dash, and only while moving.
+    if (this.sprinting && (!input.dashHeld || (onGround && wishLen < 0.3) || this.isLocked)) this.sprinting = false;
+    const maxSpeed = (this.sprinting ? MOVEMENT.sprintSpeed : MOVEMENT.maxSpeed) * (this.carrying ? MOVEMENT.carrySpeedFactor : 1);
     const targetVX = wishLen > 0 ? (this.wish.x / Math.max(wishLen, 1e-6)) * wishLen * maxSpeed : 0;
     const targetVZ = wishLen > 0 ? (this.wish.z / Math.max(wishLen, 1e-6)) * wishLen * maxSpeed : 0;
 
@@ -212,7 +273,7 @@ export class PlayerController {
       else if (cos < 0.5) accel = MOVEMENT.turnAccel;
       else accel = speed < MOVEMENT.maxSpeed * MOVEMENT.launchFraction ? MOVEMENT.launchAccel : MOVEMENT.groundAccel;
     } else {
-      accel = MOVEMENT.airAccel;
+      accel = MOVEMENT.airAccel * (this.carryT > 0 ? 0.2 : 1);
     }
     // Approach target velocity as a 2D vector so diagonal changes are smooth.
     const dvx = targetVX - this.velocity.x;
@@ -227,6 +288,9 @@ export class PlayerController {
       this.velocity.z += (dvz / dvLen) * maxDv;
     }
 
+    // --- steam kicker and dash: these can take over the step entirely
+    if (this.updateMoves(dt, input, onGround, wishLen)) return;
+
     // --- vault: jump pressed while running at a low, registered obstacle
     if (this.jumpBufferTimer > 0 && onGround && !this.isLocked && this.traversal && this.speed > 2.2) {
       const dir = new THREE.Vector3(this.velocity.x, 0, this.velocity.z);
@@ -238,7 +302,23 @@ export class PlayerController {
       }
     }
 
-    // --- jumping
+    // --- jumping (a press in the air past the coyote window is a double jump, if the kicker allows)
+    if (this.jumpBufferTimer > 0 && this.timeSinceGrounded > MOVEMENT.coyoteTime && this.steam && this.airJumps > 0 && !this.isLocked && this.pound === 'none') {
+      this.airJumps--;
+      this.velocity.y = Math.sqrt(2 * MOVEMENT.gravity * MOVEMENT.doubleJumpHeight);
+      // The second jump can redirect: it goes where the stick points, at least at running speed.
+      if (wishLen > 0.2) {
+        const sp = Math.max(Math.hypot(this.velocity.x, this.velocity.z), maxSpeed * 0.85 * wishLen);
+        this.velocity.x = (this.wish.x / wishLen) * sp * Math.min(1, wishLen);
+        this.velocity.z = (this.wish.z / wishLen) * sp * Math.min(1, wishLen);
+      }
+      this.jumpBufferTimer = 0;
+      this.jumping = true;
+      this.dashT = 0;
+      this.lastJumpTime = this.time;
+      this.doubleJumps++;
+      this.events.emit('doubleJump', { x: this.feet.x, y: this.feet.y, z: this.feet.z });
+    }
     if (this.jumpBufferTimer > 0 && this.timeSinceGrounded <= MOVEMENT.coyoteTime && !this.isLocked) {
       const height = MOVEMENT.jumpHeight * (this.carrying ? 0.85 : 1);
       this.velocity.y = Math.sqrt(2 * MOVEMENT.gravity * height);
@@ -258,7 +338,13 @@ export class PlayerController {
     let g = MOVEMENT.gravity;
     if (this.velocity.y < 0) g *= MOVEMENT.fallGravityMul;
     else if (this.jumping && !input.jumpHeld) g *= MOVEMENT.jumpCutGravityMul;
-    if (onGround && this.velocity.y <= 0) {
+    if ((this.dashT > 0 && this.dashAir) || this.pound === 'hover') {
+      // An air dash, and the ground pound's wind-up, hold their height.
+      this.velocity.y = 0;
+    } else if (this.pound === 'fall' && !onGround) {
+      this.velocity.y = -MOVEMENT.poundSpeed;
+      this.lastFallSpeed = MOVEMENT.poundSpeed;
+    } else if (onGround && this.velocity.y <= 0) {
       // Press gently into the ground so the controller slides along it (with zero vertical intent
       // it treats a floor inside its skin as blocking). On a platform that is moving vertically,
       // ride its motion exactly instead: pressing would snap the feet into the rising deck.
@@ -280,6 +366,10 @@ export class PlayerController {
     this.kcc.computeColliderMovement(this.collider, desired, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, PLAYER_GROUPS);
     const moved = this.kcc.computedMovement();
     this.grounded = this.kcc.computedGrounded() || isCarried;
+    // Standing against a wall, the ground probe can start inside it and miss the floor while the
+    // controller still stands her on it: gravity must not pile up meanwhile, or the first step off
+    // an edge drops like a stone.
+    if (this.grounded && this.velocity.y < -2 && this.pound !== 'fall') this.velocity.y = -2;
 
     // Ceiling bonk.
     if (this.velocity.y > 0 && moved.y < desired.y - 1e-4) this.velocity.y = 0;
@@ -312,6 +402,23 @@ export class PlayerController {
     this.body.setNextKinematicTranslation(next);
     this.feet.set(next.x, next.y - PLAYER_CENTER_OFFSET, next.z);
 
+    // Grind: feet coming down onto a registered pipe ride it.
+    if (!this.grounded && this.railCooldown <= 0 && this.traversal && this.traversal.rails.length && !this.isLocked && this.pound !== 'fall') {
+      for (const rail of this.traversal.rails) {
+        const hit = rail.closest(new THREE.Vector3(this.feet.x, this.feet.y - rail.radius, this.feet.z));
+        // The last stretch is where she flies off, not somewhere to get on (it hangs over a walkway).
+        if (hit.s > rail.length - MOVEMENT.grindNoCatchEnd) continue;
+        const top = rail.pointAt(hit.s).y + rail.radius;
+        // Near the top of the pipe, or fell through its top during this step (a fast fall).
+        const p = rail.pointAt(hit.s);
+        const across = Math.hypot(this.feet.x - p.x, this.feet.z - p.z) < MOVEMENT.grindAttach && this.prevFeet.y >= top - 0.05 && this.feet.y < top;
+        if (((hit.distance < MOVEMENT.grindAttach && this.feet.y > top - 0.3) || across) && this.velocity.y < 3) {
+          this.startGrind(rail, hit.s);
+          return;
+        }
+      }
+    }
+
     // Ledge catch: only with intent toward a registered ledge, near or past the apex.
     if (!this.grounded && this.traversal && this.velocity.y < 2.5 && wishLen > 0.3 && !this.isLocked) {
       const ledge = findLedge(this.physics, this.traversal, this.feet, this.wish, this.collider);
@@ -327,10 +434,18 @@ export class PlayerController {
       this.jumping = false;
       this.events.emit('land', { impact: this.lastFallSpeed });
       this.lastFallSpeed = 0;
+      if (this.pound === 'fall') {
+        this.pound = 'land';
+        this.poundT = MOVEMENT.poundRecover;
+        this.lockTimer = Math.max(this.lockTimer, MOVEMENT.poundRecover);
+        this.events.emit('groundPound', { x: this.feet.x, y: this.feet.y, z: this.feet.z, collider: this.groundCollider?.handle ?? null });
+      }
     }
 
     // --- facing
-    if (this.faceTarget !== null && this.lockTimer > 0) {
+    if (this.dashT > 0) {
+      this.facing = Math.atan2(this.dashDir.x, this.dashDir.z);
+    } else if (this.faceTarget !== null && this.lockTimer > 0) {
       this.facing = dampAngle(this.facing, this.faceTarget, 14, dt);
     } else {
       this.faceTarget = null;
@@ -341,12 +456,80 @@ export class PlayerController {
     }
   }
 
+  /**
+   * Dash, sprint and the steam kicker's moves. Returns true when it moved the player itself this
+   * step (ground pound hover and slam), so the normal movement step is skipped.
+   */
+  private updateMoves(dt: number, input: InputFrame, onGround: boolean, wishLen: number): boolean {
+    const dirOf = (out: THREE.Vector3) => (wishLen > 0.2 ? out.set(this.wish.x, 0, this.wish.z).normalize() : out.set(Math.sin(this.facing), 0, Math.cos(this.facing)));
+
+    // Ground pound: in the air, high enough above the ground.
+    if (input.poundPressed && !onGround && this.steam && this.pound === 'none' && !this.isLocked && this.heightAboveGround() > MOVEMENT.poundMinHeight) {
+      this.pound = 'hover';
+      this.poundT = MOVEMENT.poundHover;
+      this.dashT = 0;
+      this.sprinting = false;
+      this.pounds++;
+      this.events.emit('sfx', { name: 'poundStart', x: this.feet.x, y: this.feet.y, z: this.feet.z });
+    }
+    if (this.pound === 'hover' || this.pound === 'fall') {
+      if (this.pound === 'hover') {
+        this.poundT -= dt;
+        this.velocity.set(0, 0, 0);
+        if (this.poundT <= 0) this.pound = 'fall';
+      }
+      if (this.pound === 'fall') this.velocity.set(0, -MOVEMENT.poundSpeed, 0);
+      this.lastFallSpeed = this.pound === 'fall' ? MOVEMENT.poundSpeed : 0;
+      return false;
+    }
+    if (this.pound === 'land') {
+      this.poundT -= dt;
+      if (this.poundT <= 0) this.pound = 'none';
+    }
+
+    // Dash: on the ground a roll (always), in the air a steam burst (kicker, once per airtime).
+    if (input.dashPressed && !this.isLocked && this.pound === 'none') {
+      if (onGround && this.dashCooldown <= 0) {
+        this.dashT = MOVEMENT.dashTime;
+        this.dashAir = false;
+        dirOf(this.dashDir);
+        this.dashCooldown = MOVEMENT.dashCooldown;
+        this.sprinting = true;
+        this.dashes++;
+        this.events.emit('dash', { air: false, x: this.feet.x, y: this.feet.y, z: this.feet.z });
+      } else if (!onGround && this.steam && this.airDashes > 0) {
+        this.airDashes--;
+        this.dashT = MOVEMENT.airDashTime;
+        this.dashAir = true;
+        dirOf(this.dashDir);
+        this.jumping = false;
+        this.dashes++;
+        this.events.emit('dash', { air: true, x: this.feet.x, y: this.feet.y, z: this.feet.z });
+      }
+    }
+    if (this.dashT > 0) {
+      this.dashT = Math.max(0, this.dashT - dt);
+      const speed = this.dashAir ? MOVEMENT.airDashSpeed : MOVEMENT.dashSpeed;
+      this.velocity.x = this.dashDir.x * speed;
+      this.velocity.z = this.dashDir.z * speed;
+      if (this.dashAir) this.velocity.y = 0;
+    }
+    return false;
+  }
+
+  /** Distance from the feet down to walkable ground (up to 3 m; 3 if none). */
+  private heightAboveGround(): number {
+    const hit = this.physics.raycast(new THREE.Vector3(this.feet.x, this.feet.y + 0.05, this.feet.z), { x: 0, y: -1, z: 0 }, 3, GROUND_QUERY_GROUPS, this.collider);
+    return hit ? hit.distance - 0.05 : 3;
+  }
+
   private setFeet(f: THREE.Vector3): void {
     this.feet.copy(f);
     this.body.setNextKinematicTranslation({ x: f.x, y: f.y + PLAYER_CENTER_OFFSET, z: f.z });
   }
 
   private startHang(ledge: Ledge): void {
+    this.resetMoves();
     this.mode = 'hang';
     this.modeT = 0;
     this.ledge = ledge;
@@ -359,6 +542,7 @@ export class PlayerController {
   }
 
   private startClimb(ledge: Ledge, from: THREE.Vector3): void {
+    this.resetMoves();
     this.mode = 'climb';
     this.modeT = 0;
     this.ledge = ledge;
@@ -369,6 +553,42 @@ export class PlayerController {
     this.climbMid.set(from.x, ledge.topY + 0.12, from.z);
     this.climbTo.copy(ledge.standFeet);
     this.events.emit('sfx', { name: 'climb', x: from.x, y: ledge.topY, z: from.z });
+  }
+
+  private startGrind(rail: GrindRail, s: number): void {
+    this.resetMoves();
+    this.mode = 'grind';
+    this.rail = rail;
+    this.railS = s;
+    const t = rail.tangentAt(s);
+    const along = this.velocity.x * t.x + this.velocity.z * t.z;
+    // Ride the way she was going; with no clear direction, ride downhill.
+    this.railDir = Math.abs(along) > 1 ? Math.sign(along) : t.y <= 0 ? 1 : -1;
+    this.railSpeed = THREE.MathUtils.clamp(Math.abs(along), MOVEMENT.grindMinSpeed, MOVEMENT.grindMaxSpeed);
+    this.grounded = false;
+    this.jumping = false;
+    this.grinds++;
+    const f = rail.feetAt(s);
+    this.setFeet(f);
+    this.events.emit('grind', { on: true, x: f.x, y: f.y, z: f.z });
+  }
+
+  /** Off the end of the pipe, or a jump off it: momentum carries her on. */
+  private leaveRail(t: THREE.Vector3, jumped: boolean): void {
+    const rail = this.rail!;
+    const f = rail.feetAt(THREE.MathUtils.clamp(this.railS, 0, rail.length));
+    this.mode = 'move';
+    this.rail = null;
+    this.railCooldown = 0.45;
+    this.carryT = MOVEMENT.grindCarry;
+    const up = jumped ? Math.sqrt(2 * MOVEMENT.gravity * MOVEMENT.grindJumpHeight) : Math.max(0, t.y * this.railSpeed) + 2;
+    this.velocity.set(t.x * this.railSpeed, up, t.z * this.railSpeed);
+    this.jumping = jumped;
+    this.timeSinceGrounded = MOVEMENT.coyoteTime + 1;
+    this.lastJumpTime = this.time;
+    this.setFeet(f);
+    if (jumped) this.events.emit('jump', { speed: this.railSpeed });
+    this.events.emit('grind', { on: false, x: f.x, y: f.y, z: f.z });
   }
 
   private startVault(v: Vault): void {
@@ -383,6 +603,26 @@ export class PlayerController {
 
   /** Scripted traversal moves. Endpoints were validated as free when the move started. */
   private updateTraversal(dt: number, input: InputFrame, cameraYaw: number): void {
+    if (this.mode === 'grind' && this.rail) {
+      const rail = this.rail;
+      const t = rail.tangentAt(this.railS).multiplyScalar(this.railDir);
+      // Gravity along the slope and a little friction; never slower than a jog, never a blur.
+      this.railSpeed += (-t.y * MOVEMENT.gravity * MOVEMENT.grindSlope - MOVEMENT.grindFriction) * dt;
+      this.railSpeed = THREE.MathUtils.clamp(this.railSpeed, MOVEMENT.grindMinSpeed, MOVEMENT.grindMaxSpeed);
+      this.railS += this.railDir * this.railSpeed * dt;
+      this.facing = Math.atan2(t.x, t.z);
+      this.velocity.copy(t).multiplyScalar(this.railSpeed);
+      if (input.jumpPressed && !this.isLocked) {
+        this.leaveRail(t, true);
+        return;
+      }
+      if (this.railS <= 0 || this.railS >= rail.length) {
+        this.leaveRail(t, false);
+        return;
+      }
+      this.setFeet(rail.feetAt(this.railS));
+      return;
+    }
     if (this.mode === 'hang' && this.ledge) {
       this.modeT += dt;
       const fx = -Math.sin(cameraYaw);

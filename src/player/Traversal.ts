@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { GrindRail } from './GrindRail';
 import { RAPIER, GROUND_QUERY_GROUPS, type Physics } from '../physics/Physics';
 import { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
 
@@ -9,6 +10,12 @@ import { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
 export class TraversalSurfaces {
   readonly climbable = new Set<number>();
   readonly vaultable = new Set<number>();
+  /** Pipes Mara can land on and grind along. */
+  readonly rails: GrindRail[] = [];
+
+  addRail(rail: GrindRail): void {
+    this.rails.push(rail);
+  }
 
   markClimbable(collider: RAPIER.Collider | null): void {
     if (collider) this.climbable.add(collider.handle);

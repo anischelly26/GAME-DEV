@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Branch** | `claude/chapter-one-quality` (draft PR #4), stacked on `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
-| **Build** | Chapter One, *The Quiet Cell*: story opening → pressure-hatch puzzle → maintenance shaft → lookout → parkour practice route → *The Breathing Engine* and the split feed → chapter ending |
-| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PR #3: the Chapter One story and the R1–R4 fixes; PR #4: the quality pass below) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
+| **Branch** | `claude/chapter-one-v2` (draft PR #5), stacked on `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
+| **Build** | Chapter One, *The Quiet Cell*: the workshop opening → pressure-hatch puzzle → maintenance shaft (the steam kicker) → lookout → the feed-pipe grind or the scaffold → parkour practice route → *The Breathing Engine* and the split feed → chapter ending; five hidden chalk marks along the way |
+| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PR #3: the Chapter One story and the R1–R4 fixes; PR #4: the quality pass; PR #5: v2, below) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
 
 ## Launch
 
@@ -14,7 +14,7 @@ npm run dev
 ```
 
 Open http://localhost:5173, click **Begin**, then click the view to capture the mouse. The story
-opening plays first (about 30 s; Space or E skips it). Production build: `npm run build`, then
+opening plays first (about 39 s; Space or E skips it). Production build: `npm run build`, then
 `npm run preview` (http://localhost:4173). Character viewer: http://localhost:5173/?viewer=mara.
 
 **Dual-GPU laptops.** Windows runs browsers on the integrated GPU unless told otherwise.
@@ -22,6 +22,146 @@ Settings → System → Display → Graphics → Microsoft Edge (or Chrome) → 
 the browser to the dedicated GPU. On the test laptop (Intel UHD plus NVIDIA RTX 2050), Edge now
 runs on the RTX this way. The Intel measurements below use Playwright's bundled Chromium, which
 that setting does not cover.
+
+## Chapter One v2 (`claude/chapter-one-v2`, draft PR #5)
+
+The owner asked, overnight, for Chapter One at "It Takes Two quality" in movement, camera,
+character, maps, sound, story, intro, puzzles and missions. It Takes Two is the bar for feel and
+polish, not a source: nothing here copies its characters, levels, story, dialogue, assets or
+gadgets (double jump, dash, ground pound and grinding are genre-standard verbs). The plan this
+pass followed, written before starting, is [plans/OVERNIGHT_BRIEF.md](plans/OVERNIGHT_BRIEF.md).
+No person has played any of it yet.
+
+| Commit | What |
+| --- | --- |
+| `e9ffa7b` | Movement 2.0: a ground dash and sprint; Ivo's steam kicker, found in the shaft, adds a double jump with a flip, an air dash and a ground pound, worn as a brass canister with a gauge |
+| `cb24a4e` | Real sound: CC0 samples (surface footsteps, cloth, landings, metal), CC0 music and ambience beds that follow the story, a music volume setting |
+| `3b85f6c` | The opening, in the engine: Mara's workshop the night before, then the cell; captions and letterbox |
+| `a957412` | The shortcuts the new moves opened, closed (see below) |
+| `b890fd6` | 390 of 646 meshes drew black (no vertex colours on the shared materials): fixed |
+| `2dc8e72` | Secrets and toys: five chalk marks, boards to slam, a cell with bent bars, a steam whistle, area titles |
+| `60173c8` | The feed-pipe grind down into the hall; a fall-speed bug against walls |
+| `fbd8578` | Mara kneels at the low valve and folds her arms when idle; controls updated |
+| `6b3523c` | Edge cases: a teleport mid-grind; a respawn mid-opening |
+| `3e1b230` | Performance: hidden props' shaders compiled at load (a 0.5 s freeze when the kicker first appeared); new props merged |
+
+### Before and after, as a player
+
+- **Opening.** Before: three text cards on black, then the cell. Now: a letterboxed scene in Mara's
+  workshop in Saltmere (rain on the window, the diversion plans circled and crossed out in red, her
+  fighting sleep, a figure stopping at the window, the lamp going out), lower-third captions, then
+  the cell. About 39 s; Space or E skips it.
+- **Moves.** Before: run, jump, vault, ledge catch. Now also a dash (a roll) and sprint from the
+  start, and, once Mara picks up the steam kicker in the shaft, a double jump with a flip, an air
+  dash that holds height, and a ground pound. An ability card explains them the moment she gets
+  it. Each move has its own animation, sound, puff of steam or dust, and a small camera kick.
+- **Into the hall.** Before: two drops by a scaffold. Now also a broken brass feed pipe from the
+  lookout: step onto it and Mara grinds it about 20 m round in front of the engine, sparks off the
+  pipe, the camera standing back, and lands on tier one. The scaffold still works.
+- **Secrets.** Five chalk "IV" marks hidden off the path (one needs the double jump, one is under
+  boards only a ground pound breaks, one is in a cell whose bars someone bent open), a steam
+  whistle to pull, and area titles for each space. The end card counts the marks.
+- **Sound.** Before: synthesised placeholders. Now recorded footsteps that change with stone,
+  metal and wood, cloth and landings, and music that moves with the story: the title theme, the
+  workshop, a quiet cell, a driving hall, a swelling ending.
+- **It looks like it was meant to.** A third of the props, including the hatch, every pipe and
+  gauge, and the tide engine's gear and pillars, drew black. They now show their brass, iron and
+  wood. Before and after: [evidence/chapter-one-v2/](evidence/chapter-one-v2/) (06, 07).
+- **No shortcuts.** The new moves reach about 2.6 m up and well over 5 m across. Probed with the
+  real controller: a double jump from the breach checkpoint landed on the exit gantry, skipping the
+  split-feed puzzle; walking left from the scaffold went round tier one to the engine, skipping
+  sides 2 to 6; walking tier three back round and jumping the breach landed on the exit. Fixed:
+  the exit gantry and the ram's stroke are now 3.4 m; collapsed floor closes each tier the other
+  way. The steam curtain and the lookout's rope gate were also raised as precautions (they held
+  on the old code too).
+
+### Controls (new in this pass)
+
+| Action | Keyboard | Gamepad |
+| --- | --- | --- |
+| Dash (a roll); hold to sprint | Shift | B |
+| Double jump, air dash (after the kicker) | Space / Shift in the air | A / B in the air |
+| Ground pound (after the kicker) | Ctrl in the air | RB or RT |
+| Grind | Land on a pipe; Space jumps off | A jumps off |
+
+Settings gained a music volume. Gamepad B is no longer an alternate interact (it dashes).
+
+### Verification (this pass)
+
+Environment as below: Windows 11 Pro, Intel UHD 0x46A3 and NVIDIA RTX 2050, Node 22.13.1. Edge
+runs on the RTX; Playwright's bundled Chromium runs on the Intel GPU.
+
+- **Unit tests: 54/54.**
+- **Edge e2e: 82/82** at `3e1b230`:
+
+  | Spec | Tests | Spec | Tests |
+  | --- | ---: | --- | ---: |
+  | engine | 8 | moves | 6 |
+  | input | 11 | audio | 1 |
+  | jumps | 20 | sequence | 5 |
+  | parkour | 13 | secrets | 5 |
+  | slice | 8 | grind | 3 |
+  | story | 2 | | |
+
+  `sequence.spec.ts` tries every shortcut above with the real controller; without the fixes its
+  ring and exit tests fail (3 of 5).
+- **Frame times.** Production build, headed, the real-time loop, the scripted full route through
+  the input pipeline, 1280×720, Low, fresh browsers (`scripts/trace-stalls.mjs`). Both builds were
+  measured in the same session:
+
+  | GPU (browser) | Build | Runs | Mean frame | p95 | Worst frame |
+  | --- | --- | ---: | ---: | ---: | ---: |
+  | Intel UHD (bundled Chromium) | PR #4 head `485f635` | 3 | 21.0–21.6 ms (≈47 FPS) | 33.4–33.5 ms | 116–946 ms |
+  | Intel UHD (bundled Chromium) | this pass `3e1b230` | 3 | 21.3–22.1 ms (≈46 FPS) | 33.5 ms | 83–1047 ms |
+  | RTX 2050 (Edge) | both, Low | 1–2 | 16.6 ms (60 FPS) | 16.8 ms | 33 ms |
+  | RTX 2050 (Edge) | this pass, High | 2 | 17.0–17.2 ms | 16.8–16.9 ms | 50 ms |
+
+  - The RTX numbers are held at the display's 60 Hz in this session for both builds, so they show
+    that each holds 60 FPS, not the headroom. PR #4's 7.3 ms was measured uncapped.
+  - Worst frames: before `3e1b230`, 2 of 3 Intel runs froze for 0.5 s at the landing, where the
+    canister's shader linked on first sight. After, the worst frames are 83 ms and 133 ms in two
+    runs.
+  - In the third run, one frame took 1,047 ms at the cell with no WebGL work inside it (no shader,
+    texture or buffer). PR #4's build had the same kind of frame (946 ms, on tier one), so it is
+    not new, but its cause is not identified.
+  - Earlier measurements in this pass, before the last fixes, are in the commit messages.
+- **Load time** to the title screen, Intel GPU, bundled Chromium, 3 runs each: 20.5–21.2 s (PR
+  #4's build: 20.9–26.1 s), measured before `3e1b230`'s merges.
+- **Draw calls** (`scripts/count-draws.mjs`): a mean of 495 per frame over the nine checkpoints,
+  against 458 at PR #4.
+- **Each commit type-checks** (each built from a `git archive` copy).
+- **Screenshots:** [evidence/chapter-one-v2/](evidence/chapter-one-v2/).
+- **Local only (not committed):** a showcase recording in `artifacts/showcase/`
+  (`scripts/capture-showcase.mjs`): the opening, moves, the grind, the boards and the whistle. It
+  is automated, scripted input on a real-time loop.
+
+### Known limitations (this pass)
+
+- **No person has played it**, and no one has listened to it. The music beds were chosen from
+  their descriptions and checked only for loading and looping; the rain, the whistle and the grind
+  are synthesised and unheard.
+- **The workshop pose.** Mara sits upright and droops her head; she does not lay her head on the
+  plans (no such clip).
+- **The shuttle's 5 m collapse can be jumped** with a sprint, double jump and air dash. That is
+  allowed on purpose: it is a ride, not a puzzle.
+- **One pipe to grind**, and nothing else uses the ground pound yet besides the boards.
+- **Chains have no colliders**, so the camera can pass through the hanging chains in the hall.
+- **Not 60 FPS on Intel UHD**: about 46 FPS on Low in bundled Chromium.
+- Earlier limitations still apply: no IK on ledges, the hall is dark in places, the load takes
+  about 20 s on the Intel GPU.
+
+### Areas for independent review (Codex)
+
+1. **Movement 2.0 and the reach audit.** Are there gates I missed that the double jump or air
+   dash can skip? The probes in `tests/e2e/sequence.spec.ts` cover the ones I found.
+2. **The opening.** Is 39 s too long? Does the story read without the old cards (the plans, the
+   figure, the lamp)?
+3. **The grind.** The camera behaviour while riding, the catch radius (0.5 m), and whether the
+   pipe's start is discoverable.
+4. **Secrets.** Are the marks findable but not obvious? Is the boards' hint fair?
+5. **The colour fix** (`b890fd6`) changes how a third of the props look. Check that nothing is
+   now too bright or wrong.
+6. **The warm-up change** (`3e1b230`): drawing hidden props once at load.
 
 ## Chapter One quality pass (`claude/chapter-one-quality`, draft PR #4)
 

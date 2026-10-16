@@ -45,8 +45,11 @@ Stylised maritime-industrial fantasy: rounded, chipped stone; heavy iron silhoue
 brass; amber practical lamps against cold ocean blue and oxidised teal. Mara's ochre jacket and
 coral scarf are the only other warm accents, which keeps her readable. Mechanisms have honest
 motion: needles settle, latches kick, steam vents with the engine's 4.2-second "breath". Mara and
-the stone, metal and wood surfaces are CC0 assets; sound and effects are still procedural
-placeholders (see [ASSETS.md](ASSETS.md)).
+the stone, metal and wood surfaces are CC0 assets. Sound is recorded CC0 samples (footsteps that
+change with stone, metal and wood; cloth, impacts, metal) and CC0 music and ambience beds that
+change with the place, with synthesis where it reads better: steam, the engine's drone, the steam
+whistle, the grind's scrape. The workshop's rain is generated in code. Sources and licences:
+[ASSETS.md](ASSETS.md).
 
 ## Campaign outline (production proposal, not a promise)
 
@@ -84,6 +87,27 @@ The 2.0 m gap in the drainage channel sits at that limit since the run speed was
 autopilot clears it in every full-route test, and the 1.9 m tier-one gap is also cleared from 20°
 and 30° approaches with one fixed input. Whether it feels fair to a person is untested.
 
+**Movement 2.0** (`MOVEMENT` in `src/player/movement.ts`):
+
+| Move | Input | Numbers |
+| --- | --- | --- |
+| Dash (a roll) | Shift / B on the ground | 10.5 m/s for 0.18 s, 0.4 s cooldown; an FOV kick |
+| Sprint | hold Shift / B after a dash | 7.4 m/s while moving |
+| Double jump (with a flip) | Space / A in the air | +1.15 m; total reach about 2.6 m above the takeoff; redirects toward the stick |
+| Air dash | Shift / B in the air | 11 m/s for 0.2 s, holds height |
+| Ground pound | Ctrl / RB in the air, 0.9 m or more above the ground | 0.16 s hover, slam at 24 m/s, 0.22 s recovery; breaks boards |
+| Grind | land on a registered pipe; Space jumps off | 5.5–12 m/s, gravity along the slope; the last 2 m of a pipe can't be caught |
+
+The double jump, air dash and ground pound need Ivo's steam kicker, picked up in the shaft. One
+double jump and one air dash per airtime, refilled on landing, on a ledge and on a pipe.
+
+**Reach audit.** With the kicker Mara reaches about 2.6 m up and well over 5 m across, so every
+gate was re-checked with the real controller (`tests/e2e/sequence.spec.ts`): the exit gantry and
+the ram's stroke are 3.4 m above tier three; collapsed floor closes each tier of the hall to one
+direction; the steam curtain covers the full height under the roof; the lookout railing and rope
+gate reach the ceiling. The shuttle's 5 m collapse can be jumped with a sprint, double jump and air
+dash: that is allowed as a skill shortcut (it is a ride, not a puzzle).
+
 **Air control and the camera.** Movement is camera-relative. In the air, a held direction keeps the
 camera yaw it had at takeoff, so turning the camera mid-jump does not bend the jump. Releasing the
 stick, or pushing a clearly different direction, reads the camera again.
@@ -101,22 +125,35 @@ stick, or pushing a clearly different direction, reads the camera again.
    with the route above her.
 5. Camera zones per space: the cell 3.4 m, the shaft 5.0 m, the lookout 3.8 m, the hall 5.6 m,
    tier three 4.4 m, the gantry top 3.0 m with a low pivot.
+6. Grinding: Mara has no steering, so the camera swings behind the direction of travel (yielding
+   to the mouse for 0.6 s after any look input), stands back 1.2 m further and widens 6°.
 
 ## Chapter One, *The Quiet Cell* (implemented)
 
-### Opening (skippable, about 30 s)
+### Opening (skippable, about 39 s)
 
-1. Three cards over black: Saltmere, the night before (Mara keeps the tide engines running and
-   was ordered to sign off a diversion that would drown her own district); she refused and fell
-   asleep over the drawings; she woke up somewhere else.
-2. The cell, by moonlight: Mara asleep on the floor. The Warden's horn: "Pressure cycle in
-   progress. All cells remain sealed."
-3. She gets up. "Where... This isn't my workshop." She looks around. "Salt on the walls. That
-   engine thump... I know this place. Breakwater."
-4. Title: *Chapter One, The Quiet Cell*: "The prison runs on the tide. So will her way out."
-5. Control, and the objective "Open the service hatch". Mara notices the fresh copper.
+An in-engine scene, letterboxed, with captions in the lower third:
 
-Space, E or A skips to step 5 in the same state.
+1. **Saltmere, the night before.** Mara's workshop: rain on the window, the harbour lights beyond,
+   an oil lamp, a model tide engine. She sits at the bench. *"Mara Venn keeps the tide engines of
+   Saltmere running."*
+2. Over her shoulder, the plans: *DIVERSION No. 7*, the low quarter circled in red pencil, crossed
+   out, *"floods at high tide!"*. *"Today she was ordered to sign off a flood diversion that would
+   drown her own district at the next high tide."*
+3. Side on: she fights sleep, jerks awake, and loses. *"She refused, and stayed up to prove the
+   plan was wrong."*
+4. Past her to the window: a figure in a long coat and cap walks up, stops to look in, walks on.
+   A door creaks. The lamp gutters and goes out.
+5. Black: *"She woke up somewhere else."*
+6. The cell, by moonlight: Mara asleep on the floor. The Warden's horn: "Pressure cycle in
+   progress. All cells remain sealed." She gets up: "Where... This isn't my workshop." She looks
+   around: "Salt on the walls. That engine thump... I know this place. Breakwater."
+7. Title: *Chapter One, The Quiet Cell*: "The prison runs on the tide. So will her way out."
+8. Control, and the objective "Open the service hatch". Mara notices the fresh copper.
+
+Space, E or A skips to step 8 in the same state. The workshop is a set built away from the prison
+and shown only during the opening; it borrows two of the cell's lights (adding lights would
+recompile every material) and dims the moon and sky light meanwhile.
 
 ### Rhythm
 
@@ -140,6 +177,27 @@ Chapter One follows the owner's five-part rhythm:
 | Gap | Drainage channel | Walks to the lit crossing where the old catwalk broke away and jumps the 2.0 m gap | Falling recovers at the landing in under a second |
 | Reveal | Lookout (ruined tier-2 cell) | Sees the turbine hall, lights the lookout lamp | Lookout becomes the checkpoint |
 | Reveal beat | — | The service lights come on across the hall; Ivo: "The tide turns soon. Follow the service lights." The rope gate drops and increment 2 begins | — |
+
+### Secrets and toys (optional)
+
+Five chalk **"IV" marks** sit off the main path, each faintly lit with a glint every few seconds.
+Mara glances at the ones she hasn't found; each pickup chimes, counts ("Chalk mark "IV" · 2 of
+5") and gets a short line from her that builds toward the ending's "Ivo. It has to be." The end
+card shows how many were found.
+
+| Mark | Where | What it asks |
+| --- | --- | --- |
+| 1 | Beside the tally marks over the bunk, in Mara's cell | Look around before leaving |
+| 2 | On a shelf high on the breach wall above the far landing | A double jump (a single jump falls about 0.4 m short) |
+| 3 | Low on the lookout's left wall | Look around at the lookout |
+| 4 | Under boards nailed over a hatch, in the tier-one dead end left of the scaffold (a chalk arrow points at them) | A ground pound (jumping on them does nothing; Mara hints after a while) |
+| 5 | Inside a tier-three cell whose bars someone bent open (a bedroll and a candle) | Walk in on the way to the ram |
+
+The **steam whistle** on the pier by the scaffold sounds a three-pipe chord with a plume of
+steam. Mara apologises the first time; on the third pull the Watch logs the pressure loss.
+
+**Area titles** name each space the first time Mara enters it: the Maintenance Shaft, the Turbine
+Hall, the Breathing Engine, the Breach.
 
 ### Puzzle specification: the pressure hatch
 
@@ -195,7 +253,12 @@ qualify.
 *Feeling:* "I'm getting good at this." Each move gets a safe introduction before it is required,
 and a service light sits next to each risky move.
 
-1. **Drops.** Lookout → scaffold (2.0 m) → tier-1 walkway (2.6 m).
+1. **Down into the hall**, two ways. The **feed pipe**: a broken brass pipe bolted at the
+   lookout's edge (right of the rope gate) and hung from the roof on chains; stepping onto it
+   grinds about 20 m down, out over the void and round in front of the engine, and back over the
+   tier-one railing at side 1 (about 3 s, sparks, the camera standing back). Or the **drops**:
+   lookout → scaffold (2.0 m) → tier-1 walkway (2.6 m). Left of the scaffold, tier one ends after
+   a few metres at a collapse (the boards and a chalk mark are there).
 2. **Gap.** A 1.9 m collapse in the walkway (service light "Tier one" before it).
 3. **Vault.** A 0.84 m "NO ACCESS" steel barrier beam across the walkway; its top cap is painted
    in worn amber-and-black stripes where the hand lands. Jumping over it also works. Tested from
@@ -222,7 +285,7 @@ engine collar, a railed ring deck around the column, heaves ±2.6 m with the eng
 4. **Steam curtain.** On tier 3 a cracked line sprays across the walkway and pushes Mara back,
    without harming her. A painted hazard band marks where the push starts.
 5. **The split feed (puzzle).** See the specification below. Mara works out how to make the
-   breach ram carry her up 2.4 m, then makes a broad jump of about 2 m onto the exit gantry.
+   breach ram carry her up 3.4 m, then makes a broad jump of about 2 m onto the exit gantry.
    Missing the jump costs a few seconds: recovery is at the "Breach" service light with the ram
    waiting primed again.
 6. **Ending of Chapter One.** Over Mara's shoulder, out to sea. Ivo on the intercom: "You made the
@@ -240,7 +303,7 @@ The rule the cell taught (pressure goes where the valves send it) now drives a c
 consequence. It uses only existing systems: a diverter in the cell's plate-and-pointer language, a
 lever, gauges, and a vertical platform.
 
-- **Goal:** get past the steam and up to the exit gantry, 2.4 m above the walkway, at the breach.
+- **Goal:** get past the steam and up to the exit gantry, 3.4 m above the walkway (beyond a double jump), at the breach.
 - **Machine.** One steam main feeds a junction before the curtain, mounted on a lit control board:
   - **FEED diverter** (wheel with a pointer bar; plate: VENT ← → RAM). VENT sends the steam into the
     cracked line, which is the curtain. RAM sends it to the breach ram, which then rises to the
