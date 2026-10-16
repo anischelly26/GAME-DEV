@@ -1635,6 +1635,9 @@ export class QuietCellLevel implements Level {
 
   /** After a fall recovery at a checkpoint. */
   onRespawn(checkpointId: string): void {
+    // A restart from the pause menu during the opening: finish it as a skip would (the workshop
+    // gives the cell its lights back, Mara ends up at the cell spawn with control).
+    if (this.inWorkshop) this.skipCinematic();
     this.engine.onRespawn(checkpointId);
   }
 

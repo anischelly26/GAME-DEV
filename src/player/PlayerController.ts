@@ -156,6 +156,8 @@ export class PlayerController {
   }
 
   teleport(feet: THREE.Vector3, facing: number): void {
+    // Taken off a pipe mid-grind (respawn, restart, a dev teleport): end it like any other exit.
+    if (this.mode === 'grind') this.events.emit('grind', { on: false, x: this.feet.x, y: this.feet.y, z: this.feet.z });
     this.mode = 'move';
     this.ledge = null;
     this.vault = null;
