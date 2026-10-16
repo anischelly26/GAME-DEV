@@ -44,6 +44,18 @@ export const MOVEMENT = {
   poundRecover: 0.22,
   /** No ground pound closer than this above the ground (it would be a stumble, not a slam). */
   poundMinHeight: 0.9,
+  /** Grinding a pipe: speed limits, how strongly the slope pulls, friction (m/s^2). */
+  grindMinSpeed: 5.5,
+  grindMaxSpeed: 12,
+  grindSlope: 0.55,
+  grindFriction: 1.2,
+  /** Feet this close to the top of a pipe (in the air) land on it, except on its last metres. */
+  grindAttach: 0.5,
+  grindNoCatchEnd: 2,
+  /** A jump off a pipe. */
+  grindJumpHeight: 1.3,
+  /** After leaving a pipe, momentum carries this long before normal air control takes over. */
+  grindCarry: 0.7,
 };
 
 export const PLAYER_CENTER_OFFSET = MOVEMENT.capsuleHalfHeight + MOVEMENT.capsuleRadius;

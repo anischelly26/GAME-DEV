@@ -10,6 +10,8 @@ import { Hangar } from '../../world/props/Hangar';
 import { Workshop } from './Workshop';
 import { ChalkMarks, chalkArrowTexture, type ChalkMarkSpot } from '../../world/props/ChalkMarks';
 import { BoardedHatch } from '../../world/props/BoardedHatch';
+import { Chain } from '../../world/props/Mechanisms';
+import { GrindRail } from '../../player/GrindRail';
 import { ServiceLight, WorkLamp, glowSprite } from '../../world/props/Lanterns';
 import { LightShaft, SteamEmitter, Water } from '../../world/Atmosphere';
 import { PressureHatchLogic, enginePulse, LIFT_THRESHOLD } from '../../gameplay/puzzles/PressureHatchLogic';
@@ -98,6 +100,8 @@ export class QuietCellLevel implements Level {
   private whistleT = 0;
   private whistlePulls = 0;
   private readonly chest = new THREE.Vector3();
+  /** The feed pipe Mara can grind down from the lookout. */
+  feedRail!: GrindRail;
 
   constructor(private readonly ctx: LevelContext) {
     const { scene, physics, materials: m } = ctx;
@@ -612,6 +616,7 @@ export class QuietCellLevel implements Level {
 
     // ------------------------------------------------------------ gameplay wiring
     this.buildSecrets();
+    this.buildFeedPipe();
     this.registerCheckpoints();
     this.registerInteractions();
     this.registerTriggers();
@@ -1098,6 +1103,12 @@ export class QuietCellLevel implements Level {
         },
       },
       { at: tLights + 4.0, run: () => dialogue.say('Mara', 'Who is this?', 1.8, { story: true }) },
+      {
+        at: tLights + 7.4,
+        run: () => {
+          if (!progression.has('grind.first') && this.ctx.player.feet.y > LOOKOUT.y - 0.5) dialogue.say('Mara', 'That old feed pipe runs all the way down. I could ride it...', 3.2);
+        },
+      },
       { at: tLights + 5.6, run: () => events.emit('sfx', { name: 'static' }) },
     );
     this.sequence = { t: 0, steps };
@@ -1320,6 +1331,69 @@ export class QuietCellLevel implements Level {
       "All five. 'IV'... I know that hand.",
     ];
     dialogue.say('Mara', lines[Math.min(n, lines.length) - 1], 3.2);
+  }
+
+  /**
+   * The broken feed pipe from the lookout down into the hall. Bolted at the lookout's edge (right
+   * of the rope gate), it swings out over the void, round in front of the engine, and back over the
+   * tier-one railing at side 1, hung from the roof on chains. Stepping or jumping onto it from the
+   * lookout rides it down (a grind of about 20 m); the rope and scaffold stay as the other way.
+   */
+  private buildFeedPipe(): void {
+    const { scene, materials: m, traversal, events, progression, dialogue } = this.ctx;
+    const root = new THREE.Group();
+    root.name = 'feed-pipe';
+    scene.add(root);
+    const points = [
+      [1.8, 4.42, 11.65],
+      [1.2, 4.12, 9.95],
+      [-0.6, 3.85, 8.55],
+      [-2.9, 3.55, 7.65],
+      [-4.25, 3.25, 6.05],
+      [-3.5, 2.95, 4.65],
+      [-0.6, 2.6, 5.5],
+      [1.6, 2.3, 6.0],
+      [3.15, 1.95, 7.15],
+      [3.4, 1.6, 8.75],
+      [3.45, 1.32, 9.85],
+    ].map(([x, y, z]) => v3(x, y, z));
+    const curve = new THREE.CatmullRomCurve3(points, false, 'centripetal');
+    const radius = 0.13;
+    const rail = new GrindRail(curve, radius);
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 240, radius, 12, false), m.brass);
+    tube.castShadow = tube.receiveShadow = true;
+    root.add(tube);
+    // Iron collars along it, a flange where it is bolted at the lookout, a torn lip at the open end.
+    const zAxis = v3(0, 0, 1);
+    const collar = new THREE.TorusGeometry(radius + 0.02, 0.025, 6, 16);
+    const at = new THREE.Vector3();
+    const tan = new THREE.Vector3();
+    for (let s = 0.9; s < rail.length - 0.5; s += 1.7) {
+      const c = new THREE.Mesh(collar, m.ironDark);
+      c.position.copy(rail.pointAt(s, at));
+      c.quaternion.setFromUnitVectors(zAxis, rail.tangentAt(s, tan));
+      root.add(c);
+    }
+    for (const [s, r, w] of [
+      [0.05, radius + 0.09, 0.05],
+      [rail.length - 0.04, radius + 0.04, 0.03],
+    ]) {
+      const flange = new THREE.Mesh(new THREE.CylinderGeometry(r, r, w, 16), m.ironDark);
+      flange.position.copy(rail.pointAt(s, at));
+      flange.quaternion.setFromUnitVectors(v3(0, 1, 0), rail.tangentAt(s, tan));
+      root.add(flange);
+    }
+    // Hung from the roof.
+    for (const f of [0.2, 0.42, 0.63, 0.84]) {
+      const p = rail.pointAt(f * rail.length);
+      const chain = new Chain(m.ironDark, v3(p.x, HALL.roofY, p.z), p.clone().setY(p.y + radius), 0.12);
+      root.add(chain.mesh);
+    }
+    traversal.addRail(rail);
+    this.feedRail = rail;
+    events.on('grind', (g) => {
+      if (g.on && progression.set('grind.first')) dialogue.say('Mara', 'Whoa... okay. Okay!', 1.8);
+    });
   }
 
   /** A one-time area title (once per run). */

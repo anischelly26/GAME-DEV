@@ -62,6 +62,8 @@ export class AudioSystem {
   private readonly samples = new Map<string, AudioBuffer[]>();
   private readonly bedBuffers = new Map<string, Promise<AudioBuffer | null>>();
   private readonly playing: Record<'music' | 'ambience', { name: string; src: AudioBufferSourceNode | null; gain: GainNode } | null> = { music: null, ambience: null };
+  /** The scrape of a pipe being ground (built on first use, then only its level changes). */
+  private grindGain: GainNode | null = null;
   /** The prison's own drone and surf (synthesised), off away from Breakwater. */
   private prisonGain: GainNode | null = null;
   private prisonOn = true;
@@ -159,6 +161,47 @@ export class AudioSystem {
     );
     // Beds requested before the manifest arrived.
     for (const slot of ['music', 'ambience'] as const) if (this.wanted[slot]) this.startBed(slot, this.wanted[slot]!, 2);
+  }
+
+  /**
+   * Grinding a pipe: a metal scrape (noise through a wobbling resonant band) over the faint ring of
+   * the pipe. `level` 0 fades it out; otherwise it follows the speed (0..1).
+   */
+  grind(level: number): void {
+    if (!this.ctx || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    if (!this.grindGain) {
+      if (level <= 0) return;
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
+      gain.connect(this.sfxBus);
+      const src = ctx.createBufferSource();
+      src.buffer = this.noiseBuffer;
+      src.loop = true;
+      const band = ctx.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 2300;
+      band.Q.value = 2.4;
+      const wobble = ctx.createOscillator();
+      wobble.frequency.value = 6.5;
+      const depth = ctx.createGain();
+      depth.gain.value = 520;
+      wobble.connect(depth).connect(band.frequency);
+      src.connect(band).connect(gain);
+      const ring = ctx.createGain();
+      ring.gain.value = 0.18;
+      for (const f of [912, 1418, 2290]) {
+        const o = ctx.createOscillator();
+        o.frequency.value = f;
+        o.connect(ring);
+        o.start();
+      }
+      ring.connect(gain);
+      src.start();
+      wobble.start();
+      this.grindGain = gain;
+    }
+    this.grindGain.gain.setTargetAtTime(level > 0 ? 0.2 * level : 0.0001, ctx.currentTime, level > 0 ? 0.04 : 0.09);
   }
 
   /** The engine drone and distant surf under every bed (on in Breakwater, off in Saltmere). */

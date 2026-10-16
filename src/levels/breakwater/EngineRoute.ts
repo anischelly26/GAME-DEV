@@ -935,7 +935,7 @@ export class EngineRoute {
     if (this.routeOpen) {
       this.routeOpen = false;
       this.gateMesh.visible = true;
-      this.gateCollider = this.ctx.physics.box(v3(1.4, 4.6 + 1.3, HALL.aWall - 0.12), v3(0.75, 1.3, 0.08), undefined, { blocksCamera: false });
+      this.gateCollider = this.ctx.physics.box(v3(1.4, 4.6 + 1.7, HALL.aWall - 0.12), v3(0.75, 1.7, 0.08), undefined, { blocksCamera: false });
     }
   }
 

@@ -9,6 +9,7 @@ import { applySurfaces, createMaterials, Palette, type MaterialLibrary } from '.
 import { loadSurfaces } from '../world/surfaces';
 import { Sky } from '../world/Atmosphere';
 import { PlayerController } from '../player/PlayerController';
+import { MOVEMENT } from '../player/movement';
 import { PlayerAvatar } from '../player/PlayerAvatar';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DropShadow } from '../player/DropShadow';
@@ -310,6 +311,14 @@ export class Game {
       if (impact > 9 && this.player.pound === 'none') this.effects.burst(this.player.feet, { count: 6, color: '#9d907e', speed: 1.2, spread: 2.2, life: 0.6, size: [0.2, 0.7], opacity: 0.35 });
     });
     // The steam kicker's moves: steam, dust, a ring, a sound and a camera response for each.
+    this.events.on('grind', (p) => {
+      this.audio.grind(p.on ? 1 : 0);
+      if (p.on) {
+        this.effects.sparks(p, { x: 0, y: 1, z: 0 }, 14, 3.5);
+        this.audio.play('grab', p, 0.8);
+        this.camera.kick(3);
+      }
+    });
     this.events.on('doubleJump', (p) => {
       this.effects.burst(p, { count: 12, color: '#eef3f4', dir: { x: 0, y: -1, z: 0 }, speed: 2.4, spread: 1.8, life: 0.65, size: [0.18, 0.75], opacity: 0.55 });
       this.audio.play('doubleJump', p);
@@ -682,6 +691,13 @@ export class Game {
         airLeft: this.player.steam ? this.player.airJumps + this.player.airDashes : 0,
       },
     });
+    // Sparks off the pipe while grinding, more the faster she goes; the scrape follows the speed.
+    if (this.player.mode === 'grind') {
+      const f = this.player.facing;
+      const k = this.player.railSpeed / MOVEMENT.grindMaxSpeed;
+      this.effects.sparks({ x: feet.x, y: feet.y - 0.08, z: feet.z }, { x: -Math.sin(f), y: 0.35, z: -Math.cos(f) }, Math.random() < 0.5 + k * 0.5 ? 2 : 1, 2.5 + k * 3);
+      this.audio.grind(0.45 + 0.55 * k);
+    }
     // A steam trail behind the canister for the length of an air dash.
     if (this.player.dashT > 0 && this.player.dashAir && Math.random() < 0.7) {
       const f = this.player.facing;

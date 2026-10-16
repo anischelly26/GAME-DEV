@@ -13,6 +13,9 @@ export class Effects {
   readonly group = new THREE.Group();
   private readonly puffs: Puff[] = [];
   private readonly rings: Ring[] = [];
+  /** Bright, fast, falling specks (a pipe being ground). Additive, so they glow. */
+  private readonly sparkPool: Array<{ sprite: THREE.Sprite; vel: THREE.Vector3; age: number; life: number }> = [];
+  private nextSpark = 0;
   private nextPuff = 0;
   private nextRing = 0;
 
@@ -25,6 +28,12 @@ export class Effects {
       sprite.visible = false;
       this.group.add(sprite);
       this.puffs.push({ sprite, vel: new THREE.Vector3(), life: 0, age: 0, size0: 0.2, size1: 0.8, peak: 0.5 });
+    }
+    for (let i = 0; i < 48; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color: '#ffc46b', transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+      sprite.visible = false;
+      this.group.add(sprite);
+      this.sparkPool.push({ sprite, vel: new THREE.Vector3(), age: 0, life: 0 });
     }
     const ringGeo = new THREE.RingGeometry(0.82, 1, 48);
     ringGeo.rotateX(-Math.PI / 2);
@@ -58,6 +67,20 @@ export class Effects {
     }
   }
 
+  /** `count` sparks thrown from `at` along `dir` (they arc down under gravity and fade). */
+  sparks(at: THREE.Vector3Like, dir: THREE.Vector3Like, count: number, speed: number): void {
+    for (let i = 0; i < count; i++) {
+      const s = this.sparkPool[this.nextSpark];
+      this.nextSpark = (this.nextSpark + 1) % this.sparkPool.length;
+      s.vel.set(dir.x + (Math.random() - 0.5) * 0.9, dir.y + Math.random() * 0.6, dir.z + (Math.random() - 0.5) * 0.9).normalize().multiplyScalar(speed * (0.6 + Math.random() * 0.7));
+      s.sprite.position.set(at.x, at.y, at.z);
+      s.age = 0;
+      s.life = 0.25 + Math.random() * 0.25;
+      s.sprite.scale.setScalar(0.05 + Math.random() * 0.05);
+      s.sprite.visible = true;
+    }
+  }
+
   /** A shockwave ring expanding on the ground at `at` to `radius` metres. */
   ring(at: THREE.Vector3Like, radius = 2.2, life = 0.45): void {
     const r = this.rings[this.nextRing];
@@ -70,6 +93,20 @@ export class Effects {
   }
 
   update(dt: number): void {
+    for (const s of this.sparkPool) {
+      if (!s.sprite.visible) continue;
+      s.age += dt;
+      const k = s.age / s.life;
+      if (k >= 1) {
+        s.sprite.visible = false;
+        continue;
+      }
+      s.vel.y -= 9.8 * dt;
+      s.sprite.position.addScaledVector(s.vel, dt);
+      const m = s.sprite.material as THREE.SpriteMaterial;
+      m.opacity = 1 - k * k;
+      m.color.setRGB(1, 0.78 - k * 0.45, 0.42 - k * 0.35);
+    }
     for (const p of this.puffs) {
       if (!p.sprite.visible) continue;
       p.age += dt;

@@ -254,6 +254,17 @@ export class ThirdPersonCamera {
       }
     }
 
+    // --- grinding: Mara is along for the ride, so the camera swings behind the direction of travel
+    // (yielding to the mouse or stick for a moment) and pulls back to show the drop.
+    const grinding = c.mode === 'grind';
+    if (grinding && this.recenterTarget === null && this.sinceLook > 0.6 && v > 1) {
+      const behind = Math.atan2(-this.velocity.x, -this.velocity.z);
+      const ramp = clamp((this.sinceLook - 0.6) / 0.5, 0, 1);
+      this.yaw = dampAngle(this.yaw, behind, 2.8 * ramp, dt);
+      this.pitch = damp(this.pitch, 0.36, 1.6 * ramp, dt);
+      this.assisting = true;
+    }
+
     // --- zone (highest priority wins)
     let zone: CameraZone | null = null;
     for (const z of this.zones) {
@@ -261,9 +272,10 @@ export class ThirdPersonCamera {
     }
     this.activeZone = zone?.id ?? 'default';
     const zl = this.initialised ? 3 : 1000;
-    this.zoneDist = damp(this.zoneDist, zone?.distance ?? CAMERA_DEFAULTS.distance, zl, dt);
-    this.zoneHeight = damp(this.zoneHeight, zone?.height ?? CAMERA_DEFAULTS.height, zl, dt);
-    this.zoneFov = damp(this.zoneFov, zone?.fov ?? CAMERA_DEFAULTS.fov, zl, dt);
+    const gl = grinding ? 2 : zl;
+    this.zoneDist = damp(this.zoneDist, (zone?.distance ?? CAMERA_DEFAULTS.distance) + (grinding ? 1.2 : 0), gl, dt);
+    this.zoneHeight = damp(this.zoneHeight, (zone?.height ?? CAMERA_DEFAULTS.height) + (grinding ? 0.4 : 0), gl, dt);
+    this.zoneFov = damp(this.zoneFov, (zone?.fov ?? CAMERA_DEFAULTS.fov) + (grinding ? 6 : 0), gl, dt);
 
     // --- pivot: tight horizontally; vertically steady through jumps, quick when climbing or falling
     const targetY = feet.y + this.zoneHeight;

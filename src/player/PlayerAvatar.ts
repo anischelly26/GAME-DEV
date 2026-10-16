@@ -18,7 +18,7 @@ export interface AvatarState {
   /** World point Mara glances at (nearby interactable), or null. */
   lookAt: THREE.Vector3 | null;
   /** Traversal mode from the controller, and its progress (seconds for hang, 0..1 otherwise). */
-  mode?: 'move' | 'hang' | 'climb' | 'vault';
+  mode?: 'move' | 'hang' | 'climb' | 'vault' | 'grind';
   modeT?: number;
   /** Increments each time the controller applies a knockback. */
   knockbacks?: number;
@@ -101,6 +101,7 @@ export class PlayerAvatar {
   private lastDashes = 0;
   private flipT = -1;
   private tuck = 0;
+  private stance = 0;
   private dashPitch = 0;
   private spin = 0;
   private canister: THREE.Group | null = null;
@@ -151,6 +152,14 @@ export class PlayerAvatar {
       a.enabled = true;
       a.setEffectiveWeight(0);
       this.actions.set(clip.name, a);
+    }
+    // The grind stance: its own copy of the crouch, so the double jump's tuck keeps the original.
+    const crouch = gltf.animations.find((c) => c.name === 'crouch');
+    if (crouch) {
+      const a = this.mixer.clipAction(crouch.clone());
+      a.enabled = true;
+      a.setEffectiveWeight(0);
+      this.actions.set('grindPose', a);
     }
     this.root.updateMatrixWorld(true);
     this.measureLocomotion(gltf.animations);
@@ -399,7 +408,8 @@ export class PlayerAvatar {
       if (mode === 'hang') this.play('climb', 0, 0.02);
       else if (mode === 'climb') this.play('climb', this.clipDuration('climb') / TRAVERSAL.pullUpTime, 0.02);
       else if (mode === 'vault') this.play('vault', this.clipDuration('vault') / (TRAVERSAL.vaultTime * 1.6), 0.1);
-      else if (this.oneShot && /climb|vault/.test(this.oneShot.name)) this.oneShot.target = 0;
+      else if (mode === 'grind') this.play('grindPose', 0, 0.4);
+      else if (this.oneShot && /climb|vault|grindPose/.test(this.oneShot.name)) this.oneShot.target = 0;
       this.lastMode = mode;
     }
     if ((s.knockbacks ?? 0) > this.lastKnockbacks) {
@@ -508,7 +518,9 @@ export class PlayerAvatar {
     this.actions.get('crouch')?.setEffectiveWeight(this.tuck * (1 - shot) * 1.6);
     // The pound's wind-up: one quick turn in the air.
     this.spin = pound === 'hover' ? this.spin + dt * ((Math.PI * 2) / MOVEMENT.poundHover) : pound === 'fall' ? Math.round(this.spin / (Math.PI * 2)) * Math.PI * 2 : 0;
-    this.visual.rotation.y = pound === 'hover' ? this.spin : 0;
+    // Grinding: side-on to the pipe, like riding a board.
+    this.stance = damp(this.stance, mode === 'grind' ? 1 : 0, 10, dt);
+    this.visual.rotation.y = pound === 'hover' ? this.spin : this.stance * 1.15;
 
     this.mixer.update(dt);
 

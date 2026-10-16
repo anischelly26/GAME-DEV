@@ -5,9 +5,10 @@ import type { EventBus, GameEvents } from '../core/Events';
 import { dampAngle, smoothstep } from '../core/math';
 import { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
 import { findLedge, findVault, TRAVERSAL, type Ledge, type TraversalSurfaces, type Vault } from './Traversal';
+import type { GrindRail } from './GrindRail';
 
-/** Traversal state: normal movement, hanging from a ledge, pulling up, or vaulting. */
-export type MoveMode = 'move' | 'hang' | 'climb' | 'vault';
+/** Traversal state: normal movement, hanging from a ledge, pulling up, vaulting, or grinding a pipe. */
+export type MoveMode = 'move' | 'hang' | 'climb' | 'vault' | 'grind';
 
 export { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
 
@@ -92,6 +93,16 @@ export class PlayerController {
   private vaultSpeed = 0;
   private regrabTimer = 0;
   private regrabCollider = -1;
+  /** Grinding: the pipe, the distance along it, which way, and how fast. */
+  private rail: GrindRail | null = null;
+  private railS = 0;
+  private railDir = 1;
+  railSpeed = 0;
+  private railCooldown = 0;
+  /** Seconds of carried momentum after leaving a pipe (air control is light meanwhile). */
+  private carryT = 0;
+  /** Pipes ridden so far (tests, the avatar). */
+  grinds = 0;
 
   constructor(
     private readonly physics: Physics,
@@ -148,6 +159,8 @@ export class PlayerController {
     this.mode = 'move';
     this.ledge = null;
     this.vault = null;
+    this.rail = null;
+    this.carryT = 0;
     const c = { x: feet.x, y: feet.y + PLAYER_CENTER_OFFSET + 0.02, z: feet.z };
     this.body.setTranslation(c, true);
     this.body.setNextKinematicTranslation(c);
@@ -207,6 +220,8 @@ export class PlayerController {
     this.time += dt;
     this.prevFeet.copy(this.feet);
     this.regrabTimer = Math.max(0, this.regrabTimer - dt);
+    this.railCooldown = Math.max(0, this.railCooldown - dt);
+    this.carryT = Math.max(0, this.carryT - dt);
     if (this.mode !== 'move') {
       this.updateTraversal(dt, input, cameraYaw);
       return;
@@ -219,8 +234,10 @@ export class PlayerController {
     const platform = onGround && this.groundCollider ? this.platforms.get(this.groundCollider.handle) : undefined;
     const carried = !!platform;
 
-    if (onGround) this.timeSinceGrounded = 0;
-    else this.timeSinceGrounded += dt;
+    if (onGround) {
+      this.timeSinceGrounded = 0;
+      this.carryT = 0;
+    } else this.timeSinceGrounded += dt;
     if (onGround && this.pound !== 'fall') {
       this.airJumps = 1;
       this.airDashes = 1;
@@ -254,7 +271,7 @@ export class PlayerController {
       else if (cos < 0.5) accel = MOVEMENT.turnAccel;
       else accel = speed < MOVEMENT.maxSpeed * MOVEMENT.launchFraction ? MOVEMENT.launchAccel : MOVEMENT.groundAccel;
     } else {
-      accel = MOVEMENT.airAccel;
+      accel = MOVEMENT.airAccel * (this.carryT > 0 ? 0.2 : 1);
     }
     // Approach target velocity as a 2D vector so diagonal changes are smooth.
     const dvx = targetVX - this.velocity.x;
@@ -347,6 +364,10 @@ export class PlayerController {
     this.kcc.computeColliderMovement(this.collider, desired, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, PLAYER_GROUPS);
     const moved = this.kcc.computedMovement();
     this.grounded = this.kcc.computedGrounded() || isCarried;
+    // Standing against a wall, the ground probe can start inside it and miss the floor while the
+    // controller still stands her on it: gravity must not pile up meanwhile, or the first step off
+    // an edge drops like a stone.
+    if (this.grounded && this.velocity.y < -2 && this.pound !== 'fall') this.velocity.y = -2;
 
     // Ceiling bonk.
     if (this.velocity.y > 0 && moved.y < desired.y - 1e-4) this.velocity.y = 0;
@@ -378,6 +399,23 @@ export class PlayerController {
 
     this.body.setNextKinematicTranslation(next);
     this.feet.set(next.x, next.y - PLAYER_CENTER_OFFSET, next.z);
+
+    // Grind: feet coming down onto a registered pipe ride it.
+    if (!this.grounded && this.railCooldown <= 0 && this.traversal && this.traversal.rails.length && !this.isLocked && this.pound !== 'fall') {
+      for (const rail of this.traversal.rails) {
+        const hit = rail.closest(new THREE.Vector3(this.feet.x, this.feet.y - rail.radius, this.feet.z));
+        // The last stretch is where she flies off, not somewhere to get on (it hangs over a walkway).
+        if (hit.s > rail.length - MOVEMENT.grindNoCatchEnd) continue;
+        const top = rail.pointAt(hit.s).y + rail.radius;
+        // Near the top of the pipe, or fell through its top during this step (a fast fall).
+        const p = rail.pointAt(hit.s);
+        const across = Math.hypot(this.feet.x - p.x, this.feet.z - p.z) < MOVEMENT.grindAttach && this.prevFeet.y >= top - 0.05 && this.feet.y < top;
+        if (((hit.distance < MOVEMENT.grindAttach && this.feet.y > top - 0.3) || across) && this.velocity.y < 3) {
+          this.startGrind(rail, hit.s);
+          return;
+        }
+      }
+    }
 
     // Ledge catch: only with intent toward a registered ledge, near or past the apex.
     if (!this.grounded && this.traversal && this.velocity.y < 2.5 && wishLen > 0.3 && !this.isLocked) {
@@ -515,6 +553,42 @@ export class PlayerController {
     this.events.emit('sfx', { name: 'climb', x: from.x, y: ledge.topY, z: from.z });
   }
 
+  private startGrind(rail: GrindRail, s: number): void {
+    this.resetMoves();
+    this.mode = 'grind';
+    this.rail = rail;
+    this.railS = s;
+    const t = rail.tangentAt(s);
+    const along = this.velocity.x * t.x + this.velocity.z * t.z;
+    // Ride the way she was going; with no clear direction, ride downhill.
+    this.railDir = Math.abs(along) > 1 ? Math.sign(along) : t.y <= 0 ? 1 : -1;
+    this.railSpeed = THREE.MathUtils.clamp(Math.abs(along), MOVEMENT.grindMinSpeed, MOVEMENT.grindMaxSpeed);
+    this.grounded = false;
+    this.jumping = false;
+    this.grinds++;
+    const f = rail.feetAt(s);
+    this.setFeet(f);
+    this.events.emit('grind', { on: true, x: f.x, y: f.y, z: f.z });
+  }
+
+  /** Off the end of the pipe, or a jump off it: momentum carries her on. */
+  private leaveRail(t: THREE.Vector3, jumped: boolean): void {
+    const rail = this.rail!;
+    const f = rail.feetAt(THREE.MathUtils.clamp(this.railS, 0, rail.length));
+    this.mode = 'move';
+    this.rail = null;
+    this.railCooldown = 0.45;
+    this.carryT = MOVEMENT.grindCarry;
+    const up = jumped ? Math.sqrt(2 * MOVEMENT.gravity * MOVEMENT.grindJumpHeight) : Math.max(0, t.y * this.railSpeed) + 2;
+    this.velocity.set(t.x * this.railSpeed, up, t.z * this.railSpeed);
+    this.jumping = jumped;
+    this.timeSinceGrounded = MOVEMENT.coyoteTime + 1;
+    this.lastJumpTime = this.time;
+    this.setFeet(f);
+    if (jumped) this.events.emit('jump', { speed: this.railSpeed });
+    this.events.emit('grind', { on: false, x: f.x, y: f.y, z: f.z });
+  }
+
   private startVault(v: Vault): void {
     this.mode = 'vault';
     this.modeT = 0;
@@ -527,6 +601,26 @@ export class PlayerController {
 
   /** Scripted traversal moves. Endpoints were validated as free when the move started. */
   private updateTraversal(dt: number, input: InputFrame, cameraYaw: number): void {
+    if (this.mode === 'grind' && this.rail) {
+      const rail = this.rail;
+      const t = rail.tangentAt(this.railS).multiplyScalar(this.railDir);
+      // Gravity along the slope and a little friction; never slower than a jog, never a blur.
+      this.railSpeed += (-t.y * MOVEMENT.gravity * MOVEMENT.grindSlope - MOVEMENT.grindFriction) * dt;
+      this.railSpeed = THREE.MathUtils.clamp(this.railSpeed, MOVEMENT.grindMinSpeed, MOVEMENT.grindMaxSpeed);
+      this.railS += this.railDir * this.railSpeed * dt;
+      this.facing = Math.atan2(t.x, t.z);
+      this.velocity.copy(t).multiplyScalar(this.railSpeed);
+      if (input.jumpPressed && !this.isLocked) {
+        this.leaveRail(t, true);
+        return;
+      }
+      if (this.railS <= 0 || this.railS >= rail.length) {
+        this.leaveRail(t, false);
+        return;
+      }
+      this.setFeet(rail.feetAt(this.railS));
+      return;
+    }
     if (this.mode === 'hang' && this.ledge) {
       this.modeT += dt;
       const fx = -Math.sin(cameraYaw);
