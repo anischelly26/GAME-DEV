@@ -7,6 +7,7 @@ import { saltStainTexture } from '../../world/textures';
 import { PressureHatch, OPENING } from '../../world/props/PressureHatch';
 import { hazardStripeTexture } from '../../world/props/Maintenance';
 import { Hangar } from '../../world/props/Hangar';
+import { Workshop } from './Workshop';
 import { ServiceLight, WorkLamp, glowSprite } from '../../world/props/Lanterns';
 import { LightShaft, SteamEmitter, Water } from '../../world/Atmosphere';
 import { PressureHatchLogic, enginePulse, LIFT_THRESHOLD } from '../../gameplay/puzzles/PressureHatchLogic';
@@ -75,6 +76,12 @@ export class QuietCellLevel implements Level {
   private sequence: { t: number; steps: SequenceStep[] } | null = null;
   private fadeLevel = 0;
   private falling = false;
+  /** The opening's set (Saltmere, the night before) and the two cell lights it borrows. */
+  private readonly workshop: Workshop;
+  private readonly cellLamp: WorkLamp;
+  private readonly fill: THREE.PointLight;
+  private readonly fillHome = new THREE.Vector3();
+  private inWorkshop = false;
 
   constructor(private readonly ctx: LevelContext) {
     const { scene, physics, materials: m } = ctx;
@@ -334,6 +341,9 @@ export class QuietCellLevel implements Level {
     const fill = new THREE.PointLight('#5f7f95', 1.6, 7, 1.5);
     fill.position.set(-0.5, cy + 3.4, 30.2);
     scene.add(fill);
+    this.cellLamp = cellLamp;
+    this.fill = fill;
+    this.fillHome.copy(fill.position);
 
     // ------------------------------------------------------------ maintenance shaft
     const S = SHAFT;
@@ -576,6 +586,11 @@ export class QuietCellLevel implements Level {
       this.hangar = new Hangar(at, Math.atan2(ex.x - at.x, ex.z - at.z));
       scene.add(this.hangar.group);
     }
+    // The opening's set, far from the prison. Visible until the opening strikes it, so it is drawn
+    // once with everything else behind the loading screen and its shaders are ready.
+    this.workshop = new Workshop(m, physics);
+    this.workshop.visible = ctx.intro;
+    scene.add(this.workshop.group);
     this.engine.onExit = () => this.finishEngine();
 
     // ------------------------------------------------------------ gameplay wiring
@@ -825,58 +840,121 @@ export class QuietCellLevel implements Level {
   }
 
   /**
-   * Chapter One's opening. The night before, Mara refused to sign off a flood diversion that
-   * would drown her district, went back to her workshop to prove the plan wrong and fell asleep
-   * over the drawings. She wakes on the floor of a cell in Breakwater. Narration cards over black,
-   * then the cell: she gets up, looks around, works out where she is, and the chapter title plays.
+   * Chapter One's opening, watched rather than read. Saltmere, the night before, in Mara's
+   * workshop: rain on the window, the diversion plans she was ordered to sign on the bench. She
+   * stays up to prove them wrong and falls asleep over them; someone walks past the window, the
+   * lamp goes out. Then Breakwater: she wakes on the floor of a cell, gets up, works out where she
+   * is, and the chapter title plays. Captions in the lower third carry the backstory.
    *
-   * Skipping (Jump/Interact) leaves out the narration, lines and camera moves (`watchOnly`) and
+   * Skipping (Jump/Interact) leaves out the captions, lines and camera moves (`watchOnly`) and
    * runs every other step, so watching and skipping end the same way: Mara standing at the cell
    * spawn, camera behind her, control on, objective set.
    */
   private playOpening(): void {
-    const { dialogue, progression, camera, avatar, hud, events } = this.ctx;
+    const { dialogue, progression, camera, avatar, hud, events, checkpoints, player } = this.ctx;
+    const ws = this.workshop;
+    const w = ws.at;
+    const bz = ws.benchZ;
     const y = CELL.y;
     const at = (x: number, dy: number, z: number) => v3(x, y + dy, z);
+    const lamp = ws.lampLight;
     const steps: SequenceStep[] = [
       {
         at: 0,
         run: () => {
           this.ctx.setControl(false);
-          events.emit('music', { music: 'workshop', ambience: null });
           progression.setObjective('');
-          // Asleep on the floor between the bunk and the hatch: the first frame of getting up.
-          avatar.cinematic('wake', 0);
-          camera.playShot(at(1.75, 2.35, 27.55), at(-0.45, 0.1, 30.0), 0.001);
-          hud.story({
-            backdrop: true,
-            eyebrow: 'Saltmere, the night before',
-            text: 'Mara Venn keeps the tide engines of Saltmere running. Yesterday she was ordered to sign off a flood diversion that would drown her own district at the next high tide.',
-          });
+          events.emit('music', { music: 'workshop', ambience: 'rain' });
+          this.setWorkshop(true);
+          player.teleport(ws.seat, ws.seatFacing);
+          avatar.cinematic('sitIdle', 1, 0, true);
+          hud.letterbox(true);
+          // Wide: the workshop at night, rain on the window, Mara at the bench under the lamp.
+          camera.playShot(w(1.45, 1.95, -0.95), w(-0.25, 0.95, bz), 6.0, { from: { pos: w(1.95, 2.3, -1.65), look: w(-0.2, 0.9, bz) }, fov: 50 });
+          hud.story({ lower: true, eyebrow: 'Saltmere, the night before', text: 'Mara Venn keeps the tide engines of Saltmere running.' });
         },
       },
-      { at: 6.2, watchOnly: true, run: () => hud.story({ backdrop: true, text: 'She refused. She went back to her workshop to prove the plan was wrong, and fell asleep over the drawings.' }) },
-      { at: 11.4, watchOnly: true, run: () => hud.story({ backdrop: true, text: 'She woke up somewhere else.' }) },
       {
-        at: 14.2,
+        at: 5.2,
+        watchOnly: true,
+        run: () => {
+          // Over her shoulder, onto the plans she was ordered to sign.
+          camera.playShot(w(0.5, 1.36, bz - 1.12), w(-0.15, 0.78, bz - 0.05), 5.4, { from: { pos: w(0.8, 1.52, bz - 1.48), look: w(-0.1, 0.78, bz - 0.02) }, fov: 42 });
+          hud.story({ lower: true, text: 'Today she was ordered to sign off a flood diversion that would drown her own district at the next high tide.' });
+        },
+      },
+      {
+        at: 10.6,
+        watchOnly: true,
+        run: () => {
+          // Side on, the lamp beyond her: she fights sleep, and loses.
+          camera.playShot(w(1.2, 1.12, bz - 0.55), w(0, 1.0, bz - 0.98), 5.0, { from: { pos: w(1.45, 1.2, bz - 0.8), look: w(0, 1.05, bz - 1.0) }, fov: 45 });
+          hud.story({ lower: true, text: 'She refused, and stayed up to prove the plan was wrong.' });
+          avatar.doze = 0.55;
+        },
+      },
+      { at: 12.3, watchOnly: true, run: () => (avatar.doze = 0.15) },
+      { at: 13.1, watchOnly: true, run: () => (avatar.doze = 1) },
+      {
+        at: 15.4,
+        watchOnly: true,
+        run: () => {
+          hud.story(null);
+          // Past her to the window: someone walks by in the rain.
+          camera.playShot(w(-0.3, 1.42, bz - 1.18), w(-0.05, 1.7, 2.8), 4.6, { from: { pos: w(-0.4, 1.36, bz - 1.36), look: w(-0.05, 1.66, 2.8) }, fov: 48 });
+        },
+      },
+      { at: 15.6, watchOnly: true, run: () => ws.passFigure() },
+      { at: 19.2, watchOnly: true, run: () => events.emit('sfx', { name: 'doorCreak', x: lamp.x - 2, y: lamp.y, z: lamp.z - 3 }) },
+      {
+        at: 20.0,
+        watchOnly: true,
+        run: () => {
+          ws.setLamp(0);
+          events.emit('sfx', { name: 'lampOut', x: lamp.x, y: lamp.y, z: lamp.z });
+        },
+      },
+      {
+        at: 21.4,
+        watchOnly: true,
+        run: () => {
+          hud.story({ backdrop: true, text: 'She woke up somewhere else.' });
+          events.emit('music', { music: null, ambience: null });
+        },
+      },
+      {
+        at: 23.4,
+        run: () => {
+          // Breakwater: asleep on the cell floor, between the bunk and the hatch.
+          this.setWorkshop(false);
+          const cp = checkpoints.get('cell')!;
+          player.teleport(cp.feet, cp.facing);
+          avatar.endCinematic();
+          avatar.cinematic('wake', 0);
+          camera.playShot(at(1.75, 2.35, 27.55), at(-0.45, 0.1, 30.0), 0.001, { fov: 58 });
+          events.emit('music', { ambience: 'tomb' });
+        },
+      },
+      {
+        at: 24.2,
         watchOnly: true,
         run: () => {
           hud.story(null);
           events.emit('sfx', { name: 'horn' });
         },
       },
-      { at: 15.0, watchOnly: true, run: () => dialogue.say('Horn', 'Pressure cycle in progress. All cells remain sealed.', 3.4) },
+      { at: 25.0, watchOnly: true, run: () => dialogue.say('Horn', 'Pressure cycle in progress. All cells remain sealed.', 3.4) },
       {
-        at: 16.4,
+        at: 26.4,
         watchOnly: true,
         run: () => {
           avatar.cinematic('wake', 0.75);
           camera.playShot(at(1.3, 1.6, 27.85), at(-0.4, 0.95, 29.75), 2.6);
         },
       },
-      { at: 18.9, watchOnly: true, run: () => dialogue.say('Mara', "Where... This isn't my workshop.", 2.4, { story: true }) },
+      { at: 28.9, watchOnly: true, run: () => dialogue.say('Mara', "Where... This isn't my workshop.", 2.4, { story: true }) },
       {
-        at: 19.3,
+        at: 29.3,
         watchOnly: true,
         run: () => {
           // Face on: she looks around the cell.
@@ -884,17 +962,21 @@ export class QuietCellLevel implements Level {
           camera.playShot(at(0.25, 1.6, 27.95), at(-0.35, 1.45, 29.7), 1.6);
         },
       },
-      { at: 21.6, watchOnly: true, run: () => dialogue.say('Mara', 'Salt on the walls. That engine thump... I know this place. Breakwater.', 3.6, { story: true }) },
-      { at: 22.6, watchOnly: true, run: () => camera.playShot(at(1.85, 3.3, 27.4), at(-0.3, 0.7, 30.4), 5.0) },
+      { at: 31.6, watchOnly: true, run: () => dialogue.say('Mara', 'Salt on the walls. That engine thump... I know this place. Breakwater.', 3.6, { story: true }) },
+      { at: 32.6, watchOnly: true, run: () => camera.playShot(at(1.85, 3.3, 27.4), at(-0.3, 0.7, 30.4), 5.0) },
       {
-        at: 25.2,
+        at: 35.2,
         watchOnly: true,
-        run: () => hud.story({ eyebrow: 'Chapter One', title: 'The Quiet Cell', text: 'The prison runs on the tide. So will her way out.' }),
+        run: () => {
+          hud.story({ eyebrow: 'Chapter One', title: 'The Quiet Cell', text: 'The prison runs on the tide. So will her way out.' });
+          events.emit('music', { music: 'cell' });
+        },
       },
       {
-        at: 29.4,
+        at: 39.0,
         run: () => {
           hud.story(null);
+          hud.letterbox(false);
           avatar.endCinematic();
           camera.clearShot();
           camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
@@ -903,9 +985,35 @@ export class QuietCellLevel implements Level {
           events.emit('music', { music: 'cell', ambience: 'tomb' });
         },
       },
-      { at: 31.2, run: () => dialogue.say('Mara', 'Fresh copper on that line. Who repairs a pipe in a cell?') },
+      { at: 40.8, run: () => dialogue.say('Mara', 'Fresh copper on that line. Who repairs a pipe in a cell?') },
     ];
     this.sequence = { t: 0, steps };
+  }
+
+  /**
+   * Put up or strike the opening's workshop set. Two of the cell's lights stand in for the oil
+   * lamp and the window (moving a light costs nothing; adding one recompiles every material), the
+   * moon and sky light go down, and the prison's engine drone goes quiet.
+   */
+  private setWorkshop(on: boolean): void {
+    if (on === this.inWorkshop) return;
+    this.inWorkshop = on;
+    this.workshop.visible = on;
+    this.ctx.setOutdoorLight(on ? 0.12 : 1);
+    this.ctx.events.emit('music', { drone: !on });
+    const lamp = this.cellLamp.light;
+    if (lamp) {
+      if (on) {
+        this.ctx.scene.attach(lamp);
+        lamp.position.copy(this.workshop.lampLight);
+      } else {
+        this.cellLamp.group.add(lamp);
+        lamp.position.set(0, 0, 0.3);
+      }
+    }
+    this.fill.position.copy(on ? this.workshop.windowLight : this.fillHome);
+    this.fill.intensity = on ? 5.5 : 1.6;
+    if (on) this.workshop.setLamp(1, true);
   }
 
   private activateLookout(): void {
@@ -920,7 +1028,13 @@ export class QuietCellLevel implements Level {
     // Control is held only for the camera move and the lights coming on (about 3 s); the intercom
     // exchange plays over gameplay. The whole beat can be skipped (Jump/Interact).
     const steps: SequenceStep[] = [
-      { at: 0.25, run: () => this.ctx.setControl(false) },
+      {
+        at: 0.25,
+        run: () => {
+          this.ctx.setControl(false);
+          this.ctx.hud.letterbox(true);
+        },
+      },
       {
         at: 0.3,
         run: () => {
@@ -953,6 +1067,7 @@ export class QuietCellLevel implements Level {
         run: () => {
           progression.set('reveal.done');
           events.emit('music', { music: 'hall', ambience: 'waves' });
+          this.ctx.hud.letterbox(false);
           camera.clearShot();
           camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
           this.ctx.setControl(true);
@@ -1020,7 +1135,13 @@ export class QuietCellLevel implements Level {
     this.sequence = {
       t: 0,
       steps: [
-        { at: 0.2, run: () => this.ctx.setControl(false) },
+        {
+          at: 0.2,
+          run: () => {
+            this.ctx.setControl(false);
+            this.ctx.hud.letterbox(true);
+          },
+        },
         // Over the shoulder, out to sea.
         { at: 0.25, watchOnly: true, run: () => camera.playShot(ex.clone().addScaledVector(out, -3.2).add(v3(1.6, 2.2, 0)), ex.clone().addScaledVector(out, 40).add(v3(0, -6, 0)), 3.0) },
         { at: 1.4, watchOnly: true, run: () => events.emit('sfx', { name: 'intercom', x: ex.x, y: ex.y + 1, z: ex.z }) },
@@ -1045,12 +1166,14 @@ export class QuietCellLevel implements Level {
         { at: 18.6, watchOnly: true, run: () => dialogue.say('Mara', 'Ivo. It has to be.', 2, { story: true }) },
         {
           at: 21.0,
-          run: () =>
+          run: () => {
+            this.ctx.hud.letterbox(false);
             this.ctx.complete({
               title: 'Chapter One complete',
               body: 'Mara is out of the cell block, and the old seaplane is waiting in the hangar on the spur. Next: Chapter Two, <i>Wings in a Cage</i> (in development).',
               reward: true,
-            }),
+            });
+          },
         },
       ],
     };
@@ -1194,7 +1317,7 @@ export class QuietCellLevel implements Level {
       progression.falls++;
       this.ctx.respawn('fall');
     }
-    if (y < -30 || Math.abs(player.feet.x) > 60 || Math.abs(player.feet.z) > 80) this.ctx.respawn('fall');
+    if (!this.inWorkshop && (y < -30 || Math.abs(player.feet.x) > 60 || Math.abs(player.feet.z) > 80)) this.ctx.respawn('fall');
 
     // Drip: a drop every ~1.7 s taps the hatch line.
     this.dripT += dt;
@@ -1223,6 +1346,9 @@ export class QuietCellLevel implements Level {
     this.landingLight.update(dt, time);
     this.lookoutLight.update(dt, time);
     for (const l of this.lamps) l.update(dt, time);
+    this.workshop.update(dt);
+    // The cell lamp's light is the workshop's oil lamp during the opening.
+    if (this.inWorkshop && this.cellLamp.light) this.cellLamp.light.intensity = 5.5 * this.workshop.lampBrightness;
     this.dripSteam.update(dt);
     this.channelSteam.update(dt);
     this.channelWater.update(time);
@@ -1263,6 +1389,7 @@ export class QuietCellLevel implements Level {
     this.jumpHintAt = this.ropeHintAt = null;
     this.hangar.setLit(false, true);
     this.kit.visible = true;
+    this.setWorkshop(false);
     this.startIntro();
   }
 

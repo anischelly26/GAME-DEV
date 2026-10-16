@@ -78,6 +78,8 @@ export class Game {
   private sky!: Sky;
   /** Toward the moon: low over the sea behind the harbour beacon, so it shines in through the breach. */
   private readonly moonDir = new THREE.Vector3(-0.38, 0.33, -0.86).normalize();
+  private hemi!: THREE.HemisphereLight;
+  private moon!: THREE.DirectionalLight;
   private accumulator = 0;
   private lastFrame = 0;
   time = 0;
@@ -162,6 +164,11 @@ export class Game {
       respawn: (reason) => this.respawn(reason),
       complete: (card) => this.complete(card),
       setControl: (enabled) => this.setControl(enabled),
+      setOutdoorLight: (level) => {
+        this.hemi.intensity = 1.25 * level;
+        this.moon.intensity = 2.1 * level;
+        this.scene.environmentIntensity = 0.95 * level;
+      },
     };
     this.level = new QuietCellLevel(ctx);
     this.wireEvents();
@@ -231,7 +238,9 @@ export class Game {
   private setupLights(): void {
     const hemi = new THREE.HemisphereLight('#5d7f99', '#2e261d', 1.25);
     this.scene.add(hemi);
+    this.hemi = hemi;
     const moon = new THREE.DirectionalLight(Palette.moon, 2.1);
+    this.moon = moon;
     moon.position.copy(this.moonDir).multiplyScalar(60);
     moon.target.position.set(0, 0, 8);
     moon.castShadow = true;
@@ -285,6 +294,7 @@ export class Game {
     this.events.on('music', (m) => {
       if (m.music !== undefined) this.levelBeds.music = m.music;
       if (m.ambience !== undefined) this.levelBeds.ambience = m.ambience;
+      if (m.drone !== undefined) this.audio.setPrisonDrone(m.drone);
       // On the title screen the title theme plays; the level's beds start with play.
       if (this.state !== 'title') this.applyLevelBeds();
     });

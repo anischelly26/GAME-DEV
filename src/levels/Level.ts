@@ -41,6 +41,11 @@ export interface LevelContext {
   complete(card?: { title: string; body: string; reward?: boolean }): void;
   /** Hold or release player control (cutscene beats). */
   setControl(enabled: boolean): void;
+  /**
+   * Scale the moon, sky light and reflections (1: Breakwater's night). Story scenes indoors and
+   * away from the prison (the workshop in the opening) turn them down and bring their own light.
+   */
+  setOutdoorLight(level: number): void;
 }
 
 /** One step of the scripted dev/test route (see dev/Autopilot.ts). */

@@ -91,6 +91,9 @@ export class PlayerAvatar {
   private lean = 0;
   private headYaw = 0;
   private headPitch = 0;
+  /** Story beat: 0 awake, 1 asleep sitting up (chest, neck and head sag forward). */
+  doze = 0;
+  private dozeLevel = 0;
   private opacity = 1;
   private time = 0;
   // Movement 2.0 animation state.
@@ -314,14 +317,24 @@ export class PlayerAvatar {
     }
   }
 
-  /** Story beats: play a clip on the whole body (timeScale 0 holds a pose, e.g. lying asleep). */
-  cinematic(name: string, timeScale = 1, startAt = 0): void {
+  /**
+   * Story beats: play a clip on the whole body (timeScale 0 holds a pose, e.g. lying asleep).
+   * `loop` repeats it until the next clip or `endCinematic` (sitting at the bench).
+   */
+  cinematic(name: string, timeScale = 1, startAt = 0, loop = false): void {
     this.play(name, timeScale, startAt);
     if (this.oneShot && timeScale === 0) this.oneShot.weight = 1;
+    const a = this.actions.get(name);
+    if (a && loop) {
+      a.setLoop(THREE.LoopRepeat, Infinity);
+      a.clampWhenFinished = false;
+      if (this.oneShot) this.oneShot.weight = 1;
+    }
   }
 
   /** End any story clip at once and return to the normal locomotion pose. */
   endCinematic(): void {
+    this.doze = this.dozeLevel = 0;
     if (!this.oneShot) return;
     const a = this.actions.get(this.oneShot.name);
     a?.stop();
@@ -415,7 +428,7 @@ export class PlayerAvatar {
     // --- one-shot weight: fade in quickly, out when finished or released
     if (this.oneShot) {
       const a = this.actions.get(this.oneShot.name)!;
-      const finished = a.time >= a.getClip().duration - 1e-3 && a.timeScale !== 0;
+      const finished = a.loop !== THREE.LoopRepeat && a.time >= a.getClip().duration - 1e-3 && a.timeScale !== 0;
       if (finished && mode === 'move') this.oneShot.target = 0;
       if (this.oneShot.name === 'jumpStart' && this.airTime > 0.12 && (s.verticalSpeed < 0 || s.grounded)) this.oneShot.target = 0;
       this.oneShot.weight = damp(this.oneShot.weight, this.oneShot.target, this.oneShot.target > 0 ? 20 : 9, dt);
@@ -527,6 +540,15 @@ export class PlayerAvatar {
     this.root.updateMatrixWorld(true);
     this.turnBone('neck_01', this.headYaw * 0.4, this.headPitch * 0.4);
     this.turnBone('Head', this.headYaw * 0.6, this.headPitch * 0.6);
+    // Nodding off: a slow sag toward the level the story sets, a quicker lift if she jerks awake.
+    this.dozeLevel = damp(this.dozeLevel, this.doze, this.doze > this.dozeLevel ? 0.9 : 4, dt);
+    if (this.dozeLevel > 0.001) {
+      const d = this.dozeLevel;
+      const breathe = Math.sin(this.time * 1.6) * 0.03 * d;
+      this.turnBone('spine_03', 0, -0.22 * d + breathe);
+      this.turnBone('neck_01', 0.06 * d, -0.42 * d);
+      this.turnBone('Head', 0.16 * d, -0.5 * d);
+    }
 
     this.root.updateMatrixWorld(true);
     this.scarves.forEach((scarf, i) => scarf.update(dt, this.scarfAnchors[i], this.root, s.speed));

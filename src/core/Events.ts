@@ -39,5 +39,5 @@ export interface GameEvents {
   complete: { timeSeconds: number; falls: number };
   sfx: { name: string; x?: number; y?: number; z?: number; volume?: number };
   /** Change the music and/or ambience bed (undefined: leave as is; null: silence). */
-  music: { music?: string | null; ambience?: string | null };
+  music: { music?: string | null; ambience?: string | null; drone?: boolean };
 }

@@ -114,6 +114,7 @@ export class HUD {
   private readonly debugEl: HTMLElement;
   private readonly skipEl: HTMLElement;
   private readonly storyEl: HTMLElement;
+  private readonly letterboxEl: HTMLElement;
   private readonly screen: HTMLElement;
   private readonly card: HTMLElement;
   private tipTimer = 0;
@@ -127,6 +128,7 @@ export class HUD {
   constructor(container: HTMLElement) {
     this.root = el('div', 'hud', container);
     this.fallFadeEl = el('div', 'fade', this.root);
+    this.letterboxEl = el('div', 'letterbox', this.root);
     this.storyEl = el('div', 'story hidden', this.root);
     this.objective = el('div', 'objective hidden', this.root, '<div class="label">Objective</div><div class="text"></div>');
     this.objectiveText = this.objective.querySelector('.text')!;
@@ -351,20 +353,31 @@ export class HUD {
   /** Respawn / transition fade (0..1). */
   /**
    * Full-screen story card: the opening's narration and chapter titles. `backdrop` blacks out the
-   * view (narration); without it the text sits over the scene (titles). null fades it away.
+   * view (narration); without it the text sits over the scene (titles); `lower` sets it as a
+   * caption in the lower left of a shot. null fades it away.
    */
-  story(card: { eyebrow?: string; title?: string; text?: string; backdrop?: boolean } | null): void {
+  story(card: { eyebrow?: string; title?: string; text?: string; backdrop?: boolean; lower?: boolean } | null): void {
     if (!card) {
       this.storyEl.classList.add('hidden');
       return;
     }
     this.storyEl.classList.toggle('backdrop', card.backdrop ?? false);
+    this.storyEl.classList.toggle('lower', card.lower ?? false);
     this.storyEl.innerHTML = `<div class="inner">${card.eyebrow ? `<div class="eyebrow">${card.eyebrow}</div>` : ''}${card.title ? `<h1>${card.title}</h1>` : ''}${card.text ? `<p>${card.text}</p>` : ''}</div>`;
     this.storyEl.classList.remove('hidden');
   }
 
   get storyText(): string {
     return this.storyEl.classList.contains('hidden') ? '' : (this.storyEl.textContent ?? '');
+  }
+
+  /** Cinematic bars, top and bottom, while a story scene holds the camera. */
+  letterbox(on: boolean): void {
+    this.letterboxEl.classList.toggle('on', on);
+  }
+
+  get letterboxed(): boolean {
+    return this.letterboxEl.classList.contains('on');
   }
 
   setFade(v: number): void {
@@ -389,6 +402,7 @@ export class HUD {
 
   resetRun(): void {
     this.story(null);
+    this.letterbox(false);
     this.shownTips.clear();
     this.tipEl.classList.add('hidden');
     this.hideDocument();

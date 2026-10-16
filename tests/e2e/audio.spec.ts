@@ -28,6 +28,9 @@ test('samples load, beds decode, and the music follows the place', async ({ page
     return out;
   });
   for (const [name, seconds] of Object.entries(beds)) expect(seconds, name).toBeGreaterThan(10);
+  // The workshop's rain is generated, not recorded: an 8 s loop.
+  const rain = await page.evaluate(async () => ((await (window as any).__GAME.game.audio.bed('rain')) as AudioBuffer | null)?.duration ?? null);
+  expect(rain).toBeCloseTo(8, 1);
   await page.evaluate(() => (window as any).__GAME.teleport('route'));
   await expect.poll(() => page.evaluate(() => (window as any).__GAME.game.audio.currentMusic)).toBe('hall');
   expect(errors).toEqual([]);

@@ -56,6 +56,9 @@ interface Shot {
   look: THREE.Vector3;
   t: number;
   duration: number;
+  /** Lens for the shot (vertical degrees), eased from the current one; undefined keeps it. */
+  fromFov: number;
+  fov?: number;
 }
 
 /** Radius of the spring arm's collision probe: wider than the near plane, so walls never clip. */
@@ -132,16 +135,23 @@ export class ThirdPersonCamera {
     this.recenterTarget = facing + Math.PI;
   }
 
-  /** Cinematic shot. The camera eases from its current pose to the shot over `duration`. */
-  playShot(pos: THREE.Vector3, look: THREE.Vector3, duration: number): void {
+  /**
+   * Cinematic shot. The camera eases from its current pose to the shot over `duration`; with
+   * `from` it cuts to that pose first (a cut and a slow dolly in one call). `fov` sets the lens
+   * (vertical degrees) for the shot.
+   */
+  playShot(pos: THREE.Vector3, look: THREE.Vector3, duration: number, opts: { from?: { pos: THREE.Vector3; look: THREE.Vector3 }; fov?: number } = {}): void {
     this.shot = {
-      fromPos: this.camera.position.clone(),
-      fromLook: this.lookPoint.clone(),
+      fromPos: (opts.from?.pos ?? this.camera.position).clone(),
+      fromLook: (opts.from?.look ?? this.lookPoint).clone(),
       pos: pos.clone(),
       look: look.clone(),
       t: 0,
       duration: Math.max(0.001, duration),
+      fromFov: this.camera.fov,
+      fov: opts.fov,
     };
+    if (opts.from && opts.fov !== undefined) this.shot.fromFov = opts.fov;
   }
 
   clearShot(): void {
@@ -191,6 +201,10 @@ export class ThirdPersonCamera {
       this.camera.position.lerpVectors(s.fromPos, s.pos, e);
       this.lookPoint.lerpVectors(s.fromLook, s.look, e);
       this.camera.lookAt(this.lookPoint);
+      if (s.fov !== undefined) {
+        this.camera.fov = lerp(s.fromFov, s.fov, e);
+        this.camera.updateProjectionMatrix();
+      }
       this.applyShake();
       this.assisting = false;
       return;
