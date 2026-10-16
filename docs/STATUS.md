@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Branch** | `claude/polish-4979589`, stacked on `claude/breathing-engine` (PR #2), which is stacked on `claude/first-playable` (PR #1) |
+| **Branch** | `claude/chapter-one-quality` (draft PR #4), stacked on `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
 | **Build** | Chapter One, *The Quiet Cell*: story opening → pressure-hatch puzzle → maintenance shaft → lookout → parkour practice route → *The Breathing Engine* and the split feed → chapter ending |
-| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). This branch responds to both. The work after `492bce4` (the Chapter One story and the R1–R4 fixes below) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
+| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PR #3: the Chapter One story and the R1–R4 fixes; PR #4: the quality pass below) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
 
 ## Launch
 
@@ -17,12 +17,125 @@ Open http://localhost:5173, click **Begin**, then click the view to capture the 
 opening plays first (about 30 s; Space or E skips it). Production build: `npm run build`, then
 `npm run preview` (http://localhost:4173). Character viewer: http://localhost:5173/?viewer=mara.
 
-**Dual-GPU laptops.** Windows runs browsers on the integrated GPU unless told otherwise. On the
-test laptop (Intel UHD plus NVIDIA RTX 2050), Edge used the Intel GPU. Settings → System →
-Display → Graphics → Microsoft Edge (or Chrome) → **High performance** moves it to the NVIDIA
-GPU, where Low measured about 104 FPS instead of about 49 (table below).
+**Dual-GPU laptops.** Windows runs browsers on the integrated GPU unless told otherwise.
+Settings → System → Display → Graphics → Microsoft Edge (or Chrome) → **High performance** moves
+the browser to the dedicated GPU. On the test laptop (Intel UHD plus NVIDIA RTX 2050), Edge now
+runs on the RTX this way. The Intel measurements below use Playwright's bundled Chromium, which
+that setting does not cover.
 
-## Since `492bce4`
+## Chapter One quality pass (`claude/chapter-one-quality`, draft PR #4)
+
+The owner's brief: make Chapter One feel designed and readable from the first second. Priorities,
+in order:
+
+1. camera confidence and movement feel;
+2. map composition and traversal readability;
+3. the cell → machinery → escape flow;
+4. physical puzzle feedback;
+5. animation, lighting, sound and environmental storytelling;
+6. performance on Intel UHD.
+
+The player-experience audit is in [CHAPTER_ONE_AUDIT.md](CHAPTER_ONE_AUDIT.md). Commits:
+
+| Commit | What |
+| --- | --- |
+| `201f0d1` | Camera rewrite and settings, movement feel, subtitle queue, hints, the shaft railing, keyboard jump tests |
+| `ca247c6` | Framing in tight spots, cell-opening colliders, flow chevrons on both puzzles, the transfer order, the hangar ending |
+| `588df83` | Head turns, heavier landings, dust through the cell wall; small casters off the shadow pass on Low, merged set pieces, warm-up draw |
+| `326114e` | Over-the-shoulder arm shift, camera-only blockers on the flywheels |
+| docs commit | This file, the audit, TESTING, GAME_DESIGN, README, ASSETS, screenshots |
+
+### Before and after, as a player
+
+- **Before:**
+  - The camera turned by itself mid-jump, and turning it mid-jump bent the jump.
+  - It collapsed into Mara on ledges and in doorways, slipped behind machinery or into cell
+    recesses, and ran under a black roof on tier three.
+  - The first running jump in the shaft carried Mara into the channel.
+  - Subtitles arrived two rooms late, and tutorial text explained the controls.
+  - The puzzles' cause and effect was only on gauges.
+  - The ending was a menu over a dark sea.
+- **After:**
+  - The camera obeys the mouse at once. It follows on its own only on the ground when running
+    forward, and never near a jump. Rotating it mid-jump keeps the jump's line.
+  - It looks under lintels and over a shoulder instead of through things.
+  - The shaft has a railing and a lit crossing, so the practice jump and the real one are two
+    deliberate beats.
+  - Lines arrive when they matter. Hints appear only if the player hesitates.
+  - Amber chevrons on the pipes show where the pressure goes.
+  - The cell door explains why Mara is there and who expected her.
+  - The escape ends looking at a lit seaplane hangar the intercom has just pointed to, with
+    "Chapter One complete" laid over that view.
+
+### Controls and settings
+
+Controls are unchanged: WASD or the left stick to move; the mouse or right stick to look; Space or
+A to jump (hold for higher; at a run, Space vaults low obstacles); E or X to interact; C to
+recenter; Esc to pause; Space or E to skip a cinematic.
+
+The camera settings, with ranges and defaults, are in the [README](../README.md#controls).
+
+### Verification (this pass)
+
+Environment: Windows 11 Pro, Intel Core i7-12650H, Intel UHD 0x46A3 and NVIDIA RTX 2050, Node
+22.13.1. Edge runs on the RTX via the Windows setting; Playwright's bundled Chromium runs on the
+Intel GPU.
+
+- **Unit tests: 54/54.** These cover every camera-assist condition, the spring arm, framing, the
+  subtitle queue and the settings migration.
+- **Edge e2e: 62/62 in 9.3 min**, at the code of `326114e`. This includes 20 real-keyboard jump
+  cases: every route jump with the camera still and with the camera rotating. Without the
+  airborne yaw latch, 6 of the 10 rotating cases fail, bending 6.5–8°.
+- **Running jump: 3.39 m**, apex 1.38 m (unchanged).
+- **Frame times.** Production build, headed, normal real-time loop, scripted route through the
+  input pipeline, 1280×720, Low unless noted (`scripts/trace-stalls.mjs`):
+
+  | GPU (browser) | Build | Runs | Mean frame | p95 | Worst frame |
+  | --- | --- | ---: | ---: | ---: | ---: |
+  | Intel UHD (bundled Chromium) | PR #3 head `2cb6520` | 2, back to back | 24.3–24.7 ms (≈41 FPS) | 35.1–41.4 ms | 118–388 ms |
+  | Intel UHD (bundled Chromium) | this pass | 3, fresh browsers | 23.9–24.9 ms (≈41 FPS) | 35.0–41.5 ms | 97–291 ms |
+  | RTX 2050 (Edge) | this pass, Low | 1 | 7.3 ms (≈137 FPS) | 7.2 ms | 28 ms |
+  | RTX 2050 (Edge) | this pass, High | 1 | 15.4 ms (≈65 FPS) | 27.6 ms | 49 ms |
+
+  This pass adds the hangar, the flow strips and three camera casts per frame at no net
+  frame-rate cost on the Intel GPU. The shadow-pass cut and the merges paid for them.
+  - Draw calls (`scripts/count-draws.mjs`): a mean of 466 per frame over the nine checkpoints,
+    against 614 at `2cb6520`.
+  - Earlier in this pass, before the cut, the Intel mean had risen to 30–36 ms.
+  - Edge on the Intel GPU measured 20.4 ms in PR #3. Bundled Chromium is slower on the same GPU,
+    so its numbers are compared only with each other.
+- **Screenshots:** [evidence/chapter-one-quality/](evidence/chapter-one-quality/) (cell,
+  transfer order, shaft, lookout, tier one, collar, both puzzle states, the ending sequence).
+
+### Known limitations (this pass)
+
+- **No person has played it.** Story comprehension, whether hints come at the right time, the
+  feel of the camera assist and the new acceleration, and puzzle satisfaction are all untested.
+- **Animation.** The hands are not placed on ledges (no IK), and there is no wind-up before a
+  jump: control is never delayed for one.
+- **Camera artifacts in the autopilot audit.** The autopilot never turns the camera, which leaves
+  two cramped moments: the deck lever beside the engine column, and about 2 s after dropping off
+  the gantry. See the audit.
+- **Not built:** the "opening shutters" from the brief. The shaft's guidance is light, a railing
+  and a lit crossing.
+- **Sound** is still synthesised placeholder; the flow strips are silent.
+- **The hall is dark in places.** No real-time lights were added, deliberately, for the Intel GPU.
+- **Not 60 FPS on Intel UHD:** about 41 FPS in bundled Chromium, and 49 in Edge at PR #3.
+- **Load** still takes about 20 s on the Intel GPU (shader compilation).
+
+### Areas for independent review (Codex)
+
+1. **Camera.** Does the assist ever surprise? Look at the precision volumes, the shoulder shift
+   and the lower-arm search in cramped spots (the shaft exit, the gantry, the collar). Check that
+   rotating the mouse mid-jump now keeps the line, with a real mouse.
+2. **Shaft.** Does the railing plus the lit crossing read without text? Does anyone still fall in?
+3. **Subtitles.** Do any important lines get dropped (remark expiry), or arrive late?
+4. **Puzzles.** Do the chevrons make the vent/piston and vent/ram choices obvious, or too obvious?
+5. **Ending.** Is the hangar reveal clear, and is the completion card a reward?
+6. **Performance.** Re-run the normal-loop benchmark on the Intel GPU, with `&intro=0`, or with the
+   opening skipped. Check the worst frames after the warm-up draw.
+
+## Since `492bce4` (PR #3)
 
 ### Chapter One story (owner request, 2026-10-15)
 

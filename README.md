@@ -59,8 +59,23 @@ npm run preview      # serves dist/ at http://localhost:4173
 | Pause / settings | Esc or P | Start / Options |
 | Skip a cinematic beat | Space or E (prompt bottom right) | A / Cross |
 
-The pause menu has a **Hint** button, restart options, mouse sensitivity, invert-Y, volume and
-graphics quality (Auto, High, Low). Settings are remembered in the browser.
+The pause menu has a **Hint** button, restart options and these settings, remembered in the
+browser:
+
+| Setting | Range (default) | What it does |
+| --- | --- | --- |
+| Horizontal sensitivity | 1–100 (25) | Mouse and right-stick turn speed. 25 = 0.0022 rad per mouse pixel; 50 is twice that. |
+| Vertical sensitivity | 1–100 (25) | Independent of horizontal. |
+| Invert horizontal / vertical look | off | Separately. |
+| Field of view | 70–110° horizontal (90) | Wider shows more around Mara. |
+| Camera assist | Off / **Weak** / Strong | Lets the camera drift behind Mara when you run forward and leave the mouse alone (Weak after 1.5 s, Strong after 0.8 s and faster). It never turns in the air, on ledges, while vaulting or climbing, during an interaction or cinematic, or near a jump. |
+| Camera shake | on | Hard landings and heavy machinery. |
+| Volume | 0–1 (0.8) | |
+| Graphics | **Auto** / High / Low | Auto picks Low on integrated GPUs (and checks High on the title screen). |
+
+The camera always obeys the mouse or right stick immediately. It stays on Mara's side of walls
+and machinery, looking under a low lintel or over her shoulder rather than passing through
+anything.
 
 ## Development tools
 
@@ -100,6 +115,9 @@ bundled Chromium. Review captures (with `npm run dev` running in another termina
 
 - `node scripts/capture.mjs`: fixed viewpoints.
 - `node scripts/capture-opening.mjs`: the story opening, beat by beat.
+- `node scripts/capture-ending.mjs`: the ending, from the jump to the completion card.
+- `node scripts/audit-route.mjs`: the whole chapter from the player's camera, every 2 s, with
+  the camera zone, arm length and subtitle at each frame.
 - `node scripts/capture-character.mjs`: character turntable.
 - `node scripts/capture-video.mjs`: real-time movement clips.
 - `node scripts/normal-mode-run.mjs`: plays the whole route in normal mode.
@@ -110,6 +128,8 @@ Performance tools (after `npm run build`; headed Edge, real GPU, normal real-tim
   over 100 ms.
 - `node scripts/profile-render.mjs`: frame times at fixed viewpoints with rendering features
   switched off one at a time.
+- `node scripts/count-draws.mjs`: draw calls and triangles per frame at each checkpoint (a
+  deterministic cost proxy; `--root` compares another build).
 
 See [docs/TESTING.md](docs/TESTING.md).
 

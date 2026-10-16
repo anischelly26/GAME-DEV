@@ -3,7 +3,7 @@
  * Capture review screenshots of the slice at fixed viewpoints.
  *
  *   npm run dev            (in another terminal)
- *   node scripts/capture.mjs [--url http://localhost:5173] [--channel msedge|chrome] [--size 1600x900] [--out artifacts/shots]
+ *   node scripts/capture.mjs [--url http://localhost:5173] [--channel msedge|chrome] [--size 1600x900] [--out artifacts/shots] [--only a,b] [--format jpg]
  *
  * Uses the dev/test API (window.__GAME) to step the simulation deterministically, so every run
  * frames the same views. Console errors are printed and make the script exit non-zero.
@@ -85,7 +85,7 @@ for (const s of shots) {
     }, s.portrait);
   }
   await G((n) => window.__GAME.step(n), s.steps ?? 20);
-  await page.screenshot({ path: join(out, `${s.name}.png`) });
+  await page.screenshot(args.format === 'jpg' ? { path: join(out, `${s.name}.jpg`), quality: 82 } : { path: join(out, `${s.name}.png`) });
   console.log('captured', s.name, JSON.stringify(await G(() => window.__GAME.state().feet)));
 }
 
