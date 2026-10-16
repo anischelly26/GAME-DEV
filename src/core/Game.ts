@@ -185,6 +185,8 @@ export class Game {
 
     const gltf = await mara;
     this.avatar.attach(gltf);
+    // Frame the shorter toy hero: lower the camera's pivot by most of the height difference.
+    this.camera.pivotOffset = this.avatar.heightDelta * 0.8;
     let triangles = 0;
     gltf.scene.traverse((o) => {
       const m = o as THREE.Mesh;

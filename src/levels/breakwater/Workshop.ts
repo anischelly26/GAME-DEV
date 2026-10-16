@@ -144,10 +144,11 @@ export class Workshop {
     mesh(new THREE.BoxGeometry(0.08, 1.15, 0.5), new THREE.MeshStandardMaterial({ color: '#6e4526', roughness: 1 }), W / 2 - 0.08, 1.45, -1.3);
     // The stool she sits on.
     const seatZ = benchZ - 0.98;
-    piece(new THREE.CylinderGeometry(0.19, 0.19, 0.05, 16), m.wood, 0, 0.455, seatZ);
+    // A low stool, sized for the toy-proportioned Mara (her hips sit about 0.33 m up).
+    piece(new THREE.CylinderGeometry(0.19, 0.19, 0.05, 16), m.wood, 0, 0.255, seatZ);
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2;
-      piece(new THREE.CylinderGeometry(0.02, 0.025, 0.44, 6), m.wood, Math.sin(a) * 0.13, 0.22, seatZ + Math.cos(a) * 0.13);
+      piece(new THREE.CylinderGeometry(0.02, 0.025, 0.24, 6), m.wood, Math.sin(a) * 0.13, 0.12, seatZ + Math.cos(a) * 0.13);
     }
 
     // The oil lamp: brass base, a glass chimney, an emissive flame, a glow and warm pools of light.

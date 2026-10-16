@@ -5,6 +5,7 @@ import type { TextureLibrary } from '../world/textures';
 import { MOVEMENT } from './movement';
 import { TRAVERSAL } from './Traversal';
 import { Scarf } from './Scarf';
+import { createToyHero, type ToyFace, type ToyFit, type ToyMood } from './ToyHero';
 
 export interface AvatarState {
   feet: THREE.Vector3;
@@ -40,12 +41,8 @@ export interface AvatarMoves {
   airLeft: number;
 }
 
-/** The double jump's front flip: duration, and the pivot height (Mara's hips). */
+/** The double jump's front flip: duration (the pivot is her middle, from the toy's fit). */
 const FLIP_TIME = 0.42;
-const FLIP_PIVOT = 0.92;
-
-/** Mara's standing height in metres (to the top of her hair). */
-const HEIGHT = 1.7;
 const SCARF_COLOR = '#c8553a';
 const LOCOMOTION = ['walk', 'jog', 'sprint'] as const;
 type Loco = (typeof LOCOMOTION)[number];
@@ -55,8 +52,8 @@ const qa = new THREE.Quaternion();
 const qb = new THREE.Quaternion();
 
 /**
- * Mara on screen: the CC0 character assembled by scripts/import-mara.mjs (public/assets/mara/
- * mara.glb), animated with hand-made clips from Quaternius's Universal Animation Libraries.
+ * Mara on screen: the toy hero (`ToyHero.ts`), built on the CC0 skeleton and clips of
+ * public/assets/mara/mara.glb (Quaternius's Universal Animation Libraries), re-proportioned.
  * Locomotion blends idle, walk, jog and sprint by speed, phase-locked and time-scaled to the
  * controller's ground speed so the feet don't slide; jumps, landings, climbs, vaults, knockback and
  * interactions are one-shot clips layered over it; the head turns toward points of interest.
@@ -110,6 +107,13 @@ export class PlayerAvatar {
   private canister: THREE.Group | null = null;
   private canisterGauge: THREE.MeshStandardMaterial | null = null;
   private gaugeLevel = 1;
+  /** The toy's face and measurements. */
+  private face: ToyFace | null = null;
+  private fit: ToyFit = { height: 1.3, pivotY: 0.7, chestY: 0.8, eyeY: 1.05, backZ: -0.25, scarfScale: 1.3, scarfFront: 0.17, hangLift: 0.4 };
+  private surpriseT = 0;
+  private emoteMood: ToyMood = 'happy';
+  private emoteT = 0;
+  private hangLift = 0;
 
   /** Called when a foot plants; used for footstep audio. */
   onFootstep: ((speed: number) => void) | null = null;
@@ -127,28 +131,28 @@ export class PlayerAvatar {
     return this.model !== null;
   }
 
+  /** The character's height against the 1.7 m figure the camera zones were set for. */
+  get heightDelta(): number {
+    return this.fit.height - 1.7;
+  }
+
   /** Kept for the quality switch; the character has a single level of detail. */
   setDetail(_level: 'high' | 'low'): void {}
 
-  /** Attach the loaded character (public/assets/mara/mara.glb). */
+  /** Attach the loaded character (public/assets/mara/mara.glb), rebuilt as the toy hero. */
   attach(gltf: GLTF): void {
-    const model = gltf.scene;
-    model.updateMatrixWorld(true);
-    const box = new THREE.Box3().setFromObject(model);
-    const s = HEIGHT / Math.max(0.5, box.max.y - box.min.y);
-    model.scale.setScalar(s);
-    model.position.y = -box.min.y * s;
+    const hero = createToyHero(gltf, this.tex);
+    const model = hero.model;
+    this.face = hero.face;
+    this.fit = hero.fit;
     this.visual.add(model);
     this.model = model;
     model.traverse((o) => {
-      const m = o as THREE.Mesh;
       if ((o as THREE.Bone).isBone) this.bones.set(o.name, o as THREE.Bone);
-      if (!m.isMesh) return;
-      m.castShadow = true;
-      m.receiveShadow = true;
-      m.frustumCulled = false;
-      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) this.addFadeable(mat);
+      if ((o as THREE.Mesh).isMesh) o.frustumCulled = false;
     });
+    for (const m of hero.materials) this.addFadeable(m);
+    this.carryAnchor.position.set(0, this.fit.chestY, 0.3);
     this.mixer = new THREE.AnimationMixer(model);
     for (const clip of gltf.animations) {
       const a = this.mixer.clipAction(clip);
@@ -212,8 +216,9 @@ export class PlayerAvatar {
     // Place it in world space against her back in the bind pose (facing +Z), then hang it on the spine.
     this.root.updateMatrixWorld(true);
     const at = spine.getWorldPosition(new THREE.Vector3());
-    g.position.set(at.x, at.y - 0.05, at.z - 0.17);
+    g.position.set(at.x, at.y - 0.03, at.z + this.fit.backZ);
     g.rotation.x = -0.12;
+    g.scale.setScalar(1.25);
     this.scene.add(g);
     spine.attach(g);
     g.visible = false;
@@ -270,9 +275,10 @@ export class PlayerAvatar {
     const neckPos = neck.getWorldPosition(new THREE.Vector3());
     const facing = this.root.getWorldQuaternion(new THREE.Quaternion());
     const wrap = new THREE.Group();
+    const k = this.fit.scarfScale;
     for (const [y, r, t, tilt] of [
-      [-0.01, 0.1, 0.036, 0.22],
-      [0.035, 0.088, 0.03, 0.08],
+      [-0.01, 0.1 * k, 0.036 * 1.2, 0.22],
+      [0.035, 0.088 * k, 0.03 * 1.2, 0.08],
     ]) {
       const torus = new THREE.Mesh(new THREE.TorusGeometry(r, t, 10, 28), knit);
       torus.rotation.x = Math.PI / 2 + tilt;
@@ -282,7 +288,8 @@ export class PlayerAvatar {
     }
     const knot = new THREE.Mesh(new THREE.SphereGeometry(0.036, 14, 10), knit);
     knot.scale.set(1.1, 0.9, 0.8);
-    knot.position.set(0.045, -0.04, 0.1);
+    knot.position.set(0.05 * k, -0.04, 0.1 * k);
+    knot.scale.multiplyScalar(1.3);
     wrap.add(knot);
     wrap.quaternion.copy(facing);
     wrap.position.copy(neckPos).add(new THREE.Vector3(0, -0.025, 0));
@@ -295,7 +302,7 @@ export class PlayerAvatar {
       [0.055, 2, 0.044],
     ]) {
       const anchor = new THREE.Object3D();
-      anchor.position.copy(neckPos).add(new THREE.Vector3(x, -0.09, 0.09).applyQuaternion(facing));
+      anchor.position.copy(neckPos).add(new THREE.Vector3(x * k, -0.1, this.fit.scarfFront).applyQuaternion(facing));
       this.scene.add(anchor);
       chest.attach(anchor);
       this.scarfAnchors.push(anchor);
@@ -303,6 +310,12 @@ export class PlayerAvatar {
       this.scarves.push(scarf);
       this.scene.add(scarf.mesh);
     }
+  }
+
+  /** A face for a moment (a find, a success): happy, surprised, worried... */
+  emote(mood: ToyMood, seconds = 1.6): void {
+    this.emoteMood = mood;
+    this.emoteT = seconds;
   }
 
   onJump(): void {
@@ -316,6 +329,7 @@ export class PlayerAvatar {
     // A big drop lands heavier and takes a beat longer to straighten up (animation only: control
     // is never held back).
     const big = clamp((impact - 7) / 9, 0, 1);
+    if (impact > 11) this.surpriseT = 0.6;
     this.landWeight = clamp(impact / 10, 0.35, 0.85) + big * 0.15;
     this.landDur = 0.35 + big * 0.3;
     const land = this.actions.get('land');
@@ -432,6 +446,7 @@ export class PlayerAvatar {
     if ((s.knockbacks ?? 0) > this.lastKnockbacks) {
       this.lastKnockbacks = s.knockbacks ?? 0;
       this.play('knockback', 1.3);
+      this.surpriseT = 0.9;
     }
     if (s.reach > 0 && this.lastReach <= 0 && mode === 'move' && s.grounded && this.oneShot?.name !== 'fix') this.play('interact', 1.7, 0.15);
     this.lastReach = s.reach;
@@ -556,7 +571,11 @@ export class PlayerAvatar {
     // Rotate about the hips (not the feet) for the flip and the dive.
     const a = flip + this.dashPitch;
     this.visual.rotation.x = this.lean + a;
-    this.visual.position.set(0, FLIP_PIVOT - FLIP_PIVOT * Math.cos(a), -FLIP_PIVOT * Math.sin(a));
+    const P = this.fit.pivotY;
+    // Hanging from a ledge: the toy's short arms are lifted to the edge the controller hangs from.
+    const liftTarget = mode === 'hang' ? 1 : mode === 'climb' ? 1 - (s.modeT ?? 0) : 0;
+    this.hangLift = damp(this.hangLift, liftTarget, 14, dt);
+    this.visual.position.set(0, P - P * Math.cos(a) + this.hangLift * this.fit.hangLift, -P * Math.sin(a));
     this.visual.rotation.z = damp(this.visual.rotation.z, clamp(-this.turnRate * 0.02, -0.12, 0.12) * clamp(v / 4, 0, 1), 8, dt);
 
     // --- head: glance at points of interest, otherwise a slow idle look-around
@@ -568,13 +587,16 @@ export class PlayerAvatar {
       const yaw = wrapAngle(Math.atan2(dx, dz) - s.facing);
       if (Math.abs(yaw) < 1.6) {
         targetYaw = clamp(yaw, -0.8, 0.8);
-        targetPitch = clamp(Math.atan2(s.lookAt.y - (s.feet.y + 1.55), Math.hypot(dx, dz)), -0.45, 0.45);
+        targetPitch = clamp(Math.atan2(s.lookAt.y - (s.feet.y + this.fit.eyeY), Math.hypot(dx, dz)), -0.45, 0.45);
       }
     }
     // Full-body clips (climbing, lying down, getting up) own the head.
     this.headYaw = dampAngle(this.headYaw, targetYaw * (1 - shot), 6, dt);
     this.headPitch = damp(this.headPitch, targetPitch * (1 - shot), 6, dt);
     this.root.updateMatrixWorld(true);
+    // The toy's short arms swing clear of her round middle.
+    this.rollBone('upperarm_l', 0.24);
+    this.rollBone('upperarm_r', -0.24);
     this.turnBone('neck_01', this.headYaw * 0.4, this.headPitch * 0.4);
     this.turnBone('Head', this.headYaw * 0.6, this.headPitch * 0.6);
     // Nodding off: a slow sag toward the level the story sets, a quicker lift if she jerks awake.
@@ -582,9 +604,28 @@ export class PlayerAvatar {
     if (this.dozeLevel > 0.001) {
       const d = this.dozeLevel;
       const breathe = Math.sin(this.time * 1.6) * 0.03 * d;
-      this.turnBone('spine_03', 0, -0.22 * d + breathe);
-      this.turnBone('neck_01', 0.06 * d, -0.42 * d);
-      this.turnBone('Head', 0.16 * d, -0.5 * d);
+      // A toy's big head only nods a little, and tips sideways: the closing eyes tell the rest.
+      this.turnBone('spine_03', 0, -0.1 * d + breathe);
+      this.turnBone('neck_01', 0, -0.12 * d);
+      this.turnBone('Head', 0.1 * d, -0.2 * d);
+      this.rollBone('Head', 0.32 * d);
+    }
+
+    if (this.face) {
+      this.surpriseT = Math.max(0, this.surpriseT - dt);
+      this.emoteT = Math.max(0, this.emoteT - dt);
+      const busy = mv?.sprinting || mv?.dashing || mode === 'grind' || mode === 'hang' || mode === 'climb' || pound !== 'none';
+      this.face.mood = this.emoteT > 0 ? this.emoteMood : this.surpriseT > 0 ? 'surprised' : busy ? 'determined' : 'neutral';
+      // Asleep: lying still on the floor, or nodding off; waking, the eyes open as she gets up.
+      let sleep = this.dozeLevel;
+      if (this.oneShot?.name === 'wake') {
+        const w = this.actions.get('wake')!;
+        sleep = Math.max(sleep, w.timeScale === 0 ? 1 : clamp(1 - w.time / 1.4, 0, 1));
+      }
+      this.face.sleep = sleep;
+      if (s.lookAt && mode === 'move') this.face.look.set(wrapAngle(targetYaw - this.headYaw), targetPitch - this.headPitch);
+      else this.face.look.set(0, 0);
+      this.face.update(dt);
     }
 
     this.root.updateMatrixWorld(true);
@@ -593,6 +634,18 @@ export class PlayerAvatar {
 
   private clipDuration(name: string): number {
     return this.actions.get(name)?.getClip().duration ?? 1;
+  }
+
+  /** Roll a bone about the character's forward axis (arms out from the body), in world space. */
+  private rollBone(name: string, angle: number): void {
+    const b = this.bones.get(name);
+    if (!b || !b.parent) return;
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.root.getWorldQuaternion(qa));
+    const delta = qb.setFromAxisAngle(fwd, angle);
+    const world = b.getWorldQuaternion(new THREE.Quaternion());
+    const parentInv = b.parent.getWorldQuaternion(new THREE.Quaternion()).invert();
+    b.quaternion.copy(parentInv.multiply(delta.multiply(world)));
+    b.updateMatrixWorld(true);
   }
 
   /** Turn a bone by yaw (about world up) and pitch (about the character's right axis), in world space. */

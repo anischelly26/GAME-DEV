@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { createToyHero } from '../player/ToyHero';
+import { createTextureLibrary } from '../world/textures';
 
 /**
  * Dev-only turntable for the character (public/assets/mara/mara.glb): `/?viewer=mara`.
@@ -36,12 +38,10 @@ export async function startCharacterViewer(container: HTMLElement): Promise<void
   scene.add(floor);
 
   const gltf = await new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/mara/mara.glb`);
-  const model = gltf.scene;
-  const box = new THREE.Box3().setFromObject(model);
-  const s = 1.7 / (box.max.y - box.min.y);
-  model.scale.setScalar(s);
-  model.position.y = -box.min.y * s;
-  model.traverse((o) => ((o as THREE.Mesh).isMesh ? ((o.castShadow = true), (o.receiveShadow = true), (o.frustumCulled = false)) : null));
+  // The toy hero, as in the game (re-proportioned skeleton, toy body, living face).
+  const hero = createToyHero(gltf, createTextureLibrary());
+  const model = hero.model;
+  model.traverse((o) => ((o as THREE.Mesh).isMesh ? (o.frustumCulled = false) : null));
   scene.add(model);
   const mixer = new THREE.AnimationMixer(model);
   const clips = gltf.animations;
@@ -83,6 +83,9 @@ export async function startCharacterViewer(container: HTMLElement): Promise<void
       renderer.render(scene, camera);
     },
     play,
+    /** The face: mood and sleep, for screenshots. */
+    face: hero.face,
+    fit: hero.fit,
     /** World height of a bone (dev checks of clips). */
     boneY: (name: string) => {
       const b = model.getObjectByName(name);
@@ -113,6 +116,7 @@ export async function startCharacterViewer(container: HTMLElement): Promise<void
   renderer.setAnimationLoop(() => {
     const dt = clock.getDelta();
     mixer.update(dt);
+    hero.face.update(dt);
     if (spin) angle += dt * 0.4;
     place();
     renderer.render(scene, camera);
