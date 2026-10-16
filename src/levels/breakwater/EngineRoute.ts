@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { LevelContext, RouteStep } from '../Level';
-import { Batcher, prismGeometry, worldBox } from '../../world/geometry';
+import { Batcher, boxProjectUVs, prismGeometry, worldBox } from '../../world/geometry';
 import { paintedTextTexture } from '../../world/textures';
 import { ServiceLight, WorkLamp, glowSprite } from '../../world/props/Lanterns';
 import { SteamEmitter } from '../../world/Atmosphere';
@@ -17,6 +17,11 @@ const T1 = HALL.tierY[0];
 const T3 = HALL.tierY[2];
 /** Gantry decks sit this far below the collar deck stops. */
 const GANTRY_DROP = 0.015;
+/**
+ * Height of the exit gantry (and the ram's stroke) above tier three. Above the reach of a double
+ * jump (2.6 m), so the only way up is riding the ram: the split feed cannot be jumped past.
+ */
+export const EXIT_RISE = 3.4;
 
 /** Walkway segments the engine route replaces with its own pieces: "tier:k". */
 export const ROUTE_WALKWAY_OVERRIDES = new Set(['0:2', '0:5', '0:6', '2:9']);
@@ -171,8 +176,44 @@ export class EngineRoute {
       tag.position.set(1.38, 4.6 + 0.78, HALL.aWall - 0.1);
       this.gateMesh.add(rope, tag);
       root.add(this.gateMesh);
-      this.gateCollider = physics.box(v3(1.4, 4.6 + 1.3, HALL.aWall - 0.12), v3(0.75, 1.3, 0.08), undefined, { blocksCamera: false });
+      this.gateCollider = physics.box(v3(1.4, 4.6 + 1.7, HALL.aWall - 0.12), v3(0.75, 1.7, 0.08), undefined, { blocksCamera: false });
     }
+
+    // ------------------------------------------------------------ collapses that close the ring
+    // The route runs one way round each tier. The other way would skip it: tier one leads round
+    // to the engine past every obstacle, and tier three to the breach's far side. So the floor above
+    // has come down across the walkway there: two broken slabs leaning floor to ceiling, rubble at
+    // their feet, out over the railing too (no hopping round them).
+    // Its own random stream, so the rest of the route's dressing stays where it was.
+    const crng = mulberry32(99);
+    const collapse = (k: number, f: number, y: number, height: number) => {
+      const q = sideQuat(k);
+      const aMid = (HALL.aIn - 1.2 + HALL.aWall) / 2;
+      const depth = HALL.aWall - HALL.aIn + 1.2;
+      const centre = sidePos(k, aMid, uAt(aMid, f), y);
+      physics.box(centre.clone().setY(y + height / 2), v3(0.75, height / 2, depth / 2), q);
+      const t = sideTangent(k);
+      const radial = v3(Math.sin(sideAngle(k)), 0, Math.cos(sideAngle(k)));
+      for (const s of [-1, 1]) {
+        // Pieces of the walkway above: cobbled face out, one leaning harder than the other.
+        const lean = new THREE.Quaternion().setFromAxisAngle(v3(0, 0, 1), s * (s > 0 ? 0.2 : 0.1));
+        const slab = centre.clone().addScaledVector(t, -s * 0.34).setY(y + height / 2);
+        batch.add(boxProjectUVs(new THREE.BoxGeometry(0.34, height + 0.3, depth - (s > 0 ? 0.5 : 0)), 2.5), m.floor, new THREE.Matrix4().compose(slab, q.clone().multiply(lean), v3(1, 1, 1)), { damp: true });
+      }
+      for (let i = 0; i < 14; i++) {
+        const sz = 0.35 + crng() * 0.5;
+        const side = i % 2 ? 1 : -1;
+        const p = centre.clone().addScaledVector(t, side * (0.5 + crng() * 0.3));
+        p.addScaledVector(radial, (crng() - 0.5) * (depth - 0.8)).setY(y + sz * 0.4 + (i > 9 ? 0.4 : 0));
+        batch.add(boxProjectUVs(new RoundedBoxGeometry(sz * 1.2, sz, sz, 1, 0.06)), m.stone, new THREE.Matrix4().compose(p, new THREE.Quaternion().setFromEuler(new THREE.Euler(crng() * 0.5, crng() * 3, crng() * 0.5)), v3(1, 1, 1)), { damp: true });
+      }
+      // A bent length of the railing from the tier above, caught in the fall.
+      const bent = centre.clone().addScaledVector(t, 0.62).setY(y + 1.4);
+      batch.add(new THREE.BoxGeometry(0.06, 0.06, 2.6), m.iron, new THREE.Matrix4().compose(bent, q.clone().multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0.5, 0.2, 0.3))), v3(1, 1, 1)));
+    };
+    collapse(17, 0.14, T1, HALL.tierH - HALL.floorT);
+    collapse(8, 0.16, T1, HALL.tierH - HALL.floorT);
+    collapse(6, 0.84, T3, HALL.roofY - T3);
 
     // ------------------------------------------------------------ k = 2: first gap on tier 1 (1.9 m)
     walkwayPiece(2, 0, 0.27, T1);
@@ -328,7 +369,7 @@ export class EngineRoute {
     {
       const k = 8;
       const fCurtain = 0.55;
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 10; i++) {
         const a = HALL.aWall - 0.1;
         const p = sidePos(k, a, uAt(a, fCurtain) + ((i % 2) - 0.5) * 0.3, T3 + 0.25 + (i >> 1) * 0.6);
         const dir = v3(-Math.sin(sideAngle(k)), 0.12, -Math.cos(sideAngle(k)));
@@ -338,7 +379,7 @@ export class EngineRoute {
         this.curtain.push(e);
         root.add(e.group);
       }
-      const sheetGeo = new THREE.PlaneGeometry(HALL.aWall - HALL.aIn, 2.6);
+      const sheetGeo = new THREE.PlaneGeometry(HALL.aWall - HALL.aIn, 3.8);
       this.curtainSheet = new THREE.Mesh(
         sheetGeo,
         new THREE.MeshBasicMaterial({ color: '#b4c3c7', map: glowSprite(), transparent: true, opacity: 0.05, depthWrite: false, side: THREE.DoubleSide }),
@@ -484,14 +525,14 @@ export class EngineRoute {
       const k = 9;
       const a = 10.7;
       const base = sidePos(k, a, uAt(a, 0.86), T3);
-      this.breachPiston = new PistonPlatform(physics, m, base, 2.4, { w: 1.8, d: 1.8 }, { rest: 2.8, travel: 2.4, phase: 0 }, sideAngle(k));
+      this.breachPiston = new PistonPlatform(physics, m, base, EXIT_RISE, { w: 1.8, d: 1.8 }, { rest: 2.8, travel: 2.4, phase: 0 }, sideAngle(k));
       this.breachPiston.heightOverride = 0;
       root.add(this.breachPiston.group);
       // Toothed rack post beside the ram, worked by the catch rod; the pawl rides on the deck.
       const rackA = 11.95;
-      const post = sidePos(k, rackA, uAt(rackA, 0.86), T3 + 1.45);
-      batch.add(new THREE.BoxGeometry(0.12, 2.9, 0.1), m.ironDark, new THREE.Matrix4().compose(post, sideQuat(k), v3(1, 1, 1)));
-      for (let i = 0; i < 26; i++) {
+      const post = sidePos(k, rackA, uAt(rackA, 0.86), T3 + (EXIT_RISE + 0.5) / 2);
+      batch.add(new THREE.BoxGeometry(0.12, EXIT_RISE + 0.5, 0.1), m.ironDark, new THREE.Matrix4().compose(post, sideQuat(k), v3(1, 1, 1)));
+      for (let i = 0; i < Math.round(EXIT_RISE * 10) + 2; i++) {
         const tooth = sidePos(k, rackA - 0.06, uAt(rackA, 0.86), T3 + 0.15 + i * 0.1);
         batch.add(new THREE.BoxGeometry(0.1, 0.035, 0.04), m.iron, new THREE.Matrix4().compose(tooth, sideQuat(k), v3(1, 1, 1)));
       }
@@ -519,7 +560,7 @@ export class EngineRoute {
       }
       // Exit gantry bolted to the broken wall, jutting out through the breach over the sea.
       const k2 = 10;
-      const eTop = T3 + 2.4;
+      const eTop = T3 + EXIT_RISE;
       // Placed from the piston: a clean 1.9 m horizontal gap along side 10, at the piston's top
       // height, pushed outward so the far end juts through the breach over the sea.
       const t10 = sideTangent(k2);
@@ -798,7 +839,7 @@ export class EngineRoute {
       id: 'steam-curtain',
       once: false,
       enabled: () => this.steamOn,
-      contains: (p) => Math.abs(p.y - T3) < 2 && Math.hypot(p.x - centre.x, p.z - centre.z) < 1.9 && (p.x - centre.x) * -back.x + (p.z - centre.z) * -back.z > -0.4,
+      contains: (p) => p.y > T3 - 1 && p.y < T3 + 4.4 && Math.hypot(p.x - centre.x, p.z - centre.z) < 1.9 && (p.x - centre.x) * -back.x + (p.z - centre.z) * -back.z > -0.4,
       onEnter: () => {
         player.knockback(back.clone().multiplyScalar(7).setY(3.5), 0.35);
         events.emit('sfx', { name: 'hiss', x: centre.x, y: centre.y + 1, z: centre.z });

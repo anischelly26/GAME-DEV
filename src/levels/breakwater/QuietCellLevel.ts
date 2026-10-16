@@ -555,7 +555,8 @@ export class QuietCellLevel implements Level {
     batch.add(new THREE.BoxGeometry(2.85, 0.045, 0.045), m.iron, new THREE.Matrix4().makeTranslation(-0.78, L.y + 0.5, railZ));
     for (const x of [-2.05, -0.7, 0.65, 2.1]) batch.add(new THREE.BoxGeometry(0.08, 1.05, 0.08), m.iron, new THREE.Matrix4().makeTranslation(x, L.y + 0.52, railZ));
     batch.add(new THREE.TorusGeometry(0.06, 0.02, 6, 12), m.rope, new THREE.Matrix4().makeTranslation(-0.7, L.y + 0.98, railZ));
-    physics.box(v3(-0.78, L.y + 1.3, railZ), v3(1.43, 1.3, 0.08), undefined, { blocksCamera: false });
+    // Its collider reaches the ceiling: a double jump must not clear it before the reveal.
+    physics.box(v3(-0.78, L.y + L.h / 2, railZ), v3(1.43, L.h / 2, 0.08), undefined, { blocksCamera: false });
     this.lookoutLight = new ServiceLight(m, v3(-1.15, L.y, HALL.aWall + 0.45), Math.PI / 2);
     scene.add(this.lookoutLight.group);
     // Ivo's intercom: a brass speaker box with a cracked grille.

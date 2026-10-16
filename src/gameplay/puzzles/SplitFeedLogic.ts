@@ -3,7 +3,7 @@
  * rules can be unit-tested and reviewed in isolation. It applies the rule the cell taught (pressure
  * goes where the valves send it) to a choice with a consequence.
  *
- *  goal ............ reach the exit gantry, 2.4 m above the walkway, past a steam curtain
+ *  goal ............ reach the exit gantry, 3.4 m above the walkway (beyond a double jump), past a steam curtain
  *  machine ......... one steam main, one diverter at a junction before the curtain:
  *                      VENT -> the cracked line sprays across the walkway (the curtain)
  *                      RAM  -> the breach ram rises to the exit gantry and holds there
