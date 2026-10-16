@@ -65,7 +65,7 @@ function saveSettings(s: Settings): void {
   }
 }
 
-const SPEAKER_LABEL: Record<string, string> = { Mara: 'Mara', Horn: "Warden's horn", Intercom: 'Intercom', Tip: '' };
+const SPEAKER_LABEL: Record<string, string> = { Mara: 'Mara', Horn: "Warden's horn", Intercom: 'Intercom', Watch: 'The Watch', Tip: '' };
 
 const CONTROLS_HTML = `
   <dl class="controls">

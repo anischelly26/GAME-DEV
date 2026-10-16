@@ -33,6 +33,7 @@ const SAMPLED: Record<string, Layer[]> = {
   pot: [['pot', 0.6, 0.95, 1.05]],
   uiSelect: [['ui.select', 0.35, 1, 1]],
   doorCreak: [['creak', 0.55, 0.62, 0.68]],
+  watchCatch: [['latch', 0.9, 0.8, 0.9], ['metal.heavy', 0.6, 0.7, 0.8]],
   boardsBreak: [['wood.medium', 0.9, 0.7, 0.8], ['land.heavy', 0.45, 1.15, 1.25], ['wood.medium', 0.6, 1.1, 1.2]],
 };
 /** These keep their synthesised layer too (steam, hiss and machinery read better with it). */
@@ -571,6 +572,17 @@ export class AudioSystem {
         this.burst('bandpass', 2600, 0.8, 1.8, 0.05, out, 0.06);
         break;
       }
+      case 'watchAlert':
+        // The Watch raises the alarm: two rising square pips over a steam shriek.
+        this.tone('square', 660, 990, 0.16, 0.05, o(), 0.004);
+        this.tone('square', 880, 1320, 0.18, 0.05, o(), 0.004, 0.2);
+        this.burst('bandpass', 3200, 1.2, 0.7, 0.04, o(), 0.02, 0.05);
+        break;
+      case 'watchStun':
+        // Knocked out: the boiler's whine sags and the valves dump steam.
+        this.tone('sawtooth', 520, 90, 1.1, 0.05, o(), 0.01);
+        this.burst('lowpass', 1800, 0.7, 1.2, 0.12, o(), 0.02, 0, 300);
+        break;
       case 'lampOut':
         // The flame gutters and goes: a soft breath of air and a tiny tick of the cooling glass.
         this.burst('lowpass', 700, 0.6, 0.55, 0.12, o(), 0.04, 0, 180);

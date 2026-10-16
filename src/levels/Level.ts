@@ -18,6 +18,8 @@ import type { Effects } from '../world/Effects';
 export interface LevelContext {
   /** Play the story opening when the level starts. */
   intro: boolean;
+  /** Watch sentries patrol (automated route tests turn them off). */
+  watch: boolean;
   scene: THREE.Scene;
   physics: Physics;
   materials: MaterialLibrary;

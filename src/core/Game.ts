@@ -41,6 +41,8 @@ export interface GameOptions {
   autoplay: boolean;
   /** Play the story opening (Mara waking in the cell). */
   intro?: boolean;
+  /** Watch sentries patrol (off by default in automated runs). */
+  watch?: boolean;
   start: string | null;
   quality: 'high' | 'low' | null;
 }
@@ -146,6 +148,7 @@ export class Game {
 
     const ctx: LevelContext = {
       intro: (this.options.intro ?? !this.options.test) && !this.options.start,
+      watch: this.options.watch ?? !this.options.test,
       scene: this.scene,
       physics: this.physics,
       materials: this.materials,
