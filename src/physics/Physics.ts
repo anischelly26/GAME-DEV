@@ -12,18 +12,22 @@ export const Layer = {
   NOCAM: 0x0004,
   PROP: 0x0008,
   CAMERA_QUERY: 0x0010,
+  /** Blocks only the camera: large visual machinery the player never touches (the flywheels). */
+  CAMONLY: 0x0020,
 } as const;
 
 export const groups = (membership: number, filter: number): number =>
   ((membership & 0xffff) << 16) | (filter & 0xffff);
 
 export const PLAYER_GROUPS = groups(Layer.PLAYER, Layer.WORLD | Layer.NOCAM | Layer.PROP);
-export const CAMERA_QUERY_GROUPS = groups(Layer.CAMERA_QUERY, Layer.WORLD);
+export const CAMERA_QUERY_GROUPS = groups(Layer.CAMERA_QUERY, Layer.WORLD | Layer.CAMONLY);
 export const GROUND_QUERY_GROUPS = groups(Layer.PLAYER, Layer.WORLD | Layer.NOCAM | Layer.PROP);
 
 export interface ColliderOptions {
   /** Defaults to true. Set false for bars and railings so the camera can see through them. */
   blocksCamera?: boolean;
+  /** Defaults to true. Set false for camera-only blockers (visual machinery out of the player's way). */
+  blocksPlayer?: boolean;
   friction?: number;
 }
 
@@ -45,9 +49,13 @@ export class Physics {
 
   private finish(desc: RAPIER.ColliderDesc, opts: ColliderOptions = {}, body?: RAPIER.RigidBody): RAPIER.Collider {
     const blocksCamera = opts.blocksCamera ?? true;
-    const membership = blocksCamera ? Layer.WORLD : Layer.NOCAM;
-    const filter = Layer.PLAYER | Layer.PROP | (blocksCamera ? Layer.CAMERA_QUERY : 0);
-    desc.setCollisionGroups(groups(membership, filter));
+    if (opts.blocksPlayer === false) {
+      desc.setCollisionGroups(groups(Layer.CAMONLY, Layer.CAMERA_QUERY));
+    } else {
+      const membership = blocksCamera ? Layer.WORLD : Layer.NOCAM;
+      const filter = Layer.PLAYER | Layer.PROP | (blocksCamera ? Layer.CAMERA_QUERY : 0);
+      desc.setCollisionGroups(groups(membership, filter));
+    }
     desc.setFriction(opts.friction ?? 0.6);
     return this.world.createCollider(desc, body);
   }

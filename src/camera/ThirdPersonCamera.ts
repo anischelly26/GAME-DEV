@@ -263,7 +263,7 @@ export class ThirdPersonCamera {
     // doorway's lintel, a wall above a ledge), it tries a lower angle and eases to the clearly
     // freer one, looking under the obstruction instead of collapsing into Mara. Yaw never changes.
     const reach = this.zoneDist + 0.3;
-    const cast = (p: number) => this.physics.sphereCastDistance(this.focus, this.armDir(p, this.tmpDir), reach, PROBE_RADIUS, this.exclude);
+    const cast = (p: number, from: THREE.Vector3 = this.focus) => this.physics.sphereCastDistance(from, this.armDir(p, this.tmpDir), reach, PROBE_RADIUS, this.exclude);
     let bestOffset = 0;
     let bestFree = cast(this.pitch);
     if (bestFree < this.zoneDist * 0.7) {
@@ -279,18 +279,42 @@ export class ThirdPersonCamera {
     this.armOffset = this.initialised ? damp(this.armOffset, bestOffset, 5, dt) : bestOffset;
     const pitch = this.pitch + this.armOffset;
     const dir = this.armDir(pitch, new THREE.Vector3());
-    const free = cast(pitch);
+
+    // Still pinned behind Mara (machinery, a column at her back): shift the pivot over a
+    // shoulder, up to 0.9 m to either side, keeping the view direction. The view becomes
+    // over-the-shoulder; the yaw, and with it the meaning of the controls, does not change.
+    const right = this.tmpRight.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
+    const sideRoom = (side: number) => Math.max(0, this.physics.sphereCastDistance(this.focus, right.clone().multiplyScalar(side), 0.9, PROBE_RADIUS, this.exclude) - 0.1);
+    let targetLateral = 0;
+    const straight = cast(pitch);
+    if (straight < this.zoneDist * 0.45) {
+      let best = straight;
+      for (const side of [1, -1]) {
+        const room = Math.min(0.9, sideRoom(side));
+        if (room < 0.4) continue;
+        const f = cast(pitch, this.tmpPivot.copy(this.focus).addScaledVector(right, side * room));
+        if (f > best + 0.6) {
+          best = f;
+          targetLateral = side * room;
+        }
+      }
+    }
+    this.lateral = this.initialised ? damp(this.lateral, targetLateral, 4, dt) : targetLateral;
+    // Never further sideways than there is room right now.
+    if (this.lateral !== 0) this.lateral = Math.sign(this.lateral) * Math.min(Math.abs(this.lateral), sideRoom(Math.sign(this.lateral)));
+    const pivot = this.tmpPivot.copy(this.focus).addScaledVector(right, this.lateral);
+    const free = cast(pitch, pivot);
     const targetDist = clamp(free - 0.1, MIN_ARM, this.zoneDist);
     if (!this.initialised || targetDist < this.currentDist) this.currentDist = targetDist;
     else this.currentDist = damp(this.currentDist, targetDist, 4, dt);
     this.initialised = true;
-    this.camera.position.copy(this.focus).addScaledVector(dir, this.currentDist);
+    this.camera.position.copy(pivot).addScaledVector(dir, this.currentDist);
 
     // --- aim: above the pivot and a little ahead of travel
     const ahead = this.velocity.clone().multiplyScalar(clamp(v / 5, 0, 1) * 0.14);
     this.lookAhead.lerp(ahead, 1 - Math.exp(-4 * dt));
     const lift = FRAME_LIFT * clamp(this.currentDist / CAMERA_DEFAULTS.distance, 0.25, 1);
-    this.lookPoint.copy(this.focus).add(this.lookAhead);
+    this.lookPoint.copy(this.focus).add(this.lookAhead).addScaledVector(right, this.lateral);
     this.lookPoint.y += lift;
     this.camera.lookAt(this.lookPoint);
     this.applyShake();
@@ -307,6 +331,10 @@ export class ThirdPersonCamera {
   }
 
   private readonly tmpDir = new THREE.Vector3();
+  private readonly tmpRight = new THREE.Vector3();
+  private readonly tmpPivot = new THREE.Vector3();
+  /** Sideways pivot shift (over a shoulder) when the arm is pinned behind Mara; 0 in the open. */
+  private lateral = 0;
   /** Pitch the arm is lowered by to see under an obstruction (eased; 0 in the open). */
   private armOffset = 0;
 

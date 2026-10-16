@@ -290,6 +290,9 @@ export function buildTurbineHall(scene: THREE.Scene, physics: Physics, m: Materi
       fly.castShadow = true;
       fly.name = 'flywheel';
       engine.add(fly);
+      // The flywheels are visual only for the player, but the camera must not slip behind them
+      // (riding the collar, they filled the frame).
+      physics.box(new THREE.Vector3(side * (HALL.columnR + 0.5), y, -0.8), new THREE.Vector3(0.3, r, r), undefined, { blocksPlayer: false });
     }
     // Rings of amber service lamps up the column: the engine reads as lit, working machinery.
     const lampPos: THREE.Matrix4[] = [];
