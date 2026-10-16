@@ -54,7 +54,11 @@ npm run preview      # serves dist/ at http://localhost:4173
 | Move | W A S D or arrow keys (physical keys: Z Q S D on AZERTY) | Left stick |
 | Look | Mouse (click the view to capture; drag also works) | Right stick |
 | Jump | Space (hold for a higher jump) | A / Cross |
-| Interact | E (also F, Enter) | X / Square (B / Circle also works) |
+| Dash (a roll); hold to sprint | Shift | B / Circle |
+| Double jump, air dash (after finding the steam kicker) | Space / Shift in the air | A / B in the air |
+| Ground pound (after the kicker) | Ctrl in the air | RB or RT |
+| Grind | Land on a pipe (the feed pipe from the lookout); Space jumps off | A jumps off |
+| Interact | E (also F, Enter) | X / Square |
 | Recenter camera | C or middle mouse | R3 / L3 |
 | Pause / settings | Esc or P | Start / Options |
 | Skip a cinematic beat | Space or E (prompt bottom right) | A / Cross |

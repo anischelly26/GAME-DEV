@@ -748,7 +748,10 @@ export class QuietCellLevel implements Level {
       radius: 2.2,
       prompt: () => (this.logic.bypassOpen ? 'Close bypass valve' : 'Open bypass valve'),
       interact: () => {
-        player.lockFor(0.7, a.valve);
+        // The valve sits low on the pipe: Mara kneels to turn it.
+        player.lockFor(1.15, a.valve);
+        this.ctx.avatar.cinematic('fix', 1.5, 0.3, false, 7);
+        this.later(1.0, () => this.ctx.avatar.releaseCinematic('fix'));
         const open = this.logic.toggleValve();
         this.hatch.setValve(open);
         events.emit('sfx', { name: open ? 'valveOpen' : 'valveClose', x: a.valve.x, y: a.valve.y, z: a.valve.z });

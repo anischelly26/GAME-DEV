@@ -72,10 +72,12 @@ const CONTROLS_HTML = `
     <dt>W A S D / Arrows</dt><dd>Move (physical keys: Z Q S D on AZERTY)</dd>
     <dt>Mouse</dt><dd>Look (click the game to capture the mouse; drag also works)</dd>
     <dt>Space</dt><dd>Jump (hold for higher)</dd>
+    <dt>Shift</dt><dd>Dash (a roll); hold after it to sprint</dd>
     <dt>E / F</dt><dd>Interact</dd>
     <dt>C / Middle mouse</dt><dd>Recenter camera behind Mara</dd>
     <dt>Esc / P</dt><dd>Pause</dd>
-    <dt>Gamepad</dt><dd>Left stick move, right stick look, A jump, X interact, R3 recenter, Start pause</dd>
+    <dt>Later</dt><dd>A steam kicker: Space again in the air, Shift in the air, Ctrl to slam down. Land on pipes to ride them.</dd>
+    <dt>Gamepad</dt><dd>Left stick move, right stick look, A jump, B dash, X interact, RB slam, R3 recenter, Start pause</dd>
   </dl>`;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, parent: HTMLElement, html = ''): HTMLElementTagNameMap[K] {

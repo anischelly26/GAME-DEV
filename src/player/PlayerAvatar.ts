@@ -82,7 +82,10 @@ export class PlayerAvatar {
   private landT = -1;
   private landWeight = 0;
   private landDur = 0.35;
-  private oneShot: { name: string; weight: number; target: number } | null = null;
+  private oneShot: { name: string; weight: number; target: number; rate?: number } | null = null;
+  /** Seconds standing still (an idle fidget plays after a while), and time left on one. */
+  private idleT = 0;
+  private fidgetT = 0;
   private lastKnockbacks = 0;
   private lastMode: AvatarState['mode'] = 'move';
   private lastReach = 0;
@@ -330,15 +333,29 @@ export class PlayerAvatar {
    * Story beats: play a clip on the whole body (timeScale 0 holds a pose, e.g. lying asleep).
    * `loop` repeats it until the next clip or `endCinematic` (sitting at the bench).
    */
-  cinematic(name: string, timeScale = 1, startAt = 0, loop = false): void {
+  cinematic(name: string, timeScale = 1, startAt = 0, loop = false, fadeIn?: number): void {
     this.play(name, timeScale, startAt);
     if (this.oneShot && timeScale === 0) this.oneShot.weight = 1;
+    if (this.oneShot && fadeIn !== undefined) this.oneShot.rate = fadeIn;
     const a = this.actions.get(name);
     if (a && loop) {
       a.setLoop(THREE.LoopRepeat, Infinity);
       a.clampWhenFinished = false;
       if (this.oneShot) this.oneShot.weight = 1;
     }
+  }
+
+  /** Arms folded for a few seconds, eased in (the next one comes after a longer wait). */
+  private startFidget(): void {
+    this.play('foldArms', 1, 0);
+    if (this.oneShot) this.oneShot.rate = 4;
+    this.fidgetT = 4;
+    this.idleT = -6;
+  }
+
+  /** Let a story clip fade out (kneeling at the valve ends when the turn is done). */
+  releaseCinematic(name: string): void {
+    if (this.oneShot?.name === name) this.oneShot.target = 0;
   }
 
   /** End any story clip at once and return to the normal locomotion pose. */
@@ -416,7 +433,7 @@ export class PlayerAvatar {
       this.lastKnockbacks = s.knockbacks ?? 0;
       this.play('knockback', 1.3);
     }
-    if (s.reach > 0 && this.lastReach <= 0 && mode === 'move' && s.grounded) this.play('interact', 1.7, 0.15);
+    if (s.reach > 0 && this.lastReach <= 0 && mode === 'move' && s.grounded && this.oneShot?.name !== 'fix') this.play('interact', 1.7, 0.15);
     this.lastReach = s.reach;
 
     // --- Movement 2.0: the steam kicker's moves, dash and sprint
@@ -435,13 +452,21 @@ export class PlayerAvatar {
       if (this.canisterGauge) this.canisterGauge.emissiveIntensity = 0.1 + this.gaugeLevel * 1.1;
     }
 
+    // --- idle fidget: after a while standing still she folds her arms; any move ends it
+    const still = mode === 'move' && s.grounded && s.speed < 0.15 && (!this.oneShot || this.oneShot.name === 'foldArms');
+    this.idleT = still ? this.idleT + dt : 0;
+    if (this.oneShot?.name === 'foldArms') {
+      this.fidgetT -= dt;
+      if (!still || this.fidgetT <= 0) this.oneShot.target = 0;
+    } else if (this.idleT > 8 && !this.oneShot && this.actions.has('foldArms')) this.startFidget();
+
     // --- one-shot weight: fade in quickly, out when finished or released
     if (this.oneShot) {
       const a = this.actions.get(this.oneShot.name)!;
       const finished = a.loop !== THREE.LoopRepeat && a.time >= a.getClip().duration - 1e-3 && a.timeScale !== 0;
       if (finished && mode === 'move') this.oneShot.target = 0;
       if (this.oneShot.name === 'jumpStart' && this.airTime > 0.12 && (s.verticalSpeed < 0 || s.grounded)) this.oneShot.target = 0;
-      this.oneShot.weight = damp(this.oneShot.weight, this.oneShot.target, this.oneShot.target > 0 ? 20 : 9, dt);
+      this.oneShot.weight = damp(this.oneShot.weight, this.oneShot.target, this.oneShot.target > 0 ? (this.oneShot.rate ?? 20) : 9, dt);
       if (this.oneShot.target === 0 && this.oneShot.weight < 0.02) {
         a.stop();
         a.setEffectiveWeight(0);
