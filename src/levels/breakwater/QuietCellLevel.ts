@@ -94,7 +94,11 @@ export class QuietCellLevel implements Level {
       const d = z1 - z0;
       const c = v3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
       batch.add(worldBox(w, h, d, 3), mat, new THREE.Matrix4().makeTranslation(c.x, c.y, c.z), { tint: opts.tint ?? tint(), damp: opts.damp });
-      if (opts.collide ?? true) physics.box(c, v3(w / 2, h / 2, d / 2));
+      if (opts.collide ?? true) {
+        const col = physics.box(c, v3(w / 2, h / 2, d / 2));
+        if (mat === m.wood) physics.setSurface(col, 'wood');
+        else if (mat === m.iron || mat === m.ironDark || mat === m.grate) physics.setSurface(col, 'metal');
+      }
     };
 
     // ------------------------------------------------------------ Mara's cell
@@ -366,7 +370,9 @@ export class QuietCellLevel implements Level {
         }
       }
       // At a run, Space vaults it; from a walk it is a small jump.
-      ctx.traversal.markVaultable(physics.box(v3(0, gy, g.z), v3((S.x1 - S.x0) / 2, g.height / 2, g.depth / 2)));
+      const girder = physics.box(v3(0, gy, g.z), v3((S.x1 - S.x0) / 2, g.height / 2, g.depth / 2));
+      ctx.traversal.markVaultable(girder);
+      physics.setSurface(girder, 'metal');
     }
     // Railing along the channel's near lip, open only at the broken catwalk (S.crossing).
     {
@@ -812,6 +818,7 @@ export class QuietCellLevel implements Level {
       return;
     }
     const { dialogue, progression } = this.ctx;
+    this.ctx.events.emit('music', { music: 'cell', ambience: 'tomb' });
     progression.setObjective('Open the service hatch');
     this.later(1.2, () => dialogue.say('Horn', 'Pressure cycle in progress. All cells remain sealed.'));
     this.later(4.2, () => dialogue.say('Mara', 'Fresh copper on that line. Who repairs a pipe in a cell?'));
@@ -836,6 +843,7 @@ export class QuietCellLevel implements Level {
         at: 0,
         run: () => {
           this.ctx.setControl(false);
+          events.emit('music', { music: 'workshop', ambience: null });
           progression.setObjective('');
           // Asleep on the floor between the bunk and the hatch: the first frame of getting up.
           avatar.cinematic('wake', 0);
@@ -892,6 +900,7 @@ export class QuietCellLevel implements Level {
           camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
           this.ctx.setControl(true);
           progression.setObjective('Open the service hatch');
+          events.emit('music', { music: 'cell', ambience: 'tomb' });
         },
       },
       { at: 31.2, run: () => dialogue.say('Mara', 'Fresh copper on that line. Who repairs a pipe in a cell?') },
@@ -943,6 +952,7 @@ export class QuietCellLevel implements Level {
         at: tLights + 0.9,
         run: () => {
           progression.set('reveal.done');
+          events.emit('music', { music: 'hall', ambience: 'waves' });
           camera.clearShot();
           camera.snapBehind(this.ctx.player.feet, this.ctx.player.facing, 0.3);
           this.ctx.setControl(true);
@@ -1002,6 +1012,7 @@ export class QuietCellLevel implements Level {
     if (progression.has('engine.finished')) return;
     progression.set('engine.finished');
     progression.setObjective('');
+    events.emit('music', { music: 'ending', ambience: 'waves' });
     const ex = this.engine.exitCenter;
     const out = v3(Math.sin(sideAngle10), 0, Math.cos(sideAngle10));
     const toHangar = this.hangar.focus.clone().sub(ex).setY(0).normalize();
@@ -1257,6 +1268,8 @@ export class QuietCellLevel implements Level {
 
   applyCheckpointState(id: string): void {
     const { progression } = this.ctx;
+    const inHall = !['cell', 'landing', 'lookout'].includes(id) || progression.has('reveal.done');
+    this.ctx.events.emit('music', inHall ? { music: 'hall', ambience: 'waves' } : { music: 'cell', ambience: 'tomb' });
     if (id === 'landing' || id === 'lookout') {
       if (this.logic.hatch !== 'latched') {
         this.logic.bypassOpen = false;

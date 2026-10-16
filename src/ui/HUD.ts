@@ -13,6 +13,8 @@ export interface Settings {
   /** How much the camera follows on its own: never in the air, climbing or interacting. */
   cameraAssist: 'off' | 'weak' | 'strong';
   volume: number; // 0..1
+  /** Music level, 0..1, under the master volume. */
+  music: number;
   /** 'auto' picks Low on integrated and mobile GPUs, High otherwise (see RenderPipeline). */
   quality: 'auto' | 'high' | 'low';
   version?: number;
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cameraShake: true,
   cameraAssist: 'weak',
   volume: 0.8,
+  music: 0.7,
   quality: 'auto',
   version: SETTINGS_VERSION,
 };
@@ -197,6 +200,7 @@ export class HUD {
         <label>Camera shake <input type="checkbox" ${s.cameraShake ? 'checked' : ''} data-s="cameraShake"></label>
         <div class="group">Sound and graphics</div>
         <label>Volume <input type="range" min="0" max="1" step="0.05" value="${s.volume}" data-s="volume"></label>
+        <label>Music <input type="range" min="0" max="1" step="0.05" value="${s.music}" data-s="music"></label>
         <label>Graphics <select data-s="quality"><option value="auto" ${s.quality === 'auto' ? 'selected' : ''}>Auto (${this.autoQualityLabel})</option><option value="high" ${s.quality === 'high' ? 'selected' : ''}>High (dedicated graphics card)</option><option value="low" ${s.quality === 'low' ? 'selected' : ''}>Low (faster)</option></select></label>
       </div>
       ${CONTROLS_HTML}`;

@@ -33,9 +33,22 @@ export interface ColliderOptions {
 
 const tmpQuat = new THREE.Quaternion();
 
+/** What a walkable surface sounds like underfoot. */
+export type Surface = 'stone' | 'metal' | 'wood';
+
 /** Thin wrapper around the Rapier world with level-building helpers. */
 export class Physics {
   readonly world: RAPIER.World;
+  /** Surface of each collider (footsteps, landings); unlisted colliders are stone. */
+  private readonly surfaces = new Map<number, Surface>();
+
+  setSurface(collider: RAPIER.Collider | null | undefined, surface: Surface): void {
+    if (collider) this.surfaces.set(collider.handle, surface);
+  }
+
+  surfaceOf(handle: number | null | undefined): Surface {
+    return (handle !== null && handle !== undefined && this.surfaces.get(handle)) || 'stone';
+  }
 
   static async create(): Promise<Physics> {
     await RAPIER.init();

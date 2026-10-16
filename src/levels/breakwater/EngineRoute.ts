@@ -117,9 +117,13 @@ export class EngineRoute {
     root.name = 'engine-route';
     scene.add(root);
     const rng = mulberry32(4242);
+    const metals: THREE.Material[] = [m.iron, m.ironDark, m.grate, m.brass];
     const solidBox = (center: THREE.Vector3, size: THREE.Vector3, q: THREE.Quaternion, mat: THREE.Material, opts: { blocksCamera?: boolean; uv?: number } = {}) => {
       batch.add(worldBox(size.x, size.y, size.z, opts.uv ?? 2), mat, new THREE.Matrix4().compose(center, q, new THREE.Vector3(1, 1, 1)));
-      return physics.box(center, size.clone().multiplyScalar(0.5), q, { blocksCamera: opts.blocksCamera });
+      const c = physics.box(center, size.clone().multiplyScalar(0.5), q, { blocksCamera: opts.blocksCamera });
+      if (mat === m.wood) physics.setSurface(c, 'wood');
+      else if (metals.includes(mat)) physics.setSurface(c, 'metal');
+      return c;
     };
     const walkwayPiece = (k: number, f0: number, f1: number, tierY: number, withRail = true) => {
       const poly: Array<[number, number]> = [sideFraction(k, HALL.aIn, f0), sideFraction(k, HALL.aWall + 0.05, f0), sideFraction(k, HALL.aWall + 0.05, f1), sideFraction(k, HALL.aIn, f1)];
@@ -264,7 +268,10 @@ export class EngineRoute {
       this.shuttle = new PistonPlatform(physics, m, start, 0, { w: 2.0, d: 2.0 }, { rest: 2.6, travel: 3.4, phase: 0 }, Math.atan2(travel.x, travel.z) + Math.PI / 2);
       this.shuttle.setTravel(travel);
       root.add(this.shuttle.group);
-      for (const c of this.shuttle.colliders) player.platforms.set(c.handle, this.shuttle);
+      for (const c of this.shuttle.colliders) {
+        player.platforms.set(c.handle, this.shuttle);
+        physics.setSurface(c, 'metal');
+      }
       // The horizontal piston housing it slides out of.
       const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 2.2, 12), m.brass);
       housing.position.copy(sidePos(5, a, uAt(a, 0.3) - 0.3, T1 - 0.45));
@@ -296,7 +303,10 @@ export class EngineRoute {
     }
     this.collar = new EngineCollar(physics, m, HALL.columnR, collarWidth, thE, T1, T3, { centre: T1, amplitude: 2.6, period: 8.4 });
     scene.add(this.collar.group);
-    for (const c of this.collar.colliders) player.platforms.set(c.handle, this.collar);
+    for (const c of this.collar.colliders) {
+      player.platforms.set(c.handle, this.collar);
+      physics.setSurface(c, 'metal');
+    }
     // Don't close the boarding gap on someone standing in it.
     this.collar.canCloseGap = () => {
       const f = player.feet;
@@ -503,7 +513,10 @@ export class EngineRoute {
       this.reliefSteam = new SteamEmitter(base.clone().add(v3(0, 0.1, 0)), v3(0, 1.4, 0), 0, new THREE.Color('#aebcc0'));
       this.reliefSteam.peakOpacity = 0.14;
       root.add(this.reliefSteam.group);
-      for (const c of this.breachPiston.colliders) player.platforms.set(c.handle, this.breachPiston);
+      for (const c of this.breachPiston.colliders) {
+        player.platforms.set(c.handle, this.breachPiston);
+        physics.setSurface(c, 'metal');
+      }
       // Exit gantry bolted to the broken wall, jutting out through the breach over the sea.
       const k2 = 10;
       const eTop = T3 + 2.4;

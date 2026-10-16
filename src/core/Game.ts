@@ -197,6 +197,17 @@ export class Game {
     } else {
       this.state = 'title';
       this.hud.showTitle(() => this.begin());
+      // Browsers only allow sound after a click or key: the title theme starts on the first one.
+      const wake = () => {
+        this.audio.unlock();
+        this.audio.setVolume(this.hud.settings.volume);
+        this.audio.setMusicVolume(this.hud.settings.music);
+        if (this.state === 'title') this.audio.setMusic('title', 1.5);
+        removeEventListener('pointerdown', wake);
+        removeEventListener('keydown', wake);
+      };
+      addEventListener('pointerdown', wake);
+      addEventListener('keydown', wake);
     }
   }
 
@@ -271,9 +282,16 @@ export class Game {
       this.avatar.onJump();
       this.audio.play('jump', this.player.feet, 0.8);
     });
+    this.events.on('music', (m) => {
+      if (m.music !== undefined) this.levelBeds.music = m.music;
+      if (m.ambience !== undefined) this.levelBeds.ambience = m.ambience;
+      // On the title screen the title theme plays; the level's beds start with play.
+      if (this.state !== 'title') this.applyLevelBeds();
+    });
     this.events.on('land', ({ impact }) => {
       this.avatar.onLand(impact);
-      if (impact > 3) this.audio.play('land', this.player.feet, Math.min(1, impact / 10));
+      const surface = this.physics.surfaceOf(this.player.groundCollider?.handle);
+      if (impact > 3) this.audio.play(impact > 12 ? 'land:heavy' : surface === 'metal' ? 'land:metal' : 'land', this.player.feet, Math.min(1, impact / 10));
       if (impact > 8) this.camera.shake(Math.min(0.45, 0.12 + (impact - 8) / 14));
       if (impact > 9 && this.player.pound === 'none') this.effects.burst(this.player.feet, { count: 6, color: '#9d907e', speed: 1.2, spread: 2.2, life: 0.6, size: [0.2, 0.7], opacity: 0.35 });
     });
@@ -312,7 +330,7 @@ export class Game {
       const d = e.x !== undefined ? Math.hypot(e.x - this.player.feet.x, (e.y ?? 0) - this.player.feet.y, (e.z ?? 0) - this.player.feet.z) : 0;
       this.camera.shake(weight * Math.max(0, 1 - d / 12));
     });
-    this.avatar.onFootstep = (speed) => this.audio.play('footstep', this.player.feet, Math.min(1, speed / 6) * 0.8);
+    this.avatar.onFootstep = (speed) => this.audio.play(`footstep:${this.physics.surfaceOf(this.player.groundCollider?.handle)}`, this.player.feet, Math.min(1, speed / 6) * 0.8);
 
     this.input.onPauseRequest = () => {
       if (this.hud.documentOpen) this.hud.hideDocument();
@@ -334,9 +352,19 @@ export class Game {
 
   // ---------------------------------------------------------------- state changes
 
+  /** The music and ambience the level has asked for (it may ask before the game listens). */
+  private readonly levelBeds: { music: string | null; ambience: string | null } = { music: null, ambience: null };
+
+  private applyLevelBeds(): void {
+    this.audio.setMusic(this.levelBeds.music);
+    this.audio.setAmbience(this.levelBeds.ambience);
+  }
+
   private begin(): void {
     this.audio.unlock();
     this.audio.setVolume(this.hud.settings.volume);
+    this.audio.setMusicVolume(this.hud.settings.music);
+    this.applyLevelBeds();
     this.state = 'playing';
     this.input.setGameplayActive(true);
     this.input.requestPointerLock();
@@ -386,6 +414,7 @@ export class Game {
     this.camera.settings.shake = s.cameraShake;
     this.camera.settings.fovHorizontal = s.fov;
     this.audio.setVolume(s.volume);
+    this.audio.setMusicVolume(s.music);
     if (!this.options.quality && !this.options.test) this.setQuality(s.quality === 'auto' ? this.pipeline.recommendedQuality : s.quality);
   }
 
