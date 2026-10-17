@@ -380,7 +380,7 @@ export class WardersGreenLevel implements Level {
           run: () =>
             this.ctx.complete({
               title: "The Warders' Green",
-              body: 'Mara is over the sea wall. The old hangar waits at the end of the causeway, and out on Knoll Rock a lighthouse is burning that should have been dark for years. Next: Chapter Three, <i>The Low Tide</i> (in development).',
+              body: 'Mara is over the sea wall. The old hangar waits at the end of the causeway, and out on Knoll Rock a lighthouse is burning that should have been dark for years. Next: Chapter Three, <i>The Low Tide</i>.',
               reward: true,
             }),
         },

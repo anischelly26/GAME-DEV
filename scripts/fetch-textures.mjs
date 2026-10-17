@@ -23,6 +23,10 @@ export const SURFACES = {
   shingle: 'pebbles',
   slate: 'roof_slates_02',
   mossyStone: 'mossy_stone_wall',
+  // Chapter Three, the Low Tide: wet sand on the flats and bars.
+  sand: 'coast_sand_04',
+  // Natural rock for boulders, cliffs and the lagoon's arms (the stone sets are walls).
+  rock: 'dark_rock',
 };
 
 const api = async (path) => {

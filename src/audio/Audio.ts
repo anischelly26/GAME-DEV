@@ -579,6 +579,10 @@ export class AudioSystem {
         this.tone('square', 880, 1320, 0.18, 0.05, o(), 0.004, 0.2);
         this.burst('bandpass', 3200, 1.2, 0.7, 0.04, o(), 0.02, 0.05);
         break;
+      case 'swimStroke':
+        // A hand into the water: a short wet slap.
+        this.burst('bandpass', 1400, 0.9, 0.18, 0.05 * (volume ?? 1), o(), 0.004, 0, 700);
+        break;
       case 'watchHear':
         // It heard something: one questioning pip, rising.
         this.tone('square', 520, 760, 0.22, 0.035, o(), 0.004);

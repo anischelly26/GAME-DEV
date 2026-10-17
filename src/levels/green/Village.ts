@@ -92,7 +92,7 @@ export function buildVillage(ctx: LevelContext): Village {
 
   // ------------------------------------------------------------ cliffs round the spur
   const cliffRock = (x0: number, x1: number, z0: number, z1: number, yTop: number) => {
-    solid(x0, x1, G.seaY - 3, yTop, z0, z1, m.stoneDark, { tint: tint(0.75, 0.1) });
+    solid(x0, x1, G.seaY - 3, yTop, z0, z1, m.rock, { tint: tint(0.85, 0.1), uv: 2 });
     // Boulders at the foot.
     const n = Math.ceil((Math.abs(x1 - x0) + Math.abs(z1 - z0)) / 2.2);
     for (let i = 0; i < n; i++) {
@@ -100,7 +100,7 @@ export function buildVillage(ctx: LevelContext): Village {
       const x = x0 + (x1 - x0) * t;
       const z = z0 + (z1 - z0) * t;
       const s = 0.8 + rng() * 1.4;
-      batch.add(boxProjectUVs(bushGeometry(900 + i + Math.round(x * 7 + z * 3), 2, false), 1.2), m.stoneDark, trs(x + (rng() - 0.5) * 2, G.seaY + rng() * 0.6, z + (rng() - 0.5) * 2, rng() * 6, rng(), rng(), s), { tint: tint(0.6, 0.12) });
+      batch.add(boxProjectUVs(bushGeometry(900 + i + Math.round(x * 7 + z * 3), 2, false), 1.2), m.rock, trs(x + (rng() - 0.5) * 2, G.seaY + rng() * 0.6, z + (rng() - 0.5) * 2, rng() * 6, rng(), rng(), s), { tint: tint(0.6, 0.12) });
     }
   };
   cliffRock(G.land.x0 - 2, G.land.x0, G.lane.z0, G.yard.z1 + 6, 0);
@@ -130,7 +130,7 @@ export function buildVillage(ctx: LevelContext): Village {
       const y = groundY(x, z);
       if (y === null || Math.abs(x) < 2.2) continue;
       const s = 0.15 + rng() * rng() * 0.9;
-      batch.add(boxProjectUVs(bushGeometry(400 + i, 2, true), 1.2), m.stoneDark, trs(x, y - s * 0.3, z, rng() * 6, 0, 0, s), { tint: tint(0.7, 0.15) });
+      batch.add(boxProjectUVs(bushGeometry(400 + i, 2, true), 1.2), m.rock, trs(x, y - s * 0.3, z, rng() * 6, 0, 0, s), { tint: tint(0.7, 0.15) });
     }
     // The waterline: too cold to wade out.
     fence(C.x0, C.x1, G.seaY - 1, 3, C.z0 + 3.2, C.z0 + 3.6);
@@ -358,7 +358,7 @@ export function buildVillage(ctx: LevelContext): Village {
     const x = (rng() - 0.5) * 6;
     const z = B.z1 - 0.8 - rng() * 2.2;
     const s = 0.2 + rng() * 0.35;
-    batch.add(boxProjectUVs(bushGeometry(500 + i, 2, true), 1.2), m.stone, trs(x, B.floorY, z, rng() * 6, 0, 0, s), { tint: tint(0.7) });
+    batch.add(boxProjectUVs(bushGeometry(500 + i, 2, true), 1.2), m.rock, trs(x, B.floorY, z, rng() * 6, 0, 0, s), { tint: tint(0.7) });
   }
   // Broken ends of the high wall at the gap.
   for (const s of [-1, 1]) {

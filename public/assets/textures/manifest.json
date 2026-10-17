@@ -142,5 +142,32 @@
     ],
     "url": "https://polyhaven.com/a/mossy_stone_wall",
     "licence": "CC0"
+  },
+  "sand": {
+    "id": "coast_sand_04",
+    "name": "Coast Sand 04",
+    "authors": [
+      "Rob Tuytel",
+      "Dario Barresi"
+    ],
+    "sizeMetres": [
+      3.940000057220459,
+      3.940000057220459
+    ],
+    "url": "https://polyhaven.com/a/coast_sand_04",
+    "licence": "CC0"
+  },
+  "rock": {
+    "id": "dark_rock",
+    "name": "Dark Rock",
+    "authors": [
+      "Amal Kumar"
+    ],
+    "sizeMetres": [
+      2.4211976528167725,
+      2.421199083328247
+    ],
+    "url": "https://polyhaven.com/a/dark_rock",
+    "licence": "CC0"
   }
 }
