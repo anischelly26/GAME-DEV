@@ -1,7 +1,7 @@
 # Movement 2.0: the overhaul's movement plan
 
-Status: **plan** (2026-10-17). Phase B items are marked with what was built and how it was checked;
-everything else is a proposal. The name "Movement 2.0" was first used for the steam kicker set
+Status (2026-10-17): **Phase B built** on `claude/game-feel`; each B item below ends with what was
+built and how it was checked. Phases after B are proposals. Nobody has played any of it yet. The name "Movement 2.0" was first used for the steam kicker set
 (sprint, dash, double jump, air dash, ground pound; `MOVEMENT` in `src/player/movement.ts`). This
 document builds on that set; it does not replace it.
 
@@ -50,10 +50,15 @@ Weights from vertical speed `vy` (m/s) and time airborne, blended every frame (n
 | Rise | `vy > +1.5` | `jumpLoop` (arms up, knees bent), body stretched (B2) |
 | Apex | `-1.5 ≤ vy ≤ +1.5` | the same, a small tuck (knees up) |
 | Fall | `vy < -1.5` | arms out and up from the shoulders, legs reaching down for the ground |
-| Long fall | falling for more than 0.45 s with `vy < -9` | the arms windmill, the face turns worried |
+| Long fall | falling faster than 9 m/s, from about 3.5 m down (full by about 6 m) | the arms windmill, the face turns worried |
 
 The blend is a pure function (`airPose` in `src/player/feel.ts`) with unit tests, so the thresholds
 can be tuned without touching the avatar.
+
+*Built.* As specified, except that the long-fall threshold moved earlier after the first
+screenshots (a 10 m drop barely reached the first version). Checked by `feel.test.ts` and
+`feel.spec.ts` (a standing jump shows the falling arms and never windmills; the 10 m drop
+windmills above 0.5).
 
 ### B2. Squash and stretch
 
@@ -70,17 +75,25 @@ spring, keeping volume (`width = 1/sqrt(height)`):
 The spring (`SquashSpring` in `src/player/feel.ts`) is unit-tested: settles, is clamped, keeps
 volume, does nothing for small impacts.
 
+*Built.* Measured in the lab, frame by frame: a standing jump stretches to 1.093 two frames after
+take-off and squashes to 0.904 on landing; the 10 m drop squashes to 0.815.
+
 ### B3. Landing tiers
 
 | Impact (m/s) | Sound | Camera | Body | Effects |
 | --- | --- | --- | --- | --- |
 | < 3 | none | none | none | none |
 | 3 to 8 | `land` by material | none | small squash, `land` overlay | none |
-| 8 to 12 | `land` by material | small shake | squash, `land` overlay | dust ring |
-| > 12 | `land:heavy` | shake | big squash, surprised face | bigger dust |
+| 8 to 12 | `land` by material | small shake | squash, `land` overlay | dust (over 9 m/s) |
+| > 12 | `land:heavy` | shake | big squash, surprised face | dust |
 
 Control is never held back by a landing (a pillar: "movement that feels good before it gets
 hard").
+
+*Built.* The sounds, shake and dust thresholds were already in the game; what is new is the squash
+and the material. A landing used to sound like stone everywhere: the controller's ground probe runs
+before each step's move, so at the moment of landing it had not seen the ground yet. It now probes
+again at the landing (which also gives a ground pound the collider it landed on).
 
 ### B4. New CC0 clips
 
@@ -96,6 +109,12 @@ source of every clip Mara has):
 | `hitHead` | UAL1 `Hit_Head` (0.43 s) | bumping her head on a ceiling mid-jump |
 | `talk` | UAL1 `Idle_Talking_Loop` (2.93 s) | Phase C scenes (cheap to add now) |
 
+*Built.* `mara.glb` rebuilt with the five clips (7.44 → 7.98 MB, 29 clips). The crawl clip turns
+out to be upright, so while stroking the body is still laid forward by the avatar (1.2 rad, as
+before); treading water sits 0.12 m lower than the float height, chest at the waterline. The
+head bump comes from a new `bump` event in the controller (rising faster than 2.5 m/s into a
+ceiling). Checked by screenshots (`scripts/capture-feel.mjs`) and `feel.spec.ts`.
+
 ### B5. Camera
 
 - **Fall framing:** after 0.3 s of falling, the aim point sinks with fall speed (up to 1.1 m) and
@@ -105,6 +124,11 @@ source of every clip Mara has):
   widens with speed. Zones still win where a level defines one.
 - **Unchanged:** mouse and stick input are never smoothed; assist rules; the spring arm never goes
   through geometry; the rising-jump pivot stays slow (the camera does not bob with every hop).
+
+*Built.* `MODE_FRAMING` and `FALL_LOOK` in `ThirdPersonCamera.ts`. Unit tests: an ordinary jump
+never moves the aim (to 1e-6 rad); a one-second fall looks 0.199 rad further down, eased (no frame
+turns more than 0.02 rad); swimming frames closer and lower, the swing and slide further back, the
+ladder unchanged. In the lab, the 10 m drop tips the view more than 0.1 rad down (`feel.spec.ts`).
 
 ### B6. Footsteps by material
 
@@ -117,6 +141,11 @@ Landings use the material too.
 Samples: Kenney Impact Sounds (CC0, already used) has grass and snow footsteps; Kenney RPG Audio
 (CC0, already used) has dirt-and-gravel footsteps. Sand uses the snow steps pitched down. All
 recorded in [ASSETS.md](ASSETS.md).
+
+*Built.* Chapter Two's cove, beach and playground floor are tagged gravel, its painted slabs answer
+`surfaceAt`; Chapter Three's seabed is tagged sand. Checked by `feel.spec.ts` (all seven lab pads,
+four places in Chapter Two, two in Chapter Three). The gravel samples have not been listened to by
+a person (see ASSETS.md).
 
 ### B7. The movement lab (validation route)
 
@@ -134,6 +163,12 @@ A small test level, `?lab=1` (not in the chapter list, no story), for tuning and
 | Pool | swimming in and out |
 
 One e2e test runs a scripted lap with the real input pipeline and checks each station's result.
+
+*Built,* with two changes: the vault station has 0.5, 0.9 and a 1.2 m block (a climb, not a vault),
+and a low beam was added for the head bump. Not in the lab yet: a swing, a slide, a grind pipe.
+The scripted lap (`feel.spec.ts`) runs the four gaps (the 3.3 m one with the double jump: a plain
+running jump from the autopilot's take-off mark falls short), two vaults, the ramp tower and its
+10 m drop, with no falls; the pad, beam, plate and pool checks place Mara directly.
 
 ## Phase F: new mechanics (proposal, gated)
 

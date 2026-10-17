@@ -19,7 +19,7 @@ steam and machinery.
 | --- | --- | --- | --- | --- |
 | Universal Base Characters (Standard): Superhero Female head, face, eyes and brows; Buns hairstyle | [quaternius.itch.io/universal-base-characters](https://quaternius.itch.io/universal-base-characters), downloaded 2026-10-15 | Quaternius | CC0 1.0 (stated on the itch.io page) | `public/assets/mara/mara.glb` |
 | Modular Character Outfits – Fantasy (Standard): Female Ranger outfit (without hood and pauldrons, recoloured from green to ochre) | [quaternius.itch.io/modular-character-outfits-fantasy](https://quaternius.itch.io/modular-character-outfits-fantasy), downloaded 2026-10-15 | Quaternius | CC0 1.0 (stated on the itch.io page) | `public/assets/mara/mara.glb` |
-| Universal Animation Library (Standard): idle, walk, jog, sprint, jump start/loop/land, interact, roll, push | [opengameart.org/content/universal-animation-library](https://opengameart.org/content/universal-animation-library) | Quaternius | CC0 1.0 (`License.txt` in the pack) | Retargeted into `mara.glb` |
+| Universal Animation Library (Standard): idle, walk, jog, sprint, jump start/loop/land, interact, roll, push; since the game-feel pass (2026-10-17) also swimming forward, treading water, driving (the skiff), a hit to the head, talking | [opengameart.org/content/universal-animation-library](https://opengameart.org/content/universal-animation-library) | Quaternius | CC0 1.0 (`License.txt` in the pack) | Retargeted into `mara.glb` |
 | Universal Animation Library 2 (Standard): climb up, ninja jump (vault), knockback, rail idle, lying down to standing, shaking the head (Chapter One opening) | [opengameart.org/content/universal-animation-library-2](https://opengameart.org/content/universal-animation-library-2) | Quaternius | CC0 1.0 (`License.txt` in the pack) | Retargeted into `mara.glb` |
 | Castle Wall Slates | [polyhaven.com/a/castle_wall_slates](https://polyhaven.com/a/castle_wall_slates) | Rob Tuytel | CC0 | Walls (`stone`) |
 | Old Stone Wall | [polyhaven.com/a/old_stone_wall](https://polyhaven.com/a/old_stone_wall) | Charlotte Baglioni | CC0 | Dark structural stone (`stoneDark`) |
@@ -63,8 +63,8 @@ each source page on 2026-10-16.
 
 | Asset | Source | Author | Licence | Used as |
 | --- | --- | --- | --- | --- |
-| Impact Sounds | [kenney.nl/assets/impact-sounds](https://kenney.nl/assets/impact-sounds) | Kenney | CC0 (page: "License: Creative Commons CC0"; `License.txt`) | Footsteps (concrete, wood, metal plate), landings, metal and wood impacts, the ground pound |
-| RPG Audio | [kenney.nl/assets/rpg-audio](https://kenney.nl/assets/rpg-audio) | Kenney | CC0 (as above) | Cloth (jump, roll, climb), belt and leather (picking up the kit), creaks (valves), latch and click (levers) |
+| Impact Sounds | [kenney.nl/assets/impact-sounds](https://kenney.nl/assets/impact-sounds) | Kenney | CC0 (page: "License: Creative Commons CC0"; `License.txt`) | Footsteps (concrete, wood, metal plate; since 2026-10-17 grass, and the snow steps pitched down for sand), landings, metal and wood impacts, the ground pound |
+| RPG Audio | [kenney.nl/assets/rpg-audio](https://kenney.nl/assets/rpg-audio) | Kenney | CC0 (as above) | Cloth (jump, roll, climb, the head bump), belt and leather (picking up the kit), creaks (valves), latch and click (levers); since 2026-10-17 its footsteps (`footstep00`–`09`) for gravel and shingle. These were chosen by pack and name and **have not been listened to by a person**; if they do not read as gravel, swap them in `scripts/build-audio.mjs` |
 | Sci-Fi Sounds | [kenney.nl/assets/sci-fi-sounds](https://kenney.nl/assets/sci-fi-sounds) | Kenney | CC0 (as above) | Thruster (the steam kicker's jets), low boom (the ground pound) |
 | Interface Sounds | [kenney.nl/assets/interface-sounds](https://kenney.nl/assets/interface-sounds) | Kenney | CC0 (as above) | Glass chime, select |
 | Music Jingles | [kenney.nl/assets/music-jingles](https://kenney.nl/assets/music-jingles) | Kenney | CC0 (as above) | Pizzicato stings: the kit, Ivo's marks |
@@ -102,7 +102,8 @@ The assembly runs in the browser (`tools/maraAssemble.ts`):
    bone axes. Horizontal hip travel is removed, because the game's controller moves Mara;
    vertical motion (lying down, getting up, climbing) is kept.
 6. **Export.** Textures are re-encoded as 1024 px JPEG and exported as one binary glTF: about
-   6.8 MB, 32k triangles, 17 clips.
+   8.0 MB, 32k triangles, 29 clips (the clip table is `CLIPS` in `tools/maraAssemble.ts`; the
+   game-feel pass added `swimIdle`, `swimFwd`, `drive`, `hitHead` and `talk`, 7.44 → 7.98 MB).
 
 `node scripts/capture-character.mjs` renders turntable views from the dev viewer
 (`/?viewer=mara`).
@@ -127,6 +128,7 @@ each chapter loads only the sets it uses (`surfaces` in `src/levels/chapters.ts`
 | Sky, water, light shafts, dust, steam | Shaders and particles in `src/world/Atmosphere.ts` |
 | Steam, hiss, vent, drips, the engine's drone, the intercom, the horn | Web Audio synthesis, `src/audio/Audio.ts` (also the fallback for any sample that has not loaded) |
 | The steam whistle's chord, the grind's metal scrape, the lamp going out | Web Audio synthesis, `src/audio/Audio.ts` |
+| Wading steps in shallow water (game-feel pass) | Web Audio synthesis, `src/audio/Audio.ts` (`wade`) |
 | The workshop's rain (an 8 s seamless stereo loop: pink-noise wash, patter, drops on the glass) | Generated at run time, `rainBuffer()` in `src/audio/Audio.ts`; no recording |
 | Mara's workshop in Saltmere (the opening): room, bench, oil lamp, model tide engine, the harbour view, rain on the glass, the passing figure, the diversion plans and her notes | `src/levels/breakwater/Workshop.ts` (geometry and canvas drawings; original) |
 | Chalk "IV" marks and the chalk arrow, the boarded hatch, the feed pipe and its chains, the steam whistle, the bent-bar cell | `src/world/props/ChalkMarks.ts`, `src/world/props/BoardedHatch.ts`, `src/levels/breakwater/QuietCellLevel.ts`, `src/levels/breakwater/TurbineHall.ts` |
