@@ -1,4 +1,4 @@
-# Testing: Chapter One, *The Quiet Cell*, and Chapter Two, *The Warders' Green*
+# Testing: Chapters One to Three
 
 ## Automated checks
 
@@ -194,6 +194,19 @@ With `?watch=1` (the Watch is off in other automated runs).
 - The title screen (normal mode) lists the other chapter, goes there, and credits the CC BY
   models.
 
+### `tests/e2e/chapter3.spec.ts`: Chapter Three (6)
+
+- Loads (`?chapter=3`) with its checkpoints and objective and the lighthouse scan; no errors.
+- The autopilot walks down the slipway, swims, crosses the sandbar, swims to the skiff and boards
+  it; it swam at least once; no falls.
+- The bar: at low water the skiff runs aground on it (a bump, still outside); from the bar
+  checkpoint, waiting for the surge and going, it crosses into the lagoon.
+- Docking at the lighthouse's stairs (Interact), climbing the three flights (lower landing,
+  half landing, gallery) to the door ends the chapter.
+- With `?watch=1`: the patrol boat hears the engine, raises the alarm, and the catch puts Mara back
+  at the lagoon checkpoint, aboard the skiff.
+- Chapter Two's completion card offers "Continue: Chapter Three".
+
 ## Review captures
 
 All of these need `npm run dev` running in another terminal. Output goes to `artifacts/` (ignored by git).
@@ -287,6 +300,12 @@ environment (OS, browser, GPU, resolution, quality setting), severity, reproduct
 expected vs actual, evidence, and acceptance criteria for the fix.
 
 ## Latest results
+
+At commit `bba9f29` (Chapter Three), same machine: **106/106 Edge e2e in 13.2 min**, unit tests
+54/54. Chapter Three's checks alone:
+`PW_CHANNEL=msedge npx playwright test tests/e2e/chapter3.spec.ts`.
+
+### Earlier: Chapter Two
 
 At commit `97a527d` (toy hero, the Watch, Chapter Two), same machine: **99/100 Edge e2e in one
 run (24.4 min)**; the one failure, a test locator fixed during the run, passes on its own (1/1).

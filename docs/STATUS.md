@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Branch** | `claude/toy-hero` (draft PR #6), stacked on `claude/chapter-one-v2` (PR #5) → `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
-| **Build** | Chapter One, *The Quiet Cell*: the workshop opening → pressure-hatch puzzle → maintenance shaft (the steam kicker) → lookout → the feed-pipe grind or the scaffold → parkour practice route → *The Breathing Engine* (now with the Watch) and the split feed → chapter ending; five hidden chalk marks. Chapter Two, *The Warders' Green*: the cove → Cottage Lane (stealth) → the green → the slide → the swing leap → the yard |
-| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PRs #3 to #6) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
+| **Branch** | `claude/low-tide` (draft PR #7), stacked on `claude/toy-hero` (PR #6) → `claude/chapter-one-v2` (PR #5) → `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
+| **Build** | Chapter One, *The Quiet Cell*: the workshop opening → pressure-hatch puzzle → maintenance shaft (the steam kicker) → lookout → the feed-pipe grind or the scaffold → parkour practice route → *The Breathing Engine* (now with the Watch) and the split feed → chapter ending; five hidden chalk marks. Chapter Two, *The Warders' Green*: the cove → Cottage Lane (stealth) → the green → the slide → the swing leap → the yard. Chapter Three, *The Low Tide*: the slipway → the swim → the skiff → the bar and the surge → the patrol boat → the lighthouse |
+| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PRs #3 to #7) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
 
 ## Launch
 
@@ -15,7 +15,7 @@ npm run dev
 
 Open http://localhost:5173, click **Begin**, then click the view to capture the mouse. The story
 opening plays first (about 39 s; Space or E skips it). Chapter Two: the title screen's chapter
-button, or http://localhost:5173/?chapter=2 (its opening is about 9 s). Production build: `npm run build`, then
+button, or http://localhost:5173/?chapter=2 (its opening is about 9 s); Chapter Three: ?chapter=3. Production build: `npm run build`, then
 `npm run preview` (http://localhost:4173). Character viewer: http://localhost:5173/?viewer=mara.
 
 **Dual-GPU laptops.** Windows runs browsers on the integrated GPU unless told otherwise.
@@ -23,6 +23,61 @@ Settings → System → Display → Graphics → Microsoft Edge (or Chrome) → 
 the browser to the dedicated GPU. On the test laptop (Intel UHD plus NVIDIA RTX 2050), Edge now
 runs on the RTX this way. The Intel measurements below use Playwright's bundled Chromium, which
 that setting does not cover.
+
+## Chapter Three, *The Low Tide* (`claude/low-tide`, draft PR #7)
+
+Stacked on `claude/toy-hero` (PR #6). The coastal escape from the owner's 2026-10-16 brief:
+swimming, a boat and the lighthouse. No person has played it yet.
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| Chapter Three, coastal escape | COMPLETED (first version) | The slipway, the swim, the steam skiff, the bar and the surge, the patrol boat, the lighthouse climb, opening and ending |
+| Swimming | COMPLETED | A swim mode in the player controller (float, crawl stroke, climb out, kick up); works in any level with water |
+| Boat | COMPLETED | The steam skiff: camera-relative steering, throttle, grounding on shallows, glancing off rocks, engine noise the Watch hears |
+| Lighthouse (CC BY scan) up close | COMPLETED | Walkable stairs, landings and gallery added as colliders (the scan has none); the real organisation's sign is covered by a board and a lifebuoy |
+| Chapter Four, arcade mystery | NOT STARTED | Needs an original arcade (the Minion Rush reference is blocked) |
+
+### Also in this pass
+
+- **Walking on slopes.** On a ramp, Mara's controller pressed into the ground at 2 m/s, which from a
+  standstill outweighed the walk and slid her back: she could not start up a 34° ramp. On sloped
+  ground she now follows the slope with a light press. This changes all chapters; the full suite
+  below covers Chapters One and Two with it.
+- **A natural rock surface** (Poly Haven "Dark Rock") for boulders and cliffs in Chapters Two and
+  Three (the stone sets are walls and read as masonry on boulders).
+- **`__THREE`** is exposed with the test API, for raycasts in probes.
+
+### Verification (this pass)
+
+Same machine and setup as below (Edge on the RTX 2050).
+
+- **Edge e2e at `bba9f29`: 106/106 in 13.2 min** (one run): chapter3 6 (new), chapter2 12,
+  stealth 6, and the 82 Chapter One tests, which now run with the slope change.
+- **What the Chapter Three tests prove:** the autopilot swims from the slipway (over the sandbar) to
+  the skiff and boards it; at low water the skiff runs aground on the bar and does not cross; on
+  the surge it crosses; docking at the stairs, the three flights climb to the gallery (lower
+  landing above 0.4 m, half landing above 2.4 m, gallery above 4.4 m) and the door ends the
+  chapter; the patrol boat hears the engine, raises the alarm and its catch returns Mara to the
+  lagoon checkpoint, aboard.
+- **Unit tests 54/54. Production build passes.** The commit type-checks from a `git archive` copy.
+- **Draw calls** (Low, `scripts/count-draws.mjs --chapter 3`): a mean of 121 over five checkpoints,
+  190k to 244k triangles.
+- **Not measured:** frame times and load time (Chapter Three loads the 3.8 MB lighthouse and
+  the sand and rock textures).
+- **The sign:** screenshots from the gallery and the lagoon show the board and lifebuoy over it and
+  no legible text.
+- **Screenshots:** [evidence/low-tide/](evidence/low-tide/).
+
+### Known limitations (this pass)
+
+- **Nobody has played it.** The surge's timing (a 3.6 s swell every 9 s) and the patrol's hearing
+  are tuned by tests.
+- **Under the lighthouse** the camera sees the scan's noisy underside (thin black fragments) while
+  Mara climbs the lower flights.
+- **The swim pose** is a tilted walk cycle with procedural arms; there is no swim animation clip.
+- **The sea** is the same height everywhere (the surge raises all of it); there are no waves that
+  move the skiff, only a bob.
+- **Music** reuses Chapter One's hall theme.
 
 ## Toy hero, the Watch, Chapter Two (`claude/toy-hero`, draft PR #6)
 
@@ -564,8 +619,7 @@ e2e suite, headed for frame times).
 
 1. Uncoached first-time playtests of Chapters One and Two (the Watch's fairness, the swing).
 2. Codex's review of PRs #3 to #6.
-3. Chapter Three, *The Low Tide* (the owner's coastal escape: swimming, a boat, the lighthouse),
-   then Chapter Four (an original arcade). The camera settings the earlier Chapter Two prompt
+3. Chapter Four (the owner's arcade mystery, in an original arcade). The camera settings the earlier Chapter Two prompt
    asked for (separate sensitivities, inverts, chase assist, shake, FOV) are already in the
    settings menu (PR #4).
 

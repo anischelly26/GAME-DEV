@@ -4,7 +4,7 @@ A single-player, story-driven 3D adventure. Mara Venn, a tide-engine mechanic, r
 a flood diversion that would drown her district. She fell asleep over her drawings and woke up in
 Breakwater, an island prison that runs on the sea.
 
-The current build has two chapters. Mara is an original toy-like hero with a living face (eyes,
+The current build has three chapters. Mara is an original toy-like hero with a living face (eyes,
 lids, brows and mouth that blink, look and react).
 
 **Chapter One, *The Quiet Cell***, a short escape from the cell block:
@@ -31,6 +31,15 @@ on the spur behind the prison, where its keepers once raised their children:
   creak;
 - the hangar yard, and a lighthouse burning out on the water (Chapter Three's destination; a CC BY
   scan).
+
+**Chapter Three, *The Low Tide*** (`?chapter=3`): late morning on the water between the spur and
+Knoll Rock:
+
+- swimming (a front crawl at the surface) out to a moored steam skiff;
+- the skiff to the lagoon's mouth, where the bar is too shallow until Breakwater's engine sends a
+  surge over it;
+- a Watch on a patrol boat that listens for the engine;
+- the lighthouse (the CC BY scan): dock at its stairs, climb to the gallery, find who lit the lamp.
 
 First-play length has not been measured with a player yet. The autopilot, which never hesitates,
 plays the route in about a minute; the opening adds about 40 seconds unless it is skipped.

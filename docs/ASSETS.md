@@ -32,6 +32,8 @@ steam and machinery.
 | Pebbles | [polyhaven.com/a/pebbles](https://polyhaven.com/a/pebbles) | Rob Tuytel | CC0 | Chapter Two: the shingle cove (`shingle`) |
 | Roof Slates 02 | [polyhaven.com/a/roof_slates_02](https://polyhaven.com/a/roof_slates_02) | Rob Tuytel | CC0 | Chapter Two: cottage roofs (`slate`) |
 | Mossy Stone Wall | [polyhaven.com/a/mossy_stone_wall](https://polyhaven.com/a/mossy_stone_wall) | Amal Kumar | CC0 | Chapter Two: cottages and garden walls (`mossyStone`) |
+| Coast Sand 04 | [polyhaven.com/a/coast_sand_04](https://polyhaven.com/a/coast_sand_04) | Rob Tuytel, Dario Barresi | CC0 | Chapter Three: the sea bed and the bars (`sand`) |
+| Dark Rock | [polyhaven.com/a/dark_rock](https://polyhaven.com/a/dark_rock) | Amal Kumar | CC0 | Chapters Two and Three: boulders, cliffs, the lagoon's rocks (`rock`) |
 
 ## Third-party models (CC BY 4.0)
 
@@ -44,12 +46,13 @@ Sketchfab writes into each file. They are optimised into `public/assets/models/`
 | Model | Source | Author | Licence | Changes made | Used in |
 | --- | --- | --- | --- | --- | --- |
 | Abandoned children's slide | [sketchfab.com/3d-models/abandoned-childrens-slide-11de2b21ec264c0a814ac024c45ab425](https://sketchfab.com/3d-models/abandoned-childrens-slide-11de2b21ec264c0a814ac024c45ab425) | [sergeilihandristov](https://sketchfab.com/sergeilihandristov) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) | Meshes merged and welded; textures resized to 1024 px and re-encoded as WebP (13.4 MB to 0.7 MB); scaled 1.6x in the game | `public/assets/models/slide.glb`: Chapter Two's playground slide (Mara rides it) |
-| Seven Foot Knoll Lighthouse | [sketchfab.com/3d-models/seven-foot-knoll-lighthouse-949111fbde5b4564811cad303b09727c](https://sketchfab.com/3d-models/seven-foot-knoll-lighthouse-949111fbde5b4564811cad303b09727c) | [Katie Wolfe](https://sketchfab.com/katiewolfe) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) | The brick plaza it was scanned on removed; simplified from 994,652 to 53,565 triangles (meshoptimizer, texture seams weighted); textures resized to 2048 px WebP (58 MB to 3.8 MB) | `public/assets/models/lighthouse.glb`: the light on "Knoll Rock", seen across the water in Chapter Two; Chapter Three's destination |
+| Seven Foot Knoll Lighthouse | [sketchfab.com/3d-models/seven-foot-knoll-lighthouse-949111fbde5b4564811cad303b09727c](https://sketchfab.com/3d-models/seven-foot-knoll-lighthouse-949111fbde5b4564811cad303b09727c) | [Katie Wolfe](https://sketchfab.com/katiewolfe) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) | The brick plaza it was scanned on removed; simplified from 994,652 to 53,565 triangles (meshoptimizer, texture seams weighted); textures resized to 2048 px WebP (58 MB to 3.8 MB) | `public/assets/models/lighthouse.glb`: the light on "Knoll Rock", seen across the water in Chapter Two; in Chapter Three Mara climbs its stairs to the gallery (the game adds its own colliders and covers its sign, below) |
 
-The lighthouse scan is a photograph of a real building and includes a small sign of the
-organisation that looks after it. In Chapter Two it is about 100 m away and not legible. Before the
-lighthouse is seen close up (Chapter Three), that sign must be covered by a prop or removed from
-the texture.
+The lighthouse scan is a photograph of a real building and includes a sign of the organisation
+that looks after it, on the gallery railing by the stairs. In Chapter Two it is about 100 m away
+and not legible. In Chapter Three, where Mara climbs to the gallery, a board and a lifebuoy of our
+own cover it (`src/levels/coast/Coast.ts`; its position was found by raycasting through it). Two
+screenshots from the gallery and the lagoon confirm it is not legible.
 
 ### Sound and music (CC0)
 
@@ -129,7 +132,8 @@ each chapter loads only the sets it uses (`surfaces` in `src/levels/chapters.ts`
 | Chalk "IV" marks and the chalk arrow, the boarded hatch, the feed pipe and its chains, the steam whistle, the bent-bar cell | `src/world/props/ChalkMarks.ts`, `src/world/props/BoardedHatch.ts`, `src/levels/breakwater/QuietCellLevel.ts`, `src/levels/breakwater/TurbineHall.ts` |
 | Chapter Two's village: cottages (stone walls, slate roofs, chimneys, doors, windows), hedges, trees, grass tufts, garden walls and gates, sheds, benches, the drinking fountain, lamp posts, the sea wall, the yard | `src/levels/green/Village.ts`, `src/world/props/Cottage.ts`, `src/world/props/Foliage.ts` (original geometry; the leaf and grass textures are drawn on a canvas) |
 | Chapter Two's playground: the swing set and its pendulum, the concrete pipe, the roundabout, the seesaw, the sandpit (the slide is the CC BY model above) | `src/levels/green/Playground.ts` |
-| The Watch automaton (a guard on rails with a searchlight, its tether) | `src/gameplay/WatchSentry.ts` (original) |
+| The Watch automaton (a guard on rails with a searchlight, its tether, its patrol boat) | `src/gameplay/WatchSentry.ts`, `src/levels/coast/LowTideLevel.ts` (original) |
+| Chapter Three's sea bed, water that shows its depth (sand under the shallows, foam on the bars), the slipway, channel buoys, the steam skiff, the board and lifebuoy over the scan's sign | `src/levels/coast/Coast.ts`, `src/levels/coast/Skiff.ts` (original) |
 | Breakwater seen across the water (Chapter Two) | Simple blocks in `src/levels/green/Village.ts` |
 | UI fonts | The player's system fonts; nothing is bundled |
 

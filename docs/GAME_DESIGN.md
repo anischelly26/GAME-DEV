@@ -57,8 +57,9 @@ whistle, the grind's scrape. The workshop's rain is generated in code. Sources a
   through the turbine hall and the Breathing Engine. Detailed below.
 - **Chapter Two, *The Warders' Green*** (built, see below): the abandoned playground the
   owner's 2026-10-16 brief asked for, on the spur behind the prison, with the Watch.
-- **Chapter Three, *The Low Tide*** (owner's 2026-10-16 brief; not built): the coastal escape:
-  swimming, a skiff, and the lighthouse on Knoll Rock (the CC BY scan, already optimised).
+- **Chapter Three, *The Low Tide*** (built, see below): the coastal escape the owner's 2026-10-16
+  brief asked for: swimming, a steam skiff, the surge over the bar, and the lighthouse on Knoll Rock
+  (the CC BY scan).
 - **Chapter Four, the arcade** (owner's 2026-10-16 brief; not built): an arcade mystery. The
   reference the owner gave is a Minion Rush rip and cannot be used, so the arcade must be an
   original environment.
@@ -127,6 +128,37 @@ In automated route tests the Watch is off unless `?watch=1`.
 | Swing | Pendulum, chain 2.7 m, its own gravity 14 m/s² (period about 2.8 s), damping 0.12/s; pumping adds up to 2.6 rad/s² when the push agrees with the swing's direction; capped at 70°. An empty swing damps at 1.0/s and can be sat on once it is low and slow (|θ| < 0.45 rad, |ω| < 1.6 rad/s) |
 | Leap | Velocity of the seat x1.35, +5.0 m/s up, +1.4 m/s forward when swinging forward. Verified: a leap from a swing pumped past 1.1 rad catches the wall; from a 0.35 rad swing it falls short |
 | Slide | The chute's centre line measured from the model (raycast profile, scale 1.6); speed gains 0.75 g along the slope less 1.2 m/s² friction, 1.5 to 9 m/s; leaves the end with a 2.2 m/s hop; Jump leaves early |
+
+## Chapter Three, *The Low Tide* (implemented, unreviewed)
+
+Late morning on the water between the hangar spur and Knoll Rock (`?chapter=3`, the title screen,
+or Chapter Two's completion card). About 3 to 5 minutes; nobody has played it yet.
+
+### Beats
+
+1. **The slipway.** Mara starts at the top of the hangar's slipway (an 8 s skippable opening). The
+   skiff is out on its buoy, the lighthouse beyond the rocks.
+2. **The swim.** Down the ramp into the sea, out onto a sandbar that is dry at low water (the surge
+   floods it for a moment), on to the skiff, and aboard.
+3. **The skiff.** A small steam boat: point the stick where to go and push for speed. Channel buoys
+   mark the way to the lagoon's mouth.
+4. **The bar.** At low water the bar across the mouth is 0.3 m deep and the skiff (0.45 m draft)
+   runs aground on it. Every 9 s Breakwater's tide engine "breathes" and the whole sea rises
+   0.85 m for 3.6 s: wait at the bar and go when the engine thumps.
+5. **The lagoon.** A Watch on a patrol boat circles the lighthouse. It hears the skiff's engine
+   (5 to 15 m, with the throttle) and comes to look; rocks and the piles hide the skiff.
+6. **The lighthouse** (the CC BY scan). Dock where its stairs come down into the water, climb three
+   flights to the gallery, round to the door: forced, the lamp mended with new copper (like the pipe
+   in her cell, Chapter One), and "IV" chalked on the lens. Completion card; Chapter Four is next.
+
+### Swimming, skiff and surge specifications
+
+| | |
+| --- | --- |
+| Swimming | Starts where the water is deeper than 0.95 m (above her waist); ends where it is shallower than 0.75 m. She floats with her feet 0.42 m under the surface, lying forward (crawl stroke, flutter kick), at up to 2.9 m/s. Swimming into a registered ledge climbs out; Space kicks up 1.6 m. No drowning, no stamina |
+| Skiff | Up to 7 m/s; turns toward the stick at 1.9 rad/s under way (60 % of that standing); draft 0.45 m: a gentle bed shallower than that grounds it, anything steep (rock, pile, stairs, buoy) is a strike it glances off. Jump leaps out; at the stairs, Interact steps off |
+| Surge | Every 9 s: the sea rises 0.85 m and falls over 3.6 s (sin²); an engine thump marks its start |
+| The patrol | The Watch's rules (above), lamp 13 m, a ring of 19 m round the lighthouse; a catch tows Mara back to the checkpoint, aboard |
 
 ## Movement capabilities (measured)
 
