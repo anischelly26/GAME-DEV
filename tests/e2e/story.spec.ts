@@ -37,7 +37,7 @@ const frozen = (page: Page) => page.evaluate(() => (window as any).__GAME.game.p
 const storyText = (page: Page) => page.evaluate(() => (window as any).__GAME.game.hud.storyText as string);
 const inShot = (page: Page) => page.evaluate(() => (window as any).__GAME.game.camera.inShot as boolean);
 const lines = (page: Page) => page.evaluate(() => (window as any).__lines as string[]);
-/** Height of Mara's pelvis above her feet: about 0.1 m lying down, about 0.5 m sitting, about 0.9 m standing. */
+/** Height of Mara's pelvis above her feet (the toy hero): about 0.13 m lying down, 0.33 m sitting, 0.47 m standing. */
 const pelvisHeight = (page: Page) =>
   page.evaluate(() => {
     const g = (window as any).__GAME.game;
@@ -68,8 +68,8 @@ test('the opening: the workshop the night before, Mara wakes on the cell floor, 
   // Saltmere: sitting at her bench in the workshop, far from the prison.
   expect((await state(page)).feet[2]).toBeGreaterThan(300);
   const sitting = await pelvisHeight(page);
-  expect(sitting).toBeGreaterThan(0.3);
-  expect(sitting).toBeLessThan(0.8);
+  expect(sitting).toBeGreaterThan(0.25);
+  expect(sitting).toBeLessThan(0.42);
   expect((await breakwaterRestored(page)).letterbox).toBe(true);
   await expect(page.locator('.skip')).not.toHaveClass(/hidden/);
 
@@ -80,7 +80,7 @@ test('the opening: the workshop the night before, Mara wakes on the cell floor, 
     const t = await storyText(page);
     if (t) cards.add(t);
     const s = await state(page);
-    if (s.feet[2] < 100 && (await pelvisHeight(page)) < 0.35) wokeOnCellFloor = true;
+    if (s.feet[2] < 100 && (await pelvisHeight(page)) < 0.22) wokeOnCellFloor = true;
     await step(page, 20);
     lockedSteps += 20;
   }
@@ -106,7 +106,7 @@ test('the opening: the workshop the night before, Mara wakes on the cell floor, 
   expect(await breakwaterRestored(page)).toEqual({ workshopVisible: false, lampHome: true, environment: 0.95, letterbox: false });
   await step(page, 60);
   expect(await storyText(page)).toBe('');
-  expect(await pelvisHeight(page)).toBeGreaterThan(0.75);
+  expect(await pelvisHeight(page)).toBeGreaterThan(0.42);
   expect(errors).toEqual([]);
 });
 
@@ -130,7 +130,7 @@ test('skipping the opening ends in the same state as watching it', async ({ page
   expect(await breakwaterRestored(page)).toEqual({ workshopVisible: false, lampHome: true, environment: 0.95, letterbox: false });
   await step(page, 60);
   expect(await storyText(page)).toBe('');
-  expect(await pelvisHeight(page)).toBeGreaterThan(0.75);
+  expect(await pelvisHeight(page)).toBeGreaterThan(0.42);
   await step(page, 60 * 6);
   // Skipped narration is dropped, not queued up; the gameplay line still plays once.
   const said = await lines(page);

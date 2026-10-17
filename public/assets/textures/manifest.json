@@ -77,5 +77,70 @@
     ],
     "url": "https://polyhaven.com/a/old_planks_02",
     "licence": "CC0"
+  },
+  "grass": {
+    "id": "leafy_grass",
+    "name": "Leafy Grass",
+    "authors": [
+      "Charlotte Baglioni"
+    ],
+    "sizeMetres": [
+      2,
+      2
+    ],
+    "url": "https://polyhaven.com/a/leafy_grass",
+    "licence": "CC0"
+  },
+  "gravel": {
+    "id": "gravel_road",
+    "name": "Gravel Road",
+    "authors": [
+      "Amal Kumar"
+    ],
+    "sizeMetres": [
+      2,
+      2
+    ],
+    "url": "https://polyhaven.com/a/gravel_road",
+    "licence": "CC0"
+  },
+  "shingle": {
+    "id": "pebbles",
+    "name": "Pebbles",
+    "authors": [
+      "Rob Tuytel"
+    ],
+    "sizeMetres": [
+      4,
+      4
+    ],
+    "url": "https://polyhaven.com/a/pebbles",
+    "licence": "CC0"
+  },
+  "slate": {
+    "id": "roof_slates_02",
+    "name": "Roof Slates 02",
+    "authors": [
+      "Rob Tuytel"
+    ],
+    "sizeMetres": [
+      3,
+      3
+    ],
+    "url": "https://polyhaven.com/a/roof_slates_02",
+    "licence": "CC0"
+  },
+  "mossyStone": {
+    "id": "mossy_stone_wall",
+    "name": "Mossy Stone Wall",
+    "authors": [
+      "Amal Kumar"
+    ],
+    "sizeMetres": [
+      1.9999996423721313,
+      1.9999996423721313
+    ],
+    "url": "https://polyhaven.com/a/mossy_stone_wall",
+    "licence": "CC0"
   }
 }

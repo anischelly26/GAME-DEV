@@ -9,6 +9,7 @@ import { FlowStrip } from '../../world/props/FlowStrip';
 import { EngineCollar, PistonPlatform } from '../../world/props/EngineRides';
 import { braceGantry, buildBarrierBeam, buildSparesRack, catchPlateTexture, dialTexture, feedPlateTexture, hazardStripeTexture } from '../../world/props/Maintenance';
 import { SplitFeedLogic } from '../../gameplay/puzzles/SplitFeedLogic';
+import { RingTrack, WatchSentry } from '../../gameplay/WatchSentry';
 import { mulberry32 } from '../../core/math';
 import { HALL, sideAngle, sideFraction, halfSide } from './layout';
 
@@ -83,6 +84,13 @@ class Lever {
  */
 export class EngineRoute {
   readonly collar: EngineCollar;
+  /** The Watch automaton that patrols the collar deck. */
+  readonly sentry: WatchSentry;
+  /** The collar deck's ring, and the boarding gap's angle on it. */
+  readonly sentryRing: RingTrack;
+  private sentryGap = 0;
+  private lastWatchLine = -99;
+  private readonly chest = new THREE.Vector3();
   readonly shuttle: PistonPlatform;
   readonly breachPiston: PistonPlatform;
   private readonly brakeLever: Lever;
@@ -364,6 +372,20 @@ export class EngineRoute {
     this.deckLever.group.position.copy(this.deckLeverLocal);
     this.deckLever.group.rotation.y = thE;
     this.collar.group.add(this.deckLever.group);
+    // The Watch: a sentry rolling round the collar deck, starting opposite the boarding gap.
+    this.sentryRing = new RingTrack(this.collar.group, rCollar - collarWidth / 2 + 0.02, () => this.collar.deckY);
+    this.sentryGap = thE;
+    this.sentry = new WatchSentry(physics, m, this.sentryRing, this.sentryHome());
+    this.sentry.enabled = ctx.watch;
+    ctx.events.on('groundPound', (e) => {
+      if (this.sentry.enabled && this.sentry.pound(e)) {
+        const p = this.sentry.position();
+        ctx.events.emit('sfx', { name: 'watchStun', x: p.x, y: p.y + 1, z: p.z });
+        ctx.effects.burst(p.clone().setY(p.y + 1.3), { count: 14, color: '#e8eef0', speed: 2.4, spread: 1.6, life: 1.2, size: [0.2, 0.8], opacity: 0.5, rise: 0.6 });
+        ctx.camera.shake(0.3);
+        ctx.avatar.emote('happy', 1.6);
+      }
+    });
 
     // ------------------------------------------------------------ k = 8 (tier 3): steam curtain + redirect valve
     {
@@ -663,8 +685,40 @@ export class EngineRoute {
     return this.feed.curtainOn;
   }
 
+  /** Where the sentry starts its round: opposite the boarding gap. */
+  private sentryHome(): number {
+    return this.sentryRing.at(this.sentryGap + Math.PI);
+  }
+
+  /** Whether Mara is where the collar's sentry can act: on its deck, or at the boarding gap. */
+  private inWatchZone(): boolean {
+    const f = this.ctx.player.feet;
+    const deckY = this.collar.deckY;
+    if (Math.abs(f.y - deckY) > 1.3) return false;
+    const r = Math.hypot(f.x, f.z);
+    const rOut = HALL.columnR + 1.85;
+    if (r > HALL.columnR - 0.3 && r < rOut + 0.4) return true;
+    const gx = Math.sin(this.sentryGap) * (rOut + 1.0);
+    const gz = Math.cos(this.sentryGap) * (rOut + 1.0);
+    return Math.hypot(f.x - gx, f.z - gz) < 2.2;
+  }
+
+  /** The Watch caught her: back to the checkpoint, the sentry back on its round. */
+  private watchCaught(): void {
+    const { events, dialogue, avatar } = this.ctx;
+    const p = this.sentry.position();
+    events.emit('sfx', { name: 'watchCatch', x: p.x, y: p.y + 1, z: p.z });
+    avatar.emote('surprised', 1.4);
+    this.ctx.respawn('manual');
+    dialogue.interrupt();
+    dialogue.say('Watch', 'Inmate returned to the gantry.', 2.6, { story: true, maxWait: 2 });
+    dialogue.sayOnce('watch-caught', 'Tip', 'Keep the column between you and its lamp. A ground pound beside it knocks it out for a while.', 5, { maxWait: 4 });
+    this.sentry.reset(this.sentryHome());
+  }
+
   /** After a fall past the curtain, the solved ram is waiting again (a missed jump never costs the puzzle). */
   onRespawn(checkpointId: string): void {
+    this.sentry.reset(this.sentryHome());
     if ((checkpointId === 'breach' || checkpointId === 'exit') && this.ctx.progression.has('ram.released') && !this.feed.primed) {
       this.feed.reset();
       this.feed.toggleCatch();
@@ -854,6 +908,10 @@ export class EngineRoute {
         progression.set('engine.reached');
         if (progression.set('area.engine')) this.ctx.hud.areaTitle('The Breathing Engine', 'It rises and falls with the sea');
         dialogue.say('Mara', "The collar breathes with the tide. If I can catch it at the gantry...");
+        if (this.sentry.enabled) {
+          dialogue.say('Mara', "And there's a Watch on it. If that lamp finds me, it marches me straight back.", undefined, { story: true });
+          dialogue.say('Tip', 'Stay out of the Watch\'s lamp: the column hides you. A ground pound beside it knocks it out.', 5, { story: true });
+        }
         progression.setObjective('Stop the collar at the gantry and ride it up');
       },
     });
@@ -931,6 +989,7 @@ export class EngineRoute {
     this.lastEmptyRises = 0;
     this.catchLever.set(false);
     this.collar.setMode('cycling', 0);
+    this.sentry.reset(this.sentryHome());
     for (const l of this.lights) l.extinguish();
     if (this.routeOpen) {
       this.routeOpen = false;
@@ -978,6 +1037,19 @@ export class EngineRoute {
     this.time += dt;
     this.shuttle.fixedUpdate(dt);
     this.collar.fixedUpdate(dt);
+    // The Watch on the collar: it sees, suspects, raises the alarm, gives chase and catches.
+    const player = this.ctx.player;
+    this.chest.copy(player.feet).setY(player.feet.y + 1.0);
+    const watch = this.sentry.step(dt, this.chest, this.inWatchZone(), player.collider);
+    if (watch === 'alert') {
+      const p = this.sentry.position();
+      this.ctx.events.emit('sfx', { name: 'watchAlert', x: p.x, y: p.y + 1.4, z: p.z });
+      if (this.time - this.lastWatchLine > 8) {
+        this.lastWatchLine = this.time;
+        this.ctx.dialogue.interrupt();
+        this.ctx.dialogue.say('Watch', 'Inmate out of bounds. Halt!', 2.2, { story: true, maxWait: 1 });
+      }
+    } else if (watch === 'caught') this.watchCaught();
     this.feed.step(dt, this.onRamDeck());
     this.breachPiston.heightOverride = this.feed.height;
     this.breachPiston.fixedUpdate(dt);
@@ -997,6 +1069,7 @@ export class EngineRoute {
   update(dt: number, time: number, alpha: number): void {
     this.shuttle.render(alpha);
     this.collar.render(alpha, time);
+    this.sentry.update();
     this.breachPiston.render(alpha);
     // A caught ram strains against its pawl: a fine shudder and a relief valve hissing at the base.
     this.shudder = this.feed.straining ? Math.sin(time * 57) * 0.004 : 0;

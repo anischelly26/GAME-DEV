@@ -14,22 +14,28 @@ export interface SurfaceSet {
   arm: THREE.Texture;
 }
 
-export type SurfaceKey = 'stone' | 'stoneDark' | 'floor' | 'grate' | 'iron' | 'wood';
-export type SurfaceLibrary = Record<SurfaceKey, SurfaceSet>;
+type CoreSurface = 'stone' | 'stoneDark' | 'floor' | 'grate' | 'iron' | 'wood';
+/** Chapter Two's outdoor sets: the green, the lane, the shingle, roofs and garden walls. */
+type OutdoorSurface = 'grass' | 'gravel' | 'shingle' | 'slate' | 'mossyStone';
+export type SurfaceKey = CoreSurface | OutdoorSurface;
+export type SurfaceLibrary = Record<CoreSurface, SurfaceSet> & Partial<Record<OutdoorSurface, SurfaceSet>>;
 
 interface ManifestEntry {
   id: string;
   sizeMetres: [number, number];
 }
 
-export async function loadSurfaces(anisotropy: number): Promise<SurfaceLibrary | null> {
+/** Load the sets named in `keys` (a chapter loads only what it uses). */
+export async function loadSurfaces(anisotropy: number, keys: SurfaceKey[]): Promise<SurfaceLibrary | null> {
   try {
     const base = `${import.meta.env.BASE_URL}assets/textures/`;
     const manifest = (await (await fetch(`${base}manifest.json`)).json()) as Record<SurfaceKey, ManifestEntry>;
     const loader = new THREE.TextureLoader();
     const out: Partial<SurfaceLibrary> = {};
     await Promise.all(
-      (Object.keys(manifest) as SurfaceKey[]).map(async (key) => {
+      (Object.keys(manifest) as SurfaceKey[])
+        .filter((key) => keys.includes(key))
+        .map(async (key) => {
         const { id, sizeMetres } = manifest[key];
         const [map, normalMap, arm] = await Promise.all(['diff', 'nor', 'arm'].map((n) => loader.loadAsync(`${base}${id}/${n}.jpg`)));
         map.colorSpace = THREE.SRGBColorSpace;

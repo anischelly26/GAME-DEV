@@ -10,7 +10,10 @@ const options: GameOptions = {
   autoplay: flag('autoplay'),
   // The story opening plays in normal play; automated runs (test, autoplay) skip it unless ?intro=1.
   intro: params.has('intro') ? flag('intro') : !flag('test') && !flag('autoplay'),
+  // The Watch (sentries) patrols in normal play; automated runs turn it on with ?watch=1.
+  watch: params.has('watch') ? flag('watch') : !flag('test') && !flag('autoplay'),
   start: params.get('start'),
+  chapter: Number(params.get('chapter') ?? 1) || 1,
   quality: params.get('quality') === 'low' ? 'low' : params.get('quality') === 'high' ? 'high' : null,
 };
 

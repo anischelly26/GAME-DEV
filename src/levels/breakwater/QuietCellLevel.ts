@@ -719,6 +719,7 @@ export class QuietCellLevel implements Level {
           events.emit('sfx', { name: 'pickup', x: this.kitPos.x, y: this.kitPos.y, z: this.kitPos.z });
         });
         this.later(0.95, () => {
+          this.ctx.avatar.emote('happy', 2.4);
           hud.abilityCard(
             {
               eyebrow: 'Found: a steam kicker',
@@ -925,7 +926,7 @@ export class QuietCellLevel implements Level {
         watchOnly: true,
         run: () => {
           // Side on, the lamp beyond her: she fights sleep, and loses.
-          camera.playShot(w(1.2, 1.12, bz - 0.55), w(0, 1.0, bz - 0.98), 5.0, { from: { pos: w(1.45, 1.2, bz - 0.8), look: w(0, 1.05, bz - 1.0) }, fov: 45 });
+          camera.playShot(w(1.15, 1.0, bz - 0.4), w(0, 0.86, bz - 0.98), 5.0, { from: { pos: w(1.38, 1.06, bz - 0.28), look: w(0, 0.9, bz - 0.98) }, fov: 40 });
           hud.story({ lower: true, text: 'She refused, and stayed up to prove the plan was wrong.' });
           avatar.doze = 0.55;
         },
@@ -986,20 +987,34 @@ export class QuietCellLevel implements Level {
         watchOnly: true,
         run: () => {
           avatar.cinematic('wake', 0.75);
-          camera.playShot(at(1.3, 1.6, 27.85), at(-0.4, 0.95, 29.75), 2.6);
+          camera.playShot(at(1.35, 1.3, 27.9), at(-0.4, 0.7, 29.75), 2.6);
         },
       },
-      { at: 28.9, watchOnly: true, run: () => dialogue.say('Mara', "Where... This isn't my workshop.", 2.4, { story: true }) },
+      {
+        at: 28.9,
+        watchOnly: true,
+        run: () => {
+          dialogue.say('Mara', "Where... This isn't my workshop.", 2.4, { story: true });
+          avatar.emote('surprised', 2.2);
+        },
+      },
       {
         at: 29.3,
         watchOnly: true,
         run: () => {
           // Face on: she looks around the cell.
           avatar.cinematic('shakeHead', 0.9);
-          camera.playShot(at(0.25, 1.6, 27.95), at(-0.35, 1.45, 29.7), 1.6);
+          camera.playShot(at(0.2, 1.2, 28.05), at(-0.35, 1.0, 29.7), 1.6);
         },
       },
-      { at: 31.6, watchOnly: true, run: () => dialogue.say('Mara', 'Salt on the walls. That engine thump... I know this place. Breakwater.', 3.6, { story: true }) },
+      {
+        at: 31.6,
+        watchOnly: true,
+        run: () => {
+          dialogue.say('Mara', 'Salt on the walls. That engine thump... I know this place. Breakwater.', 3.6, { story: true });
+          avatar.emote('worried', 3.4);
+        },
+      },
       { at: 32.6, watchOnly: true, run: () => camera.playShot(at(1.85, 3.3, 27.4), at(-0.3, 0.7, 30.4), 5.0) },
       {
         at: 35.2,
@@ -1339,6 +1354,7 @@ export class QuietCellLevel implements Level {
       camera.shake(0.12);
     });
     progression.set('whistle.pulled');
+    this.ctx.avatar.emote('happy', 2.2);
     if (this.whistlePulls === 1) this.later(2.1, () => dialogue.say('Mara', '...Sorry. I had to.', 2));
     if (this.whistlePulls === 3) this.later(2.3, () => dialogue.say('Horn', 'Unscheduled whistle. Pressure loss logged.', 3));
   }
@@ -1346,6 +1362,7 @@ export class QuietCellLevel implements Level {
   private onMarkFound(spot: ChalkMarkSpot): void {
     const { progression, events, hud, dialogue, effects } = this.ctx;
     progression.set(`mark.${spot.id}`);
+    this.ctx.avatar.emote('happy', 1.8);
     const n = this.marks.foundCount;
     events.emit('sfx', { name: 'markFound', x: spot.pos.x, y: spot.pos.y, z: spot.pos.z });
     effects.burst(spot.pos, { count: 10, color: '#efe6d2', dir: spot.normal, speed: 1.2, spread: 0.8, life: 0.9, size: [0.06, 0.16], opacity: 0.5, rise: 0.2 });

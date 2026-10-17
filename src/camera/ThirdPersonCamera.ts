@@ -90,6 +90,8 @@ export class ThirdPersonCamera {
   /** Volumes around jumps, vaults and ledges where the assist never turns the camera. */
   readonly precision: Array<(p: THREE.Vector3) => boolean> = [];
   readonly settings: CameraSettings = { assist: 'weak', shake: true, fovHorizontal: CAMERA_DEFAULTS.fovHorizontal };
+  /** Added to every zone's pivot height: the zones are set for a 1.7 m figure (the toy hero is shorter). */
+  pivotOffset = 0;
 
   private readonly focus = new THREE.Vector3();
   private currentDist = CAMERA_DEFAULTS.distance;
@@ -126,7 +128,7 @@ export class ThirdPersonCamera {
     this.yaw = yaw ?? facing + Math.PI;
     this.pitch = pitch;
     this.recenterTarget = null;
-    this.focus.set(feet.x, feet.y + this.zoneHeight, feet.z);
+    this.focus.set(feet.x, feet.y + this.zoneHeight + this.pivotOffset, feet.z);
     this.initialised = false;
   }
 
@@ -278,7 +280,7 @@ export class ThirdPersonCamera {
     this.zoneFov = damp(this.zoneFov, (zone?.fov ?? CAMERA_DEFAULTS.fov) + (grinding ? 6 : 0), gl, dt);
 
     // --- pivot: tight horizontally; vertically steady through jumps, quick when climbing or falling
-    const targetY = feet.y + this.zoneHeight;
+    const targetY = feet.y + this.zoneHeight + this.pivotOffset;
     if (!this.initialised) {
       this.focus.set(feet.x, targetY, feet.z);
       this.currentDist = this.zoneDist;

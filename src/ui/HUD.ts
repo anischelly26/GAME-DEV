@@ -65,7 +65,7 @@ function saveSettings(s: Settings): void {
   }
 }
 
-const SPEAKER_LABEL: Record<string, string> = { Mara: 'Mara', Horn: "Warden's horn", Intercom: 'Intercom', Tip: '' };
+const SPEAKER_LABEL: Record<string, string> = { Mara: 'Mara', Horn: "Warden's horn", Intercom: 'Intercom', Watch: 'The Watch', Tip: '' };
 
 const CONTROLS_HTML = `
   <dl class="controls">
@@ -155,21 +155,34 @@ export class HUD {
     this.card.innerHTML = `<div class="eyebrow">It Takes One</div><p class="loading">${text}</p>`;
   }
 
-  showTitle(onStart: () => void): void {
+  showTitle(
+    chapter: { label: string; title: string; blurb: string },
+    chapters: Array<{ number: number; label: string; current: boolean }>,
+    onStart: () => void,
+    onChoose: (n: number) => void,
+  ): void {
     this.screen.classList.remove('hidden');
+    const others = chapters.filter((c) => !c.current);
     this.card.innerHTML = `
       <div class="eyebrow">Working title</div>
       <h1>It Takes One</h1>
-      <p>Mara Venn fell asleep in her workshop and woke up inside Breakwater, the prison that runs
-      on the tide.<br/>Chapter One, <i>The Quiet Cell</i>.</p>
+      <p>${chapter.blurb}<br/>${chapter.label}, <i>${chapter.title}</i>.</p>
       ${CONTROLS_HTML}
-      <div class="buttons"><button class="primary" data-a="start">Begin</button></div>`;
+      <div class="buttons"><button class="primary" data-a="start">Begin</button>${others
+        .map((c) => `<button data-chapter="${c.number}">${c.label}</button>`)
+        .join('')}</div>
+      <p class="credits">Chapter Two uses "Abandoned children's slide" by sergeilihandristov and "Seven Foot
+      Knoll Lighthouse" by Katie Wolfe (Sketchfab, CC BY 4.0, optimised for the game). Full credits:
+      docs/ASSETS.md.</p>`;
     const btn = this.card.querySelector<HTMLButtonElement>('[data-a="start"]')!;
     btn.focus();
     btn.addEventListener('click', () => {
       this.hideScreen();
       onStart();
     });
+    for (const b of this.card.querySelectorAll<HTMLButtonElement>('[data-chapter]')) {
+      b.addEventListener('click', () => onChoose(Number(b.dataset.chapter)));
+    }
   }
 
   hideScreen(): void {
@@ -237,7 +250,11 @@ export class HUD {
    * The completion screen. With `reward` it is laid over the current view (the vista the ending
    * framed) as a title card, with the choices fading in after a moment, rather than a menu.
    */
-  showComplete(stats: { time: number; falls: number; title?: string; body?: string; reward?: boolean; marks?: { found: number; total: number } }, onRestart: () => void, onContinue: () => void): void {
+  showComplete(
+    stats: { time: number; falls: number; title?: string; body?: string; reward?: boolean; marks?: { found: number; total: number }; next?: { label: string; go: () => void } },
+    onRestart: () => void,
+    onContinue: () => void,
+  ): void {
     this.screen.classList.remove('hidden');
     this.screen.classList.toggle('reward', !!stats.reward);
     const mins = Math.floor(stats.time / 60);
@@ -253,12 +270,15 @@ export class HUD {
       }</p>
       <div class="stats"><div><b>${mins}:${secs}</b>time</div><div><b>${stats.falls}</b>falls</div>${stats.marks ? `<div><b>${stats.marks.found}/${stats.marks.total}</b>chalk marks</div>` : ''}</div>
       <div class="buttons">
-        <button class="primary" data-a="restart">${stats.reward ? 'Play Chapter One again' : 'Restart section'}</button>
+        ${stats.next ? `<button class="primary" data-a="next">${stats.next.label}</button>` : ''}
+        <button class="${stats.next ? '' : 'primary'}" data-a="restart">${stats.reward ? 'Play this chapter again' : 'Restart section'}</button>
         <button data-a="continue">Keep exploring</button>
       </div>`;
     this.card.querySelector('[data-a="restart"]')!.addEventListener('click', onRestart);
     this.card.querySelector('[data-a="continue"]')!.addEventListener('click', onContinue);
-    this.card.querySelector<HTMLButtonElement>('[data-a="restart"]')!.focus();
+    const next = stats.next;
+    if (next) this.card.querySelector('[data-a="next"]')!.addEventListener('click', () => next.go());
+    this.card.querySelector<HTMLButtonElement>(next ? '[data-a="next"]' : '[data-a="restart"]')!.focus();
   }
 
   // ---------------------------------------------------------------- in-game elements

@@ -18,6 +18,8 @@ import type { Effects } from '../world/Effects';
 export interface LevelContext {
   /** Play the story opening when the level starts. */
   intro: boolean;
+  /** Watch sentries patrol (automated route tests turn them off). */
+  watch: boolean;
   scene: THREE.Scene;
   physics: Physics;
   materials: MaterialLibrary;
@@ -34,6 +36,8 @@ export interface LevelContext {
   camera: ThirdPersonCamera;
   hud: HUD;
   moonDir: THREE.Vector3;
+  /** The key light (the moon, or the sun at dawn): outdoor levels move its shadows with Mara. */
+  keyLight: THREE.DirectionalLight;
   /** Register climbable ledges and vaultable obstacles here. */
   traversal: TraversalSurfaces;
   /** Pooled puffs and rings (dust, splinters, chalk). */

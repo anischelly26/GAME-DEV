@@ -1,6 +1,6 @@
 import type { EventBus, GameEvents } from '../core/Events';
 
-export type Speaker = 'Mara' | 'Horn' | 'Intercom' | 'Tip';
+export type Speaker = 'Mara' | 'Horn' | 'Intercom' | 'Watch' | 'Tip';
 
 export interface Line {
   speaker: Speaker;

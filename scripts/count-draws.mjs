@@ -5,7 +5,7 @@
  * what else the machine is doing.
  *
  *   npm run build
- *   node scripts/count-draws.mjs [--root artifacts/base-xxxx] [--quality low] [--port 5236]
+ *   node scripts/count-draws.mjs [--root artifacts/base-xxxx] [--quality low] [--port 5236] [--chapter 2]
  */
 import { preview } from 'vite';
 import { chromium } from 'playwright';
@@ -18,10 +18,12 @@ const server = await preview({ ...(args.root ? { root: args.root, configFile: fa
 const browser = await chromium.launch({ channel: args.channel || 'chromium' });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-  await page.goto(`http://127.0.0.1:${port}/?test=1&dev=1&quality=${args.quality || 'low'}&intro=0`);
+  await page.goto(`http://127.0.0.1:${port}/?test=1&dev=1&quality=${args.quality || 'low'}&intro=0&chapter=${args.chapter || 1}`);
   await page.waitForFunction(() => window.__GAME?.ready, null, { timeout: 180000 });
   const rows = {};
-  for (const cp of ['cell', 'landing', 'lookout', 'route', 'shuttle', 'engine', 'engine-top', 'breach', 'exit']) {
+  // Every checkpoint of the chapter (Chapter One: cell .. exit).
+  const ids = await page.evaluate(() => window.__GAME.game.level.checkpointIds);
+  for (const cp of ids) {
     rows[cp] = await page.evaluate((id) => {
       const g = window.__GAME;
       g.teleport(id);

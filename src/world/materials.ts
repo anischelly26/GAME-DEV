@@ -38,6 +38,12 @@ export interface MaterialLibrary {
   copper: THREE.MeshStandardMaterial;
   ceramic: THREE.MeshStandardMaterial;
   grate: THREE.MeshStandardMaterial;
+  /** Outdoors (Chapter Two): turf, a gravel lane, beach shingle, roof slates, mossy garden walls. */
+  grass: THREE.MeshStandardMaterial;
+  gravel: THREE.MeshStandardMaterial;
+  shingle: THREE.MeshStandardMaterial;
+  slate: THREE.MeshStandardMaterial;
+  mossyStone: THREE.MeshStandardMaterial;
 }
 
 export function createMaterials(tex: TextureLibrary): MaterialLibrary {
@@ -69,6 +75,12 @@ export function createMaterials(tex: TextureLibrary): MaterialLibrary {
     copper: new THREE.MeshStandardMaterial({ color: '#d4815a', roughness: 0.3, metalness: 0.9 }),
     ceramic: new THREE.MeshStandardMaterial({ color: '#e9e2d0', roughness: 0.25, metalness: 0 }),
     grate: textured(tex.iron, { roughness: 0.6, metalness: 0.7, color: new THREE.Color('#9aa0a6') }),
+    // Procedural stand-ins until the photographed sets load (or if they cannot).
+    grass: textured(tex.floor, { roughness: 1, metalness: 0, color: new THREE.Color('#6f8a4a') }),
+    gravel: textured(tex.floor, { roughness: 0.95, metalness: 0, color: new THREE.Color('#9a9284') }),
+    shingle: textured(tex.stone, { roughness: 0.9, metalness: 0, color: new THREE.Color('#a39d94') }),
+    slate: textured(tex.stone, { roughness: 0.75, metalness: 0, color: new THREE.Color('#4a5257') }),
+    mossyStone: textured(tex.stone, { roughness: 0.95, metalness: 0, color: new THREE.Color('#8f9b80') }),
   };
 }
 
@@ -86,6 +98,24 @@ export function applySurfaces(m: MaterialLibrary, s: SurfaceLibrary): void {
   applySurface(m.ironDark, s.iron, { normalScale: 0.8 });
   m.ironDark.color.set('#5c666b');
   applySurface(m.wood, s.wood);
+  const outdoor = [
+    [m.grass, s.grass],
+    [m.gravel, s.gravel],
+    [m.shingle, s.shingle],
+    [m.slate, s.slate],
+    [m.mossyStone, s.mossyStone],
+  ] as const;
+  for (const [mat, set] of outdoor) {
+    if (!set) continue;
+    applySurface(mat, set, { normalScale: 1.1 });
+    mat.color.set(mat === m.shingle ? '#e8e0d2' : '#ffffff');
+  }
+  // Poly Haven's gravel_road ships a roughness channel of 0 everywhere: as a mirror it threw the
+  // low dawn sun back at the camera hard enough to overflow the frame. Gravel is matte.
+  if (s.gravel) {
+    m.gravel.roughnessMap = null;
+    m.gravel.roughness = 0.95;
+  }
 }
 
 /**

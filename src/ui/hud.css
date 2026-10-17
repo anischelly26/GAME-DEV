@@ -308,3 +308,5 @@ html, body {
   .card h1 { font-size: 34px; }
   .settings label { grid-template-columns: 1fr; }
 }
+
+.card .credits { margin: 14px 0 0; font-size: 11px; line-height: 1.45; color: var(--ink-dim); opacity: 0.75; }

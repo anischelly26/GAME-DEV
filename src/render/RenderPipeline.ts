@@ -42,6 +42,29 @@ const GradeShader = {
   `,
 };
 
+/**
+ * Before bloom: clamp the HDR scene to a sane range and zero any NaN. A single overflowing pixel (a
+ * mirror-like surface catching the sun) otherwise turns to Inf, and the bloom blur spreads it into
+ * a black frame.
+ */
+const SanitizeShader = {
+  name: 'SanitizeShader',
+  uniforms: { tDiffuse: { value: null as THREE.Texture | null } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      if (c.r != c.r || c.g != c.g || c.b != c.b) c.rgb = vec3(0.0);
+      gl_FragColor = vec4(clamp(c.rgb, 0.0, 48.0), c.a);
+    }
+  `,
+};
+
 export type QualityLevel = 'high' | 'low';
 
 export class RenderPipeline {
@@ -52,6 +75,7 @@ export class RenderPipeline {
   private readonly renderPass: RenderPass;
   private readonly ao: GTAOPass;
   private readonly fxaa: ShaderPass;
+  private readonly sanitize: ShaderPass;
   private quality: QualityLevel = 'high';
 
   constructor(
@@ -95,6 +119,8 @@ export class RenderPipeline {
       });
     };
     this.composer.addPass(this.ao);
+    this.sanitize = new ShaderPass(SanitizeShader);
+    this.composer.addPass(this.sanitize);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.w, size.h), 0.55, 0.6, 0.82);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
@@ -122,6 +148,7 @@ export class RenderPipeline {
     this.renderer.setPixelRatio(level === 'high' ? Math.min(window.devicePixelRatio, 2) : Math.min(window.devicePixelRatio, 1));
     this.ao.enabled = level === 'high';
     this.bloom.enabled = level === 'high';
+    this.sanitize.enabled = level === 'high';
     this.fxaa.enabled = level === 'low';
     const samples = level === 'high' ? 4 : 0;
     for (const rt of [this.composer.renderTarget1, this.composer.renderTarget2]) {

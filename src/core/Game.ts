@@ -20,7 +20,7 @@ import { Dialogue } from '../gameplay/Dialogue';
 import { HUD, type Settings } from '../ui/HUD';
 import { AudioSystem } from '../audio/Audio';
 import type { Level, LevelContext } from '../levels/Level';
-import { QuietCellLevel } from '../levels/breakwater/QuietCellLevel';
+import { CHAPTERS, chapterByNumber, chapterLabel, type Atmosphere, type Chapter } from '../levels/chapters';
 import { ensureVertexColors } from '../world/geometry';
 import { Autopilot } from '../dev/Autopilot';
 import { TraversalSurfaces } from '../player/Traversal';
@@ -41,8 +41,12 @@ export interface GameOptions {
   autoplay: boolean;
   /** Play the story opening (Mara waking in the cell). */
   intro?: boolean;
+  /** Watch sentries patrol (off by default in automated runs). */
+  watch?: boolean;
   start: string | null;
   quality: 'high' | 'low' | null;
+  /** Which chapter to play (1: The Quiet Cell). */
+  chapter?: number;
 }
 
 export type GameState = 'loading' | 'title' | 'playing' | 'paused' | 'complete';
@@ -73,6 +77,7 @@ export class Game {
   dropShadow!: DropShadow;
   camera!: ThirdPersonCamera;
   level!: Level;
+  readonly chapter: Chapter;
   autopilot: Autopilot | null = null;
 
   private textures!: TextureLibrary;
@@ -104,6 +109,7 @@ export class Game {
     this.progression = new Progression(this.events);
     this.checkpoints = new Checkpoints(this.events);
     this.dialogue = new Dialogue(this.events);
+    this.chapter = chapterByNumber(options.chapter ?? 1);
   }
 
   static async create(container: HTMLElement, options: GameOptions): Promise<Game> {
@@ -113,14 +119,16 @@ export class Game {
   }
 
   private async init(): Promise<void> {
-    this.hud.showLoading('Charging the tide engine…');
+    this.hud.showLoading(this.chapter.loading);
+    const atmosphere = this.chapter.atmosphere;
+    this.applyAtmospherePalette(atmosphere);
     // Mara is sculpted in Web Workers while the rest of the world is built here.
     // Mara (public/assets/mara/mara.glb) loads while the rest of the world is built here.
     const maraStart = performance.now();
     const mara = new GLTFLoader().loadAsync(`${import.meta.env.BASE_URL}assets/mara/mara.glb`);
     // Let the loading card paint before the heavy synchronous texture generation.
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
-    const surfaces = loadSurfaces(8);
+    const surfaces = loadSurfaces(8, this.chapter.surfaces);
     this.physics = await Physics.create();
     this.textures = createTextureLibrary();
     this.materials = createMaterials(this.textures);
@@ -128,9 +136,10 @@ export class Game {
     if (photographed) applySurfaces(this.materials, photographed);
 
     this.scene.background = Palette.skyTop.clone();
-    this.scene.fog = new THREE.FogExp2(Palette.fog, 0.024);
-    this.setupLights();
+    this.scene.fog = new THREE.FogExp2(Palette.fog, atmosphere.fogDensity);
+    this.setupLights(atmosphere);
     this.sky = new Sky(this.moonDir);
+    this.sky.setLook(atmosphere.stars, atmosphere.disc);
     this.scene.add(this.sky.mesh);
 
     const spawn = new THREE.Vector3(0, 0, 0);
@@ -142,10 +151,11 @@ export class Game {
     this.camera = new ThirdPersonCamera(this.physics, this.player.collider);
     this.pipeline = new RenderPipeline(this.container, this.scene, this.camera.camera);
     this.container.insertBefore(this.pipeline.canvas, this.hud.root);
-    this.environmentMap();
+    this.environmentMap(atmosphere);
 
     const ctx: LevelContext = {
       intro: (this.options.intro ?? !this.options.test) && !this.options.start,
+      watch: this.options.watch ?? !this.options.test,
       scene: this.scene,
       physics: this.physics,
       materials: this.materials,
@@ -162,18 +172,19 @@ export class Game {
       camera: this.camera,
       hud: this.hud,
       moonDir: this.moonDir,
+      keyLight: this.moon,
       traversal: this.traversal,
       effects: this.effects,
       respawn: (reason) => this.respawn(reason),
       complete: (card) => this.complete(card),
       setControl: (enabled) => this.setControl(enabled),
       setOutdoorLight: (level) => {
-        this.hemi.intensity = 1.25 * level;
-        this.moon.intensity = 2.1 * level;
-        this.scene.environmentIntensity = 0.95 * level;
+        this.hemi.intensity = atmosphere.hemiIntensity * level;
+        this.moon.intensity = atmosphere.lightIntensity * level;
+        this.scene.environmentIntensity = atmosphere.envIntensity * level;
       },
     };
-    this.level = new QuietCellLevel(ctx);
+    this.level = await this.chapter.create(ctx);
     // Props built straight from the shared (vertex-coloured) materials would otherwise draw black.
     ensureVertexColors(this.scene);
     this.wireEvents();
@@ -185,6 +196,8 @@ export class Game {
 
     const gltf = await mara;
     this.avatar.attach(gltf);
+    // Frame the shorter toy hero: lower the camera's pivot by most of the height difference.
+    this.camera.pivotOffset = this.avatar.heightDelta * 0.8;
     let triangles = 0;
     gltf.scene.traverse((o) => {
       const m = o as THREE.Mesh;
@@ -208,7 +221,12 @@ export class Game {
       if (this.options.autoplay) this.startAutopilot();
     } else {
       this.state = 'title';
-      this.hud.showTitle(() => this.begin());
+      this.hud.showTitle(
+        { label: chapterLabel(this.chapter.number), title: this.chapter.title, blurb: this.chapter.blurb },
+        CHAPTERS.map((c) => ({ number: c.number, label: `${chapterLabel(c.number)}: ${c.title}`, current: c === this.chapter })),
+        () => this.begin(),
+        (n) => this.gotoChapter(n),
+      );
       // Browsers only allow sound after a click or key: the title theme starts on the first one.
       const wake = () => {
         this.audio.unlock();
@@ -253,11 +271,31 @@ export class Game {
     for (const o of shown) o.visible = false;
   }
 
-  private setupLights(): void {
-    const hemi = new THREE.HemisphereLight('#5d7f99', '#2e261d', 1.25);
+  /**
+   * The chapter's sky and fog colours go into the shared palette before anything is built (the sky,
+   * the sea and the fog read it), and its key light direction into moonDir.
+   */
+  private applyAtmospherePalette(a: Atmosphere): void {
+    Palette.skyTop.set(a.skyTop);
+    Palette.skyHorizon.set(a.skyHorizon);
+    Palette.fog.set(a.fog);
+    Palette.moon.set(a.light);
+    this.moonDir.set(...a.lightDir).normalize();
+  }
+
+  /** Load another chapter (a fresh page: every chapter builds its own world). */
+  gotoChapter(n: number): void {
+    const params = new URLSearchParams(location.search);
+    params.set('chapter', String(n));
+    for (const k of ['start', 'intro', 'autoplay']) params.delete(k);
+    location.assign(`${location.pathname}?${params.toString()}`);
+  }
+
+  private setupLights(a: Atmosphere): void {
+    const hemi = new THREE.HemisphereLight(a.hemiSky, a.hemiGround, a.hemiIntensity);
     this.scene.add(hemi);
     this.hemi = hemi;
-    const moon = new THREE.DirectionalLight(Palette.moon, 2.1);
+    const moon = new THREE.DirectionalLight(Palette.moon, a.lightIntensity);
     this.moon = moon;
     moon.position.copy(this.moonDir).multiplyScalar(60);
     moon.target.position.set(0, 0, 8);
@@ -276,27 +314,34 @@ export class Game {
     this.scene.add(moon, moon.target);
   }
 
-  /** Night-time reflections for metals: cold sky above, warm lamp glow near the horizon. */
-  private environmentMap(): void {
+  /** Reflections for metals: the chapter's sky above, a warm glow round the horizon, the moon or sun. */
+  private environmentMap(a: Atmosphere): void {
     const envScene = new THREE.Scene();
     const geo = new THREE.SphereGeometry(10, 32, 16);
     const mat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
-      uniforms: { moonDir: { value: this.moonDir } },
+      uniforms: {
+        moonDir: { value: this.moonDir },
+        low: { value: new THREE.Color(a.env.low) },
+        high: { value: new THREE.Color(a.env.high) },
+        glow: { value: new THREE.Color(a.env.glow) },
+        glowStrength: { value: a.env.glowStrength },
+        lightColor: { value: new THREE.Color(a.light) },
+      },
       vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: `uniform vec3 moonDir; varying vec3 vDir;
+      fragmentShader: `uniform vec3 moonDir, low, high, glow, lightColor; uniform float glowStrength; varying vec3 vDir;
         void main(){
           vec3 d = normalize(vDir);
-          vec3 col = mix(vec3(0.05,0.07,0.09), vec3(0.12,0.2,0.28), smoothstep(-0.2, 0.8, d.y));
-          col += vec3(0.9,0.55,0.25) * 0.5 * exp(-abs(d.y + 0.05) * 9.0) * (0.5 + 0.5 * sin(atan(d.z, d.x) * 3.0));
-          col += vec3(0.7,0.8,1.0) * pow(max(dot(d, moonDir), 0.0), 40.0) * 3.0;
+          vec3 col = mix(low, high, smoothstep(-0.2, 0.8, d.y));
+          col += glow * glowStrength * exp(-abs(d.y + 0.05) * 9.0) * (0.5 + 0.5 * sin(atan(d.z, d.x) * 3.0));
+          col += lightColor * pow(max(dot(d, moonDir), 0.0), 40.0) * 3.0;
           gl_FragColor = vec4(col, 1.0);
         }`,
     });
     envScene.add(new THREE.Mesh(geo, mat));
     const pmrem = new THREE.PMREMGenerator(this.pipeline.renderer);
     this.scene.environment = pmrem.fromScene(envScene, 0.02).texture;
-    this.scene.environmentIntensity = 0.95;
+    this.scene.environmentIntensity = a.envIntensity;
     pmrem.dispose();
   }
 
@@ -541,8 +586,14 @@ export class Game {
     this.input.setGameplayActive(false);
     this.input.exitPointerLock();
     this.events.emit('complete', { timeSeconds: this.progression.elapsed, falls: this.progression.falls });
+    const next = CHAPTERS.find((c) => c.number === this.chapter.number + 1);
     this.hud.showComplete(
-      { time: this.progression.elapsed, falls: this.progression.falls, ...card },
+      {
+        time: this.progression.elapsed,
+        falls: this.progression.falls,
+        ...card,
+        next: next ? { label: `Continue: ${chapterLabel(next.number)}`, go: () => this.gotoChapter(next.number) } : undefined,
+      },
       () => this.restartSection(),
       () => {
         this.hud.hideScreen();
@@ -692,6 +743,8 @@ export class Game {
       lookAt: focus ? focus.position : (this.level.pointOfInterest?.(feet, this.player.facing) ?? null),
       mode: this.player.mode,
       modeT: this.player.modeT,
+      ridePose: this.player.ride?.pose,
+      rideTilt: this.player.ride?.tilt,
       knockbacks: this.player.knockbacks,
       moves: {
         steam: this.player.steam,
@@ -797,6 +850,7 @@ export class Game {
         level: game.level.debugInfo(),
         autopilot: game.autopilot?.status ?? null,
         time: Number(game.time.toFixed(3)),
+        chapter: game.chapter.number,
       }),
       /** Advance the simulation by `n` fixed steps (render once at the end). */
       step: (n = 1) => {

@@ -4,7 +4,10 @@ A single-player, story-driven 3D adventure. Mara Venn, a tide-engine mechanic, r
 a flood diversion that would drown her district. She fell asleep over her drawings and woke up in
 Breakwater, an island prison that runs on the sea.
 
-The current build is **Chapter One, *The Quiet Cell***, a short escape from the cell block:
+The current build has two chapters. Mara is an original toy-like hero with a living face (eyes,
+lids, brows and mouth that blink, look and react).
+
+**Chapter One, *The Quiet Cell***, a short escape from the cell block:
 
 - a skippable story opening, played in the engine: Mara's workshop the night before, then she
   wakes up on the cell floor;
@@ -14,8 +17,20 @@ The current build is **Chapter One, *The Quiet Cell***, a short escape from the 
   the scaffold);
 - *The Breathing Engine* ride and the split-feed puzzle at the breach;
 - five hidden chalk marks, boards to slam, a steam whistle to pull;
-- the chapter ending, which points to Chapter Two (the hangar cell and an old aircraft, not built
-  yet).
+- a Watch automaton (a guard on rails with a searchlight) patrolling the Breathing Engine's collar:
+  stay out of its lamp, keep the column between you, or knock it out with a ground pound;
+- the chapter ending, which points to Chapter Two.
+
+**Chapter Two, *The Warders' Green*** (`?chapter=2`, or the title screen's chapter buttons): dawn
+on the spur behind the prison, where its keepers once raised their children:
+
+- a stealth lane: a Watch on a rail down Cottage Lane; the hedged front gardens are the way past it;
+- a sunken playground entered down a slide (a CC BY model Mara rides), with a second Watch on its
+  rim that hears noise;
+- a swing to pump high enough to leap onto the fallen sea wall, while the Watch listens for the
+  creak;
+- the hangar yard, and a lighthouse burning out on the water (Chapter Three's destination; a CC BY
+  scan).
 
 First-play length has not been measured with a player yet. The autopilot, which never hesitates,
 plays the route in about a minute; the opening adds about 40 seconds unless it is skipped.
@@ -41,8 +56,9 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173 and click **Begin**. Click the game view to capture the mouse
-(Esc releases it and pauses).
+Open http://localhost:5173 and click **Begin** (or a chapter button). Click the game view to
+capture the mouse (Esc releases it and pauses). http://localhost:5173/?chapter=2 opens Chapter Two
+directly.
 
 Production build (static files in `dist/`, servable from any static host or sub-path):
 

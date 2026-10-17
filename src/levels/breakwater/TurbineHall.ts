@@ -317,9 +317,10 @@ export function buildTurbineHall(
       engine.add(pipe);
     }
     // Two great flywheels on the column, slowly turning.
+    // Above and below the collar's travel (T1 - 2.6 to T3 plus a figure on the deck), never in it.
     for (const [y, r, side] of [
-      [2.2, 1.9, 1],
-      [7.4, 1.5, -1],
+      [-6.4, 1.9, 1],
+      [12.3, 1.4, -1],
     ]) {
       const fly = new THREE.Mesh(gearGeometry(r, 24, 0.18, 0.35, 0.35), m.brass);
       fly.position.set(side * (HALL.columnR + 0.5), y, -0.8);
