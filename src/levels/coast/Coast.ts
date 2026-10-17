@@ -86,7 +86,7 @@ export function buildCoast(ctx: LevelContext, lighthouse: GLTF | null): Coast {
   const bed = new THREE.Mesh(bedGeo, m.sand);
   bed.receiveShadow = true;
   root.add(bed);
-  physics.fixed(R.ColliderDesc.trimesh(pos, new Uint32Array(idx)));
+  physics.setSurface(physics.fixed(R.ColliderDesc.trimesh(pos, new Uint32Array(idx))), 'sand');
 
   // ------------------------------------------------------------ water that shows its depth
   const waterGeo = new THREE.BufferGeometry();

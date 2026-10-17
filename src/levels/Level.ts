@@ -13,6 +13,7 @@ import type { ThirdPersonCamera } from '../camera/ThirdPersonCamera';
 import type { HUD } from '../ui/HUD';
 import type { TraversalSurfaces } from '../player/Traversal';
 import type { Effects } from '../world/Effects';
+import type { Surface } from '../physics/Physics';
 
 /** Everything a level needs from the game. Levels never reach into `Game` directly. */
 export interface LevelContext {
@@ -58,7 +59,7 @@ export interface LevelContext {
 /** One step of the scripted dev/test route (see dev/Autopilot.ts). */
 export type RouteStep =
   | { kind: 'move'; to: [number, number, number]; radius?: number; precise?: boolean }
-  | { kind: 'jump'; from: [number, number, number]; to: [number, number, number] }
+  | { kind: 'jump'; from: [number, number, number]; to: [number, number, number]; double?: boolean }
   | { kind: 'vault'; from: [number, number, number]; to: [number, number, number] }
   | { kind: 'climb'; from: [number, number, number]; to: [number, number, number] }
   | { kind: 'interact'; id: string; standAt: [number, number, number]; expectFlag?: string }
@@ -81,6 +82,11 @@ export interface Level {
   reset(): void;
   /** Put props/flags into the state implied by reaching a checkpoint (dev teleports). */
   applyCheckpointState(id: string): void;
+  /**
+   * What the ground sounds like at a point, for large colliders painted with several materials
+   * (lawns and lanes on one slab). Colliders tagged with `physics.setSurface` win; null: stone.
+   */
+  surfaceAt?(x: number, y: number, z: number): Surface | null;
   /** Something nearby worth a glance (Mara turns her head toward it), or null. */
   pointOfInterest?(feet: THREE.Vector3, facing: number): THREE.Vector3 | null;
   /** Give the next tier of hint for the current objective. */

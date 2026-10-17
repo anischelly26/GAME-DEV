@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import type { Level, LevelContext, RouteStep } from '../Level';
+import type { Surface } from '../../physics/Physics';
 import { ServiceLight, glowSprite } from '../../world/props/Lanterns';
 import { Hangar } from '../../world/props/Hangar';
 import { PathTrack, WatchSentry } from '../../gameplay/WatchSentry';
@@ -516,6 +517,16 @@ export class WardersGreenLevel implements Level {
     progression.setObjective(['Climb up from the cove', 'Get through Cottage Lane to the green', 'Find a way over the sea wall', 'Get up onto the fallen sea wall', 'Cross the yard to the causeway gate'][order] ?? '');
     this.laneWatch.reset();
     this.rimWatch.reset();
+  }
+
+  /** The village's ground slabs are painted: gravel on the lane and the garden paths, paving in the yard, grass elsewhere. */
+  surfaceAt(x: number, y: number, z: number): Surface | null {
+    if (Math.abs(y) > 0.4 || z < G.lane.z0 || z > G.yard.z1) return null;
+    const ax = Math.abs(x);
+    if (z < G.lane.z1 && ax < G.lane.x) return 'gravel';
+    if (z < G.lane.z1 && ax < G.cottage.x0 && G.cottage.zs.some((zc) => Math.abs(z - zc) < 0.55)) return 'gravel';
+    if (z > G.wall.z1 && x > G.yard.x0 && x < G.yard.x1) return 'stone';
+    return 'grass';
   }
 
   pointOfInterest(feet: THREE.Vector3): THREE.Vector3 | null {

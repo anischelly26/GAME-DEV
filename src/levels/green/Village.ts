@@ -112,7 +112,7 @@ export function buildVillage(ctx: LevelContext): Village {
 
   // ------------------------------------------------------------ the cove: landing, beach, wall
   const C = G.cove;
-  solid(C.x0, C.x1, C.landingY - 2, C.landingY, C.landingZ0, G.lane.z0 - 0.6, m.shingle, { tint: tint(0.9) });
+  physics.setSurface(solid(C.x0, C.x1, C.landingY - 2, C.landingY, C.landingZ0, G.lane.z0 - 0.6, m.shingle, { tint: tint(0.9) }), 'gravel');
   {
     // The beach: a slab sloping from the landing to under the sea.
     const len = Math.hypot(C.landingZ0 - C.z0, C.landingY - (G.seaY - 0.4));
@@ -122,7 +122,7 @@ export function buildVillage(ctx: LevelContext): Village {
     // Tilted so its north end (toward the landing) is the high one.
     const q = new THREE.Quaternion().setFromAxisAngle(v3(1, 0, 0), -ang);
     batch.add(worldBox(C.x1 - C.x0, 1, len, 3), m.shingle, new THREE.Matrix4().compose(v3(0, cy, cz), q, v3(1, 1, 1)), { tint: tint(0.95) });
-    physics.box(v3(0, cy, cz), v3((C.x1 - C.x0) / 2, 0.5, len / 2), q);
+    physics.setSurface(physics.box(v3(0, cy, cz), v3((C.x1 - C.x0) / 2, 0.5, len / 2), q), 'gravel');
     // Pebbles and rocks on the beach.
     for (let i = 0; i < 40; i++) {
       const x = C.x0 + 1 + rng() * (C.x1 - C.x0 - 2);
@@ -296,7 +296,7 @@ export function buildVillage(ctx: LevelContext): Village {
   // Retaining walls (south, west, east), coping stones on the rim, railings above (Mara cannot
   // climb out except up the slide's ladder).
   const rimY = 0;
-  solid(B.x0 - 0.5, B.x1 + 0.5, B.floorY - 1, B.floorY, B.z0, B.z1, m.gravel, { tint: tint(0.85) });
+  physics.setSurface(solid(B.x0 - 0.5, B.x1 + 0.5, B.floorY - 1, B.floorY, B.z0, B.z1, m.gravel, { tint: tint(0.85) }), 'gravel');
   solid(B.x0 - 0.5, B.x1 + 0.5, B.floorY, rimY - 0.2, B.z0 - 0.5, B.z0, m.stone, { tint: tint(0.8) });
   solid(B.x0 - 0.5, B.x0, B.floorY, rimY - 0.2, B.z0, B.z1, m.stone, { tint: tint(0.8) });
   solid(B.x1, B.x1 + 0.5, B.floorY, rimY - 0.2, B.z0, B.z1, m.stone, { tint: tint(0.8) });

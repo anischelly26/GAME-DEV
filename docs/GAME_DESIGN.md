@@ -46,7 +46,8 @@ brass; amber practical lamps against cold ocean blue and oxidised teal. Mara's o
 coral scarf are the only other warm accents, which keeps her readable. Mechanisms have honest
 motion: needles settle, latches kick, steam vents with the engine's 4.2-second "breath". Mara and
 the stone, metal and wood surfaces are CC0 assets. Sound is recorded CC0 samples (footsteps that
-change with stone, metal and wood; cloth, impacts, metal) and CC0 music and ambience beds that
+change with stone, metal, wood, grass, gravel and sand, and a splash when wading; cloth, impacts,
+metal) and CC0 music and ambience beds that
 change with the place, with synthesis where it reads better: steam, the engine's drone, the steam
 whistle, the grind's scrape. The workshop's rain is generated in code. Sources and licences:
 [ASSETS.md](ASSETS.md).
@@ -221,6 +222,37 @@ stick, or pushing a clearly different direction, reads the camera again.
    tier three 4.4 m, the gantry top 3.0 m with a low pivot.
 6. Grinding: Mara has no steering, so the camera swings behind the direction of travel (yielding
    to the mouse for 0.6 s after any look input), stands back 1.2 m further and widens 6°.
+7. Framing per mode (`MODE_FRAMING`, added to the zone's): swimming 0.6 m closer and 0.45 m lower
+   (the waterline in the lower third); on the swing 1.3 m further back, 0.5 m higher and 5° wider
+   (the whole arc and the wall in view); on the slide 0.8 m back and 5° wider. The ladder and the
+   skiff keep their framing (the skiff has its zone).
+8. A long fall lowers the aim with the fall speed (up to 1.1 m, from 0.3 s into the fall), so the
+   landing comes into view in time; an ordinary jump never moves it.
+
+## Game feel (Phase B of the overhaul; implemented, unreviewed)
+
+The plan and its reasons: [MOVEMENT_2_0.md](MOVEMENT_2_0.md). Tuning lives in `FEEL`
+(`src/player/feel.ts`) and `MODE_FRAMING` (`src/camera/ThirdPersonCamera.ts`). All of it is
+visual or audible only: the capsule, the physics and the controls are unchanged.
+
+| | |
+| --- | --- |
+| Air poses | Rising, apex (a small tuck) and falling (arms up and out, a leg reaching down) blend by vertical speed; faster than 9 m/s from about 3.5 m down, the arms windmill and her face turns worried |
+| Squash and stretch | A spring on her height (ω 22 rad/s, damping 0.42), volume kept: take-off stretches to 1.09, the double jump 1.06; a landing squashes in proportion to impact (none under 3 m/s, 0.80 at 16 m/s and above); a ground pound lands with the full squash. Measured in the lab: a standing jump 1.093 up, 0.904 on landing; the 10 m drop 0.815 |
+| Head bump | Rising faster than 2.5 m/s into a ceiling: a flinch (CC0 `Hit_Head`), a surprised face, a small squash, a soft bump |
+| Landings | By impact: under 3 m/s nothing; then the material's landing sound; over 8 m/s a small camera shake; over 12 m/s the heavy landing. The landing now knows what she landed on (the ground probe runs again at the landing; before, landings always sounded like stone) |
+| Footsteps | Stone, metal, wood, grass, gravel, sand, and wading (shallow water, a splash and a ring). Colliders are tagged in the level; large painted slabs answer `surfaceAt` (Chapter Two's lawns, lane, garden paths and yard) |
+| Swimming | CC0 clips: treading water when slow, the crawl when moving (laid forward), its rate following her speed |
+| The skiff | CC0 `Driving_Loop` instead of the bench-sitting clip |
+
+### The movement lab (`?lab=1`)
+
+A plain yard outside the story for tuning and tests (no Watch, one checkpoint, falls come back to
+the start). Stations: gaps 1.5, 2.0, 2.8 and 3.3 m (the last one is the running jump's limit; the
+scripted lap takes it with the double jump); ledges 1.2, 1.8, 2.2 and 2.6 m (the last needs the
+double jump); vault blocks 0.5 and 0.9 m and a 1.2 m climb; a tower of 34° ramps to landings at 3,
+6 and 10 m with open edges to drop from; seven footstep pads; a low beam; a pound plate; a pool.
+Each station has a sign.
 
 ## Chapter One, *The Quiet Cell* (implemented)
 

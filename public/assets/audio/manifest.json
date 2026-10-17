@@ -21,6 +21,32 @@
       "sfx/impact-sounds-impactPlate_light_003.ogg",
       "sfx/impact-sounds-impactPlate_light_004.ogg"
     ],
+    "step.grass": [
+      "sfx/impact-sounds-footstep_grass_000.ogg",
+      "sfx/impact-sounds-footstep_grass_001.ogg",
+      "sfx/impact-sounds-footstep_grass_002.ogg",
+      "sfx/impact-sounds-footstep_grass_003.ogg",
+      "sfx/impact-sounds-footstep_grass_004.ogg"
+    ],
+    "step.sand": [
+      "sfx/impact-sounds-footstep_snow_000.ogg",
+      "sfx/impact-sounds-footstep_snow_001.ogg",
+      "sfx/impact-sounds-footstep_snow_002.ogg",
+      "sfx/impact-sounds-footstep_snow_003.ogg",
+      "sfx/impact-sounds-footstep_snow_004.ogg"
+    ],
+    "step.gravel": [
+      "sfx/rpg-audio-footstep00.ogg",
+      "sfx/rpg-audio-footstep01.ogg",
+      "sfx/rpg-audio-footstep02.ogg",
+      "sfx/rpg-audio-footstep03.ogg",
+      "sfx/rpg-audio-footstep04.ogg",
+      "sfx/rpg-audio-footstep05.ogg",
+      "sfx/rpg-audio-footstep06.ogg",
+      "sfx/rpg-audio-footstep07.ogg",
+      "sfx/rpg-audio-footstep08.ogg",
+      "sfx/rpg-audio-footstep09.ogg"
+    ],
     "land": [
       "sfx/impact-sounds-impactSoft_medium_000.ogg",
       "sfx/impact-sounds-impactSoft_medium_001.ogg",

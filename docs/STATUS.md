@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Branch** | `claude/low-tide` (draft PR #7), stacked on `claude/toy-hero` (PR #6) → `claude/chapter-one-v2` (PR #5) → `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
-| **Build** | Chapter One, *The Quiet Cell*: the workshop opening → pressure-hatch puzzle → maintenance shaft (the steam kicker) → lookout → the feed-pipe grind or the scaffold → parkour practice route → *The Breathing Engine* (now with the Watch) and the split feed → chapter ending; five hidden chalk marks. Chapter Two, *The Warders' Green*: the cove → Cottage Lane (stealth) → the green → the slide → the swing leap → the yard. Chapter Three, *The Low Tide*: the slipway → the swim → the skiff → the bar and the surge → the patrol boat → the lighthouse |
-| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PRs #3 to #7) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
+| **Branch** | `claude/game-feel` (draft PR #8), stacked on `claude/low-tide` (PR #7) → `claude/toy-hero` (PR #6) → `claude/chapter-one-v2` (PR #5) → `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
+| **Build** | Chapter One, *The Quiet Cell*: the workshop opening → pressure-hatch puzzle → maintenance shaft (the steam kicker) → lookout → the feed-pipe grind or the scaffold → parkour practice route → *The Breathing Engine* (now with the Watch) and the split feed → chapter ending; five hidden chalk marks. Chapter Two, *The Warders' Green*: the cove → Cottage Lane (stealth) → the green → the slide → the swing leap → the yard. Chapter Three, *The Low Tide*: the slipway → the swim → the skiff → the bar and the surge → the patrol boat → the lighthouse. The movement lab (`?lab=1`). The cinematic overhaul's audit and plans (Phase A) and game feel (Phase B) |
+| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PRs #3 to #8) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
 
 ## Launch
 
@@ -15,7 +15,7 @@ npm run dev
 
 Open http://localhost:5173, click **Begin**, then click the view to capture the mouse. The story
 opening plays first (about 39 s; Space or E skips it). Chapter Two: the title screen's chapter
-button, or http://localhost:5173/?chapter=2 (its opening is about 9 s); Chapter Three: ?chapter=3. Production build: `npm run build`, then
+button, or http://localhost:5173/?chapter=2 (its opening is about 9 s); Chapter Three: ?chapter=3; the movement lab: ?lab=1. Production build: `npm run build`, then
 `npm run preview` (http://localhost:4173). Character viewer: http://localhost:5173/?viewer=mara.
 
 **Dual-GPU laptops.** Windows runs browsers on the integrated GPU unless told otherwise.
@@ -23,6 +23,84 @@ Settings → System → Display → Graphics → Microsoft Edge (or Chrome) → 
 the browser to the dedicated GPU. On the test laptop (Intel UHD plus NVIDIA RTX 2050), Edge now
 runs on the RTX this way. The Intel measurements below use Playwright's bundled Chromium, which
 that setting does not cover.
+
+## The cinematic overhaul: audit, plans, and Phase B, game feel (`claude/game-feel`, draft PR #8)
+
+Stacked on `claude/low-tide` (PR #7). The owner's brief of 2026-10-17, "IT TAKES ONE — THE
+CINEMATIC ADVENTURE OVERHAUL": first an audit and plans (Phase A), then game feel (Phase B). No
+person has played any of it yet.
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| Phase A: audit and design documents | COMPLETED (for the owner's review) | [OVERHAUL_AUDIT.md](OVERHAUL_AUDIT.md), [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md), [MOVEMENT_2_0.md](MOVEMENT_2_0.md), [CINEMATIC_VISION.md](CINEMATIC_VISION.md), [CHARACTER_BIBLE.md](CHARACTER_BIBLE.md), [STORY_CONTINUITY.md](STORY_CONTINUITY.md), [VISUAL_ART_DIRECTION.md](VISUAL_ART_DIRECTION.md). The story answers in STORY_CONTINUITY.md are a proposal that needs the owner's approval before any dialogue uses them |
+| Air poses, squash and stretch, landing tiers, head bump | COMPLETED | `src/player/feel.ts`, `PlayerAvatar.ts`; a `bump` event in the controller |
+| New CC0 clips (swim, tread water, drive, head bump, talk) | COMPLETED | `mara.glb` rebuilt, 29 clips, 7.98 MB (was 7.44) |
+| Camera: fall framing, per-mode framing | COMPLETED | `FALL_LOOK`, `MODE_FRAMING` |
+| Footsteps and landings by material, wading | COMPLETED | Grass, gravel, sand and water added; Chapters Two and Three tagged |
+| Movement lab (`?lab=1`) | COMPLETED (first version) | No swing, slide or grind pipe in it yet |
+| Frame-time baseline for every chapter | COMPLETED | `scripts/measure-frames.mjs`; found long single frames in Chapters Two and Three (not yet diagnosed) |
+| Phases C to G (Pip, scenes and transitions, Chapter One polish, story thread, new mechanics, Chapter Four design) | NOT STARTED | Order and gates in the roadmap |
+
+### Also in this pass
+
+- **Landings know what she landed on.** The controller's ground probe runs before each step's
+  move, so at the moment of landing it had not seen the ground: every landing sounded like stone
+  and a ground pound's `collider` was always null. It now probes again at the landing. The boards
+  in Chapter One already had a position fallback; nothing else read the collider.
+- **The autopilot** can take a jump step with the double jump (`double: true`).
+
+### Verification (this pass)
+
+Same machine as below (Edge on the RTX 2050).
+
+- **Edge e2e at `b3f907d`: 115/115 in 13.3 min** (one run): the new `feel.spec.ts` (9) and the
+  106 earlier tests, which now run with the landing probe, the camera framing, the material
+  footsteps and the swim clips. An earlier run before the swim cross-fade was added: 115/115 in
+  15.0 min. Baseline at `f95f398` before any change: 106/106 in 17.1 min.
+- **Unit tests: 68/68** (54 before; new: `feel.test.ts` 11, camera framing 3).
+- **Type-check** of `f74c255` and `b3f907d` from clean `git archive` copies; the production
+  build passes (main bundle 4,953 → 4,969 kB).
+- **Screenshots** (exact frames read from the canvas, `scripts/capture-feel.mjs`):
+  `docs/evidence/game-feel/`. Read by me for pose correctness: the first swim screenshots showed
+  the crawl clip upright and treading water too deep, both corrected before the commit.
+- **Frame times after the change** (`scripts/measure-frames.mjs`, same conditions as the baseline
+  in [OVERHAUL_AUDIT.md](OVERHAUL_AUDIT.md); raw data [evidence/frames-after-b3f907d.jsonl](evidence/frames-after-b3f907d.jsonl)):
+
+| Chapter | Quality | Browser, GPU | Mean frame (ms), range over checkpoints | Mean fps | Worst checkpoint p95 (ms) | Worst single frame (ms) | Checkpoints | Geometries / textures | JS heap max (MB) |
+| ---: | --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: |
+| 1 | Low | Edge, RTX 2050 | 4.1–6.8 | 148–246 | 14.2 | 34 | 9 | 623 / 64 | 82 |
+| 1 | High | Edge, RTX 2050 | 11.4–19.4 | 51–87 | 35.5 | 53 | 9 | 623 / 84 | 112 |
+| 1 | Low | Chromium, Intel UHD | 16.5–36.9 | 27–61 | 55.2 | 69 | 9 | 623 / 64 | 99 |
+| 2 | Low | Edge, RTX 2050 | 2.3–3.1 | 319–433 | 6.4 | 20 | 5 | 291 / 62 | 57 |
+| 2 | High | Edge, RTX 2050 | 6.6–8.3 | 121–152 | 23.0 | 339 | 5 | 291 / 79 | 53 |
+| 2 | Low | Chromium, Intel UHD | 19.4–24.2 | 41–51 | 36.3 | 60 | 5 | 291 / 62 | 73 |
+| 3 | Low | Edge, RTX 2050 | 1.8–3.1 | 323–556 | 5.8 | 38 | 5 | 123 / 34 | 70 |
+| 3 | High | Edge, RTX 2050 | 5.7–7.7 | 130–175 | 14.0 | 510 | 5 | 123 / 51 | 47 |
+| 3 | Low | Chromium, Intel UHD | 13.0–16.2 | 62–77 | 34.1 | 54 | 5 | 123 / 34 | 45 |
+| lab | Low | Edge, RTX 2050 | 2.1–2.1 | 481–481 | 4.1 | 11 | 1 | 142 / 64 | 40 |
+| lab | High | Edge, RTX 2050 | 5.7–5.7 | 176–176 | 11.4 | 25 | 1 | 142 / 81 | 65 |
+| lab | Low | Chromium, Intel UHD | 15.0–15.0 | 67–67 | 33.9 | 38 | 1 | 142 / 64 | 47 |
+
+  One run each, before and after. The differences go both ways by similar amounts (Chapter One
+  High 12.7–17.9 → 11.4–19.4 ms; Chapter One on Intel 20.5–39.8 → 16.5–36.9 ms), so no change
+  shows above the run-to-run variation; this is not a claim of improvement. The long single frames
+  recur at High on the RTX (Chapter Two: 261–339 ms at four of five checkpoints; Chapter Three:
+  406 and 510 ms) and did not appear on the Intel GPU this time (worst 54–69 ms): intermittent,
+  still undiagnosed.
+
+### Known limitations (this pass)
+
+- **Nobody has played it.** The squash amounts, the windmill threshold and the camera's fall
+  framing are tuned from numbers and screenshots only.
+- **The gravel footsteps** (Kenney RPG Audio's footsteps) were chosen by pack and name and have not
+  been listened to by a person. Sand is the snow steps pitched down.
+- **The crawl clip is upright**, so the swimming body is still laid forward by code; at some
+  angles the arms may cross the body. Treading water is the clip as it is.
+- **In test mode the browser keeps animating between steps**, so page screenshots of a stepped
+  moment drift; `capture-feel.mjs` reads the canvas inside the step instead.
+- **Long single frames** in Chapters Two and Three (240–825 ms) are measured but not diagnosed.
+- **The lab** has no swing, slide or grind pipe, and its 2.6 m ledge (double jump) is not in the
+  scripted lap.
 
 ## Chapter Three, *The Low Tide* (`claude/low-tide`, draft PR #7)
 
@@ -617,11 +695,17 @@ e2e suite, headed for frame times).
 
 ## Next
 
-1. Uncoached first-time playtests of Chapters One and Two (the Watch's fairness, the swing).
-2. Codex's review of PRs #3 to #6.
-3. Chapter Four (the owner's arcade mystery, in an original arcade). The camera settings the earlier Chapter Two prompt
-   asked for (separate sensitivities, inverts, chase assist, shake, FOV) are already in the
-   settings menu (PR #4).
+The order is in [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md). In short:
+
+1. The owner's decision on the story proposal in [STORY_CONTINUITY.md](STORY_CONTINUITY.md).
+2. Uncoached first-time playtests: the movement lab first (Codex's acceptance: five clean runs),
+   then Chapters One to Three (the Watch's fairness, the swing, the surge).
+3. Diagnose the long single frames in Chapters Two and Three (`scripts/trace-stalls.mjs`).
+4. Phase C: Pip, the `Cinematic` director, the Chapter One → Two transition.
+5. Codex's review of PRs #3 to #8.
+6. Chapter Four is design-only (Phase G) until Phases B to E are polished. The camera settings the
+   earlier Chapter Two prompt asked for (separate sensitivities, inverts, chase assist, shake,
+   FOV) are already in the settings menu (PR #4).
 
 ---
 

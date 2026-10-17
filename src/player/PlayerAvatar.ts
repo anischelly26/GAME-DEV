@@ -6,6 +6,7 @@ import { MOVEMENT } from './movement';
 import { TRAVERSAL } from './Traversal';
 import { Scarf } from './Scarf';
 import { createToyHero, type ToyFace, type ToyFit, type ToyMood } from './ToyHero';
+import { FEEL, SquashSpring, airPose, landingSquash } from './feel';
 
 export interface AvatarState {
   feet: THREE.Vector3;
@@ -44,6 +45,16 @@ export interface AvatarMoves {
   /** Air moves left this airtime (0..2): the canister's gauge glows with it. */
   airLeft: number;
 }
+
+/** Falling: how far the arms lift out from her sides (rad), and the leading leg's reach (rad). */
+const FALL_ARM_RAISE = 0.75;
+const FALL_LEG_REACH = 0.3;
+/**
+ * With the swim clips: the forward lean while stroking (rad; the crawl clip is upright, so the
+ * body is laid down here, as before), and how much lower she sits treading water (m).
+ */
+const SWIM_CLIP_TILT = 1.2;
+const SWIM_TREAD_DROP = 0.12;
 
 /** The double jump's front flip: duration (the pivot is her middle, from the toy's fit). */
 const FLIP_TIME = 0.42;
@@ -120,6 +131,16 @@ export class PlayerAvatar {
   private emoteMood: ToyMood = 'happy';
   private emoteT = 0;
   private hangLift = 0;
+  /** Game feel (feel.ts, visual only): squash and stretch, and the airborne poses. */
+  private readonly squash = new SquashSpring();
+  private fallingFor = 0;
+  private fallArms = 0;
+  private flail = 0;
+  /** Swimming with the swim clips: how much she is stroking rather than treading water, the phase. */
+  private swimMove = 0;
+  private swimPhase = 0;
+  /** 0..1: how much the swim clips have taken over from the walk cycle (eases in and out). */
+  private swimBlend = 0;
 
   /** Called when a foot plants; used for footstep audio. */
   onFootstep: ((speed: number) => void) | null = null;
@@ -176,7 +197,7 @@ export class PlayerAvatar {
     }
     this.root.updateMatrixWorld(true);
     this.measureLocomotion(gltf.animations);
-    for (const n of ['idle', ...LOCOMOTION, 'jumpLoop', 'land', 'crouch']) this.actions.get(n)?.play();
+    for (const n of ['idle', ...LOCOMOTION, 'jumpLoop', 'land', 'crouch', 'swimIdle', 'swimFwd']) this.actions.get(n)?.play();
     this.actions.get('idle')?.setEffectiveWeight(1);
     this.mixer.update(0);
     this.root.updateMatrixWorld(true);
@@ -327,10 +348,24 @@ export class PlayerAvatar {
   onJump(): void {
     this.airTime = 0;
     this.play('jumpStart', 1.6, 0.25);
+    this.squash.pop(FEEL.takeoffStretch);
+  }
+
+  /** Rising into a ceiling: a flinch, a surprised face, a little squash. */
+  onBump(): void {
+    if (this.actions.has('hitHead')) this.play('hitHead', 1.4, 0);
+    this.surpriseT = 0.7;
+    this.squash.pop(-0.07);
+  }
+
+  /** What the game-feel layer is showing (tests and tuning). */
+  get feel(): { height: number; width: number; fallArms: number; flail: number; swimMove: number } {
+    return { height: this.squash.height, width: this.squash.width, fallArms: this.fallArms, flail: this.flail, swimMove: this.swimMove };
   }
 
   onLand(impact: number): void {
     if (impact < 3) return;
+    this.squash.pop(-landingSquash(impact));
     this.landT = 0;
     // A big drop lands heavier and takes a beat longer to straighten up (animation only: control
     // is never held back).
@@ -354,6 +389,7 @@ export class PlayerAvatar {
    * `loop` repeats it until the next clip or `endCinematic` (sitting at the bench).
    */
   cinematic(name: string, timeScale = 1, startAt = 0, loop = false, fadeIn?: number): void {
+    this.squash.reset();
     this.play(name, timeScale, startAt);
     if (this.oneShot && timeScale === 0) this.oneShot.weight = 1;
     if (this.oneShot && fadeIn !== undefined) this.oneShot.rate = fadeIn;
@@ -447,8 +483,9 @@ export class PlayerAvatar {
       else if (mode === 'vault') this.play('vault', this.clipDuration('vault') / (TRAVERSAL.vaultTime * 1.6), 0.1);
       else if (mode === 'grind') this.play('grindPose', 0, 0.4);
       else if (mode === 'ride' && s.ridePose === 'ladder') this.cinematic('climb', 0.8, 0, true, 10);
+      else if (mode === 'ride' && s.ridePose === 'boat' && this.actions.has('drive')) this.cinematic('drive', 1, 0, true, 8);
       else if (mode === 'ride') this.cinematic('sitIdle', 1, 0, true, 8);
-      else if (this.oneShot && /climb|vault|grindPose|sitIdle/.test(this.oneShot.name)) this.oneShot.target = 0;
+      else if (this.oneShot && /climb|vault|grindPose|sitIdle|drive/.test(this.oneShot.name)) this.oneShot.target = 0;
       this.lastMode = mode;
     }
     if ((s.knockbacks ?? 0) > this.lastKnockbacks) {
@@ -466,6 +503,7 @@ export class PlayerAvatar {
       if (mv.doubleJumps > this.lastDoubleJumps) {
         this.lastDoubleJumps = mv.doubleJumps;
         this.flipT = 0;
+        this.squash.pop(FEEL.doubleJumpStretch);
       }
       if (mv.dashes > this.lastDashes) {
         this.lastDashes = mv.dashes;
@@ -502,6 +540,8 @@ export class PlayerAvatar {
     this.airTime = s.grounded ? 0 : this.airTime + dt;
     const airborne = !s.grounded && mode === 'move' && (this.airTime > 0.1 || s.verticalSpeed > 1);
     this.airBlend = damp(this.airBlend, airborne ? 1 : 0, airborne ? 12 : 18, dt);
+    this.fallingFor = airborne && s.verticalSpeed < -FEEL.airFrom ? this.fallingFor + dt : 0;
+    const air = airPose(s.verticalSpeed, this.fallingFor);
 
     // --- landing overlay
     let land = 0;
@@ -511,8 +551,26 @@ export class PlayerAvatar {
       if (this.landT > 0.35) this.landT = -1;
     }
 
+    // --- swimming (with the swim clips): treading water when slow, the crawl when moving, the
+    // stroke's rate following her speed
+    const swimClips = mode === 'swim' && this.actions.has('swimFwd') && this.actions.has('swimIdle');
+    this.swimMove = damp(this.swimMove, swimClips ? smoothstep(0.25, 1.4, s.speed) : 0, 5, dt);
+    // Into and out of the water the clips cross-fade with the walk cycle (no pop).
+    this.swimBlend = damp(this.swimBlend, swimClips ? 1 : 0, 10, dt);
+    const swimShare = this.swimBlend * (1 - shot);
+    if (this.actions.has('swimFwd') && this.actions.has('swimIdle')) {
+      const before = this.swimPhase;
+      this.swimPhase = (this.swimPhase + (dt * (0.7 + 0.6 * clamp(s.speed / 2.9, 0, 1))) / this.clipDuration('swimFwd')) % 1;
+      if (swimClips && s.speed > 0.5 && Math.floor(before * 2) !== Math.floor(this.swimPhase * 2)) this.onFootstep?.(s.speed);
+      const fwd = this.actions.get('swimFwd')!;
+      fwd.timeScale = 0;
+      fwd.time = this.swimPhase * this.clipDuration('swimFwd');
+      fwd.setEffectiveWeight(swimShare * this.swimMove);
+      this.actions.get('swimIdle')!.setEffectiveWeight(swimShare * (1 - this.swimMove));
+    }
+
     // --- locomotion: phase-locked blend of walk, jog and sprint by ground speed
-    const v = s.grounded ? s.speed : 0;
+    const v = s.grounded && !swimClips ? s.speed : 0;
     const ns = this.naturalSpeed;
     const w: Record<string, number> = { idle: 0, walk: 0, jog: 0, sprint: 0 };
     if (v < 0.15) w.idle = 1;
@@ -536,7 +594,7 @@ export class PlayerAvatar {
     const prev = this.phase;
     this.phase = (this.phase + dt * rate) % 1;
     if (s.grounded && v > 1 && Math.floor(prev * 2) !== Math.floor(this.phase * 2)) this.onFootstep?.(v);
-    const groundShare = (1 - this.airBlend) * (1 - shot) * (1 - land);
+    const groundShare = (1 - this.airBlend) * (1 - shot) * (1 - land) * (1 - swimShare);
     for (const n of ['idle', ...LOCOMOTION]) {
       const a = this.actions.get(n);
       if (!a) continue;
@@ -562,6 +620,8 @@ export class PlayerAvatar {
     }
     const pound = mv?.pound ?? 'none';
     if (pound === 'hover' || pound === 'fall') tuckTarget = 1;
+    // The top of a jump: the knees come up a little.
+    else if (this.flipT < 0) tuckTarget = Math.max(tuckTarget, air.apex * this.airBlend * 0.3);
     this.tuck = damp(this.tuck, tuckTarget, tuckTarget > this.tuck ? 22 : 9, dt);
     this.actions.get('crouch')?.setEffectiveWeight(this.tuck * (1 - shot) * 1.6);
     // The pound's wind-up: one quick turn in the air.
@@ -586,13 +646,19 @@ export class PlayerAvatar {
     this.visual.position.set(0, P - P * Math.cos(a) + this.hangLift * this.fit.hangLift, -P * Math.sin(a));
     // Riding a swing or a slide: lean with the chains or the chute, about the seat.
     // Swimming: lying forward in the water, the crawl stroke below.
-    this.rideTilt = damp(this.rideTilt, mode === 'ride' ? (s.rideTilt ?? 0) : mode === 'swim' ? 1.2 : 0, mode === 'swim' ? 6 : 14, dt);
+    const swimTilt = swimClips ? SWIM_CLIP_TILT * this.swimMove : 1.2;
+    this.rideTilt = damp(this.rideTilt, mode === 'ride' ? (s.rideTilt ?? 0) : mode === 'swim' ? swimTilt : 0, mode === 'swim' ? 6 : 14, dt);
     if (Math.abs(this.rideTilt) > 1e-4) {
       const Q = 0.33;
       this.visual.rotation.x += this.rideTilt;
       this.visual.position.y += Q - Q * Math.cos(this.rideTilt);
       this.visual.position.z += -Q * Math.sin(this.rideTilt);
     }
+    // Treading water, she sits lower: shoulders at the surface.
+    if (swimClips) this.visual.position.y -= SWIM_TREAD_DROP * (1 - this.swimMove) * this.swimBlend;
+    // Squash and stretch, about her feet.
+    this.squash.update(dt);
+    this.visual.scale.set(this.squash.width, this.squash.height, this.squash.width);
     this.visual.rotation.z = damp(this.visual.rotation.z, clamp(-this.turnRate * 0.02, -0.12, 0.12) * clamp(v / 4, 0, 1), 8, dt);
 
     // --- head: glance at points of interest, otherwise a slow idle look-around
@@ -614,14 +680,33 @@ export class PlayerAvatar {
     // The toy's short arms swing clear of her round middle.
     this.rollBone('upperarm_l', 0.24);
     this.rollBone('upperarm_r', -0.24);
-    // Swimming: a front crawl, one arm over as the other pulls; a flutter kick.
-    if (s.mode === 'swim') {
+    // Swimming without the swim clips: a front crawl, one arm over as the other pulls; a flutter kick.
+    if (s.mode === 'swim' && !swimClips) {
       this.swimT += dt * (1.6 + Math.min(1, s.speed / 2.5) * 1.6);
       const a = this.swimT * Math.PI * 2;
       this.turnBone('upperarm_l', 0, -1.5 + Math.sin(a) * 1.4);
       this.turnBone('upperarm_r', 0, -1.5 + Math.sin(a + Math.PI) * 1.4);
       this.turnBone('thigh_l', 0, Math.sin(a * 2) * 0.3);
       this.turnBone('thigh_r', 0, Math.sin(a * 2 + Math.PI) * 0.3);
+    }
+    // In the air: falling, the arms come up and out and the legs reach for the ground; a long drop
+    // windmills the arms.
+    const armsTarget = mode === 'move' && pound === 'none' && this.flipT < 0 && !mv?.dashing ? air.fall * this.airBlend * (1 - shot) : 0;
+    this.fallArms = damp(this.fallArms, armsTarget, 10, dt);
+    this.flail = damp(this.flail, armsTarget > 0 ? air.flail : 0, 12, dt);
+    if (this.fallArms > 0.01) {
+      const w = this.fallArms;
+      const f = this.flail * w;
+      const arm = Math.sin(this.time * 13) * 1.1 * f;
+      const leg = Math.sin(this.time * 9) * 0.4 * f;
+      this.rollBone('upperarm_l', FALL_ARM_RAISE * w);
+      this.rollBone('upperarm_r', -FALL_ARM_RAISE * w);
+      if (f > 0.01) {
+        this.turnBone('upperarm_l', 0, arm);
+        this.turnBone('upperarm_r', 0, -arm);
+      }
+      this.turnBone('thigh_l', 0, FALL_LEG_REACH * w + leg);
+      this.turnBone('thigh_r', 0, -0.4 * FALL_LEG_REACH * w - leg);
     }
     this.turnBone('neck_01', this.headYaw * 0.4, this.headPitch * 0.4);
     this.turnBone('Head', this.headYaw * 0.6, this.headPitch * 0.6);
@@ -641,7 +726,7 @@ export class PlayerAvatar {
       this.surpriseT = Math.max(0, this.surpriseT - dt);
       this.emoteT = Math.max(0, this.emoteT - dt);
       const busy = mv?.sprinting || mv?.dashing || mode === 'grind' || mode === 'hang' || mode === 'climb' || pound !== 'none';
-      this.face.mood = this.emoteT > 0 ? this.emoteMood : this.surpriseT > 0 ? 'surprised' : busy ? 'determined' : 'neutral';
+      this.face.mood = this.emoteT > 0 ? this.emoteMood : this.surpriseT > 0 ? 'surprised' : this.flail > 0.4 ? 'worried' : busy ? 'determined' : 'neutral';
       // Asleep: lying still on the floor, or nodding off; waking, the eyes open as she gets up.
       let sleep = this.dozeLevel;
       if (this.oneShot?.name === 'wake') {

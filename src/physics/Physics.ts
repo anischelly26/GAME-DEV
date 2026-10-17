@@ -33,8 +33,8 @@ export interface ColliderOptions {
 
 const tmpQuat = new THREE.Quaternion();
 
-/** What a walkable surface sounds like underfoot. */
-export type Surface = 'stone' | 'metal' | 'wood';
+/** What a walkable surface sounds like underfoot (`water`: wading in shallow water). */
+export type Surface = 'stone' | 'metal' | 'wood' | 'grass' | 'gravel' | 'sand' | 'water';
 
 /** Thin wrapper around the Rapier world with level-building helpers. */
 export class Physics {
@@ -47,7 +47,12 @@ export class Physics {
   }
 
   surfaceOf(handle: number | null | undefined): Surface {
-    return (handle !== null && handle !== undefined && this.surfaces.get(handle)) || 'stone';
+    return this.taggedSurface(handle) ?? 'stone';
+  }
+
+  /** The surface a collider was tagged with, or undefined (the level may know better). */
+  taggedSurface(handle: number | null | undefined): Surface | undefined {
+    return handle !== null && handle !== undefined ? this.surfaces.get(handle) : undefined;
   }
 
   static async create(): Promise<Physics> {

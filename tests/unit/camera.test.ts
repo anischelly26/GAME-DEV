@@ -122,3 +122,62 @@ describe('camera framing', () => {
     expect(chest.y).toBeLessThan(-0.05);
   });
 });
+
+describe('camera framing in the air and in each mode (MOVEMENT_2_0 B5)', () => {
+  /** Two cameras over the same flight: one told the vertical speed, one not. Returns the gap in
+   * view direction (radians, + = the told camera looks further down) at every frame. */
+  function flight(vys: number[]): number[] {
+    const a = settled();
+    const b = settled();
+    const feet = new THREE.Vector3();
+    const da = new THREE.Vector3();
+    const db = new THREE.Vector3();
+    return vys.map((vy) => {
+      feet.y += vy / 60;
+      const ctx: CameraContext = { grounded: false, speed: 0, mode: 'move', interacting: false, forwardInput: 0 };
+      a.camera.update(1 / 60, noLook, feet, { ...ctx, verticalSpeed: vy });
+      b.camera.update(1 / 60, noLook, feet, ctx);
+      a.camera.camera.getWorldDirection(da);
+      b.camera.camera.getWorldDirection(db);
+      return Math.asin(db.y) - Math.asin(da.y);
+    });
+  }
+  /** Vertical speed each frame of a fall from rest: gravity 26 m/s² x 1.35, capped at 26 m/s. */
+  const fall = (seconds: number, v0 = 0) => Array.from({ length: Math.round(seconds * 60) }, (_, i) => Math.max(-26, v0 - 35.1 * (i / 60)));
+
+  it('an ordinary jump never moves the aim', () => {
+    // Up at 8.7 m/s (a 1.45 m jump), then back down to the take-off height.
+    const vys: number[] = [];
+    for (let v = 8.7; v > 0; v -= 26 / 60) vys.push(v);
+    vys.push(...fall(0.29));
+    const gaps = flight(vys);
+    expect(Math.max(...gaps.map(Math.abs))).toBeLessThan(1e-6);
+  });
+
+  it('a long fall looks down toward the landing', () => {
+    const gaps = flight(fall(1.0));
+    // About 0.2 rad (11 degrees) further down by the end of a one-second fall (measured 0.199).
+    expect(gaps[gaps.length - 1]).toBeGreaterThan(0.15);
+    // And it eases in: no frame turns the view by more than 0.02 rad.
+    for (let i = 1; i < gaps.length; i++) expect(Math.abs(gaps[i] - gaps[i - 1])).toBeLessThan(0.02);
+  });
+
+  it('swimming frames closer and lower; the swing and the slide stand back', () => {
+    const frame = (mode: string, ridePose?: string) => {
+      const { camera, feet } = settled();
+      for (let i = 0; i < 240; i++) camera.update(1 / 60, noLook, feet, { grounded: true, speed: 0, mode, interacting: false, forwardInput: 0, ridePose });
+      return { dist: camera.distance, height: camera.camera.position.y - feet.y };
+    };
+    const walk = frame('move');
+    const swim = frame('swim');
+    const swing = frame('ride', 'swing');
+    const slide = frame('ride', 'slide');
+    const ladder = frame('ride', 'ladder');
+    expect(swim.dist).toBeLessThan(walk.dist - 0.4);
+    expect(swim.height).toBeLessThan(walk.height - 0.5);
+    expect(swing.dist).toBeGreaterThan(walk.dist + 1);
+    expect(slide.dist).toBeGreaterThan(walk.dist + 0.5);
+    // A ladder keeps the ordinary framing.
+    expect(Math.abs(ladder.dist - walk.dist)).toBeLessThan(0.01);
+  });
+});

@@ -128,7 +128,38 @@ export function chapterByNumber(n: number): Chapter {
   return CHAPTERS.find((c) => c.number === n) ?? CHAPTERS[0];
 }
 
-/** "Chapter One", "Chapter Two", ... */
+/**
+ * The movement lab (`?lab=1`): stations for tuning and testing movement outside the story
+ * (docs/MOVEMENT_2_0.md, B7). Not in the chapter list; number 0.
+ */
+export const MOVEMENT_LAB: Chapter = {
+  number: 0,
+  title: 'Movement Lab',
+  blurb: 'A yard of stations for every move: gaps, ledges, vaults, drops, materials, the pool.',
+  loading: 'Setting out the stations…',
+  surfaces: [...CORE, 'grass', 'gravel', 'sand'],
+  atmosphere: {
+    // Plain, even daylight: the lab is for reading movement, not mood.
+    skyTop: '#6f9cc8',
+    skyHorizon: '#d6e2ea',
+    fog: '#c9d6de',
+    fogDensity: 0.004,
+    light: '#fff4e2',
+    lightIntensity: 2.8,
+    lightDir: [0.4, 0.7, -0.6],
+    hemiSky: '#c6dbec',
+    hemiGround: '#6e6656',
+    hemiIntensity: 1.5,
+    stars: 0,
+    disc: 1.4,
+    env: { low: '#5d6b74', high: '#b8d1e4', glow: '#ffe8c8', glowStrength: 0.3 },
+    envIntensity: 1.0,
+  },
+  create: async (ctx) => new (await import('./lab/MovementLab')).MovementLab(ctx),
+};
+
+/** "Chapter One", "Chapter Two", ... (the lab is "Practice"). */
 export function chapterLabel(n: number): string {
+  if (n === 0) return 'Practice';
   return `Chapter ${['Zero', 'One', 'Two', 'Three', 'Four', 'Five'][n] ?? n}`;
 }

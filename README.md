@@ -41,10 +41,18 @@ Knoll Rock:
 - a Watch on a patrol boat that listens for the engine;
 - the lighthouse (the CC BY scan): dock at its stairs, climb to the gallery, find who lit the lamp.
 
+**The movement lab** (`?lab=1`): a yard of stations outside the story for trying every move:
+gaps, ledges, vaults, 3/6/10 m drops off a ramp tower, footstep pads for each material, a low
+beam, a pound plate and a pool.
+
 First-play length has not been measured with a player yet. The autopilot, which never hesitates,
 plays the route in about a minute; the opening adds about 40 seconds unless it is skipped.
 
 - Creative direction and chapter plan: [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md)
+- The cinematic overhaul (2026-10-17): [audit](docs/OVERHAUL_AUDIT.md),
+  [roadmap](docs/IMPLEMENTATION_ROADMAP.md), [movement](docs/MOVEMENT_2_0.md),
+  [cinematic vision](docs/CINEMATIC_VISION.md), [characters](docs/CHARACTER_BIBLE.md),
+  [story continuity](docs/STORY_CONTINUITY.md), [art direction](docs/VISUAL_ART_DIRECTION.md)
 - What works, what doesn't, what's temporary: [docs/STATUS.md](docs/STATUS.md)
 - Test route and acceptance checks: [docs/TESTING.md](docs/TESTING.md)
 - Asset sources and licences: [docs/ASSETS.md](docs/ASSETS.md)
@@ -129,6 +137,7 @@ URL parameters:
   is off in `?test=1` and `?autoplay=1` runs.
 - `?autoplay=1`: watch the scripted route play itself through the real input pipeline.
 - `?quality=low` or `?quality=high`: override the graphics setting.
+- `?lab=1`: the movement lab instead of a chapter.
 - `?viewer=mara`: turntable of the character model. Drag to orbit, wheel to zoom, number keys
   cycle the animation clips.
 - `?test=1`: automation mode. No title screen, and the simulation advances only when a test calls
@@ -154,6 +163,7 @@ bundled Chromium. Review captures (with `npm run dev` running in another termina
 - `node scripts/capture-character.mjs`: character turntable.
 - `node scripts/capture-video.mjs`: real-time movement clips.
 - `node scripts/normal-mode-run.mjs`: plays the whole route in normal mode.
+- `node scripts/capture-feel.mjs`: the game-feel poses in the lab (exact frames).
 
 Performance tools (after `npm run build`; headed Edge, real GPU, normal real-time loop):
 
@@ -163,6 +173,8 @@ Performance tools (after `npm run build`; headed Edge, real GPU, normal real-tim
   switched off one at a time.
 - `node scripts/count-draws.mjs`: draw calls and triangles per frame at each checkpoint (a
   deterministic cost proxy; `--root` compares another build).
+- `node scripts/measure-frames.mjs`: frame times at every checkpoint of a chapter (or the lab)
+  with the camera turning; `--uncapped 1` lifts the display's refresh-rate cap.
 
 See [docs/TESTING.md](docs/TESTING.md).
 

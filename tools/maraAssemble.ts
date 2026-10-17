@@ -38,6 +38,13 @@ export const CLIPS: Record<string, [1 | 2, string]> = {
   pickup: [1, 'PickUp_Table'],
   foldArms: [2, 'Idle_FoldArms_Loop'],
   nod: [2, 'Yes'],
+  // The game-feel pass (docs/MOVEMENT_2_0.md, B4): swimming, steering the skiff, a bump on the
+  // head, and talking (for scenes).
+  swimIdle: [1, 'Swim_Idle_Loop'],
+  swimFwd: [1, 'Swim_Fwd_Loop'],
+  drive: [1, 'Driving_Loop'],
+  hitHead: [1, 'Hit_Head'],
+  talk: [1, 'Idle_Talking_Loop'],
 };
 
 export function bonesOf(root: THREE.Object3D): Map<string, THREE.Bone> {

@@ -2,7 +2,7 @@ import { Effects } from '../world/Effects';
 import * as THREE from 'three';
 import { EventBus, type GameEvents } from './Events';
 import { Input, BASE_RADIANS_PER_PIXEL, DEFAULT_LOOK_SENSITIVITY } from './Input';
-import { Physics, RAPIER } from '../physics/Physics';
+import { Physics, RAPIER, type Surface } from '../physics/Physics';
 import { RenderPipeline } from '../render/RenderPipeline';
 import { createTextureLibrary, type TextureLibrary } from '../world/textures';
 import { applySurfaces, createMaterials, Palette, type MaterialLibrary } from '../world/materials';
@@ -20,7 +20,7 @@ import { Dialogue } from '../gameplay/Dialogue';
 import { HUD, type Settings } from '../ui/HUD';
 import { AudioSystem } from '../audio/Audio';
 import type { Level, LevelContext } from '../levels/Level';
-import { CHAPTERS, chapterByNumber, chapterLabel, type Atmosphere, type Chapter } from '../levels/chapters';
+import { CHAPTERS, MOVEMENT_LAB, chapterByNumber, chapterLabel, type Atmosphere, type Chapter } from '../levels/chapters';
 import { ensureVertexColors } from '../world/geometry';
 import { Autopilot } from '../dev/Autopilot';
 import { TraversalSurfaces } from '../player/Traversal';
@@ -47,6 +47,8 @@ export interface GameOptions {
   quality: 'high' | 'low' | null;
   /** Which chapter to play (1: The Quiet Cell). */
   chapter?: number;
+  /** Load the movement lab instead of a chapter. */
+  lab?: boolean;
 }
 
 export type GameState = 'loading' | 'title' | 'playing' | 'paused' | 'complete';
@@ -109,7 +111,7 @@ export class Game {
     this.progression = new Progression(this.events);
     this.checkpoints = new Checkpoints(this.events);
     this.dialogue = new Dialogue(this.events);
-    this.chapter = chapterByNumber(options.chapter ?? 1);
+    this.chapter = options.lab ? MOVEMENT_LAB : chapterByNumber(options.chapter ?? 1);
   }
 
   static async create(container: HTMLElement, options: GameOptions): Promise<Game> {
@@ -287,7 +289,7 @@ export class Game {
   gotoChapter(n: number): void {
     const params = new URLSearchParams(location.search);
     params.set('chapter', String(n));
-    for (const k of ['start', 'intro', 'autoplay']) params.delete(k);
+    for (const k of ['start', 'intro', 'autoplay', 'lab']) params.delete(k);
     location.assign(`${location.pathname}?${params.toString()}`);
   }
 
@@ -363,8 +365,9 @@ export class Game {
     });
     this.events.on('land', ({ impact }) => {
       this.avatar.onLand(impact);
-      const surface = this.physics.surfaceOf(this.player.groundCollider?.handle);
-      if (impact > 3) this.audio.play(impact > 12 ? 'land:heavy' : surface === 'metal' ? 'land:metal' : 'land', this.player.feet, Math.min(1, impact / 10));
+      const surface = this.groundSurface();
+      if (impact > 3) this.audio.play(impact > 12 && surface !== 'water' ? 'land:heavy' : surface === 'stone' ? 'land' : `land:${surface}`, this.player.feet, Math.min(1, impact / 10));
+      if (impact > 3 && surface === 'water') this.effects.ring(this.player.feet, 1.2);
       if (impact > 8) this.camera.shake(Math.min(0.45, 0.12 + (impact - 8) / 14));
       if (impact > 9 && this.player.pound === 'none') this.effects.burst(this.player.feet, { count: 6, color: '#9d907e', speed: 1.2, spread: 2.2, life: 0.6, size: [0.2, 0.7], opacity: 0.35 });
     });
@@ -411,9 +414,17 @@ export class Game {
       const d = e.x !== undefined ? Math.hypot(e.x - this.player.feet.x, (e.y ?? 0) - this.player.feet.y, (e.z ?? 0) - this.player.feet.z) : 0;
       this.camera.shake(weight * Math.max(0, 1 - d / 12));
     });
+    this.events.on('bump', () => {
+      this.avatar.onBump();
+      this.audio.play('bump', this.player.feet, 0.8);
+    });
     this.avatar.onFootstep = (speed) => {
       if (this.player.mode === 'swim') this.audio.play('swimStroke', this.player.feet, 0.6);
-      else this.audio.play(`footstep:${this.physics.surfaceOf(this.player.groundCollider?.handle)}`, this.player.feet, Math.min(1, speed / 6) * 0.8);
+      else {
+        const surface = this.groundSurface();
+        this.audio.play(`footstep:${surface}`, this.player.feet, Math.min(1, speed / 6) * 0.8);
+        if (surface === 'water') this.effects.ring(this.player.feet, 0.7);
+      }
     };
     this.events.on('swim', (p) => {
       this.effects.ring(p, 1.6);
@@ -443,6 +454,17 @@ export class Game {
 
   /** The music and ambience the level has asked for (it may ask before the game listens). */
   private readonly levelBeds: { music: string | null; ambience: string | null } = { music: null, ambience: null };
+
+  /**
+   * What the ground under Mara sounds like: shallow water if she is wading, else the collider's
+   * tag, else what the level says is painted there, else stone.
+   */
+  groundSurface(): Surface {
+    const f = this.player.feet;
+    const water = this.player.water?.level(f.x, f.z);
+    if (water !== null && water !== undefined && water - f.y > 0.08) return 'water';
+    return this.physics.taggedSurface(this.player.groundCollider?.handle) ?? this.level.surfaceAt?.(f.x, f.y, f.z) ?? 'stone';
+  }
 
   private applyLevelBeds(): void {
     this.audio.setMusic(this.levelBeds.music);
@@ -786,6 +808,8 @@ export class Game {
       mode: this.player.mode,
       interacting: this.player.isLocked || !!this.hud.documentOpen,
       forwardInput: moveLen > 0.2 ? this.lastMove.y / moveLen : 0,
+      verticalSpeed: this.player.velocity.y,
+      ridePose: this.player.ride?.pose,
     });
     // Fade only when the camera is right inside Mara's space: partial dithered opacity reads as grain.
     this.avatar.setOpacity(this.camera.inShot ? 1 : smoothstep(0.38, 0.72, this.camera.distance));

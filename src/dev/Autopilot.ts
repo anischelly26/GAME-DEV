@@ -130,6 +130,12 @@ export class Autopilot {
           if (this.stepT > 10) this.fail('never reached take-off');
         } else {
           this.jumpHold -= dt;
+          if (step.double && this.phase === 1 && !this.host.player.grounded && this.host.player.velocity.y < 1) {
+            // Near the top: the steam kicker's second jump.
+            this.host.input.press('jump');
+            this.jumpHold = 0.3;
+            this.phase = 2;
+          }
           const toLanding = flat(v(step.to));
           this.steer(toLanding, toLanding.length() > 0.4 ? 1 : 0.3, this.jumpHold > 0);
           if (this.host.player.grounded && this.stepT > 0.25 && toLanding.length() < 0.9 && Math.abs(feet.y - step.to[1]) < 0.3) {

@@ -37,6 +37,8 @@ export interface GameEvents {
   dash: { air: boolean; x: number; y: number; z: number };
   groundPound: { x: number; y: number; z: number; collider: number | null };
   land: { impact: number };
+  /** Rising into a ceiling hard enough to bump her head (m/s up when it stopped her). */
+  bump: { x: number; y: number; z: number; speed: number };
   footstep: { speed: number };
   interact: { id: string };
   line: { speaker: string; text: string };

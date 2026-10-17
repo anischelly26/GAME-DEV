@@ -1,11 +1,11 @@
-# Testing: Chapters One to Three
+# Testing: Chapters One to Three, and the movement lab
 
 ## Automated checks
 
 | Command | What it checks |
 | --- | --- |
 | `npm run typecheck` | TypeScript strict type-check |
-| `npm test` | Unit tests (Vitest): puzzle rules (pressure hatch, split feed), progression/checkpoints/triggers, level dimensions vs movement capability, traversal eligibility against a real Rapier world, every camera-assist condition, the spring arm and framing, the subtitle queue, the settings migration |
+| `npm test` | Unit tests (Vitest): puzzle rules (pressure hatch, split feed), progression/checkpoints/triggers, level dimensions vs movement capability, traversal eligibility against a real Rapier world, every camera-assist condition, the spring arm and framing (including the fall framing and the per-mode framing), the subtitle queue, the settings migration, and game feel (`feel.test.ts`: air poses, landing tiers, the squash-and-stretch spring) |
 | `npm run build` | Production bundle builds |
 | `npm run check` | All three above |
 | `npm run test:e2e` | Browser tests (Playwright) against a dev server it starts on port 5199. Set `PW_CHANNEL=msedge` to use installed Edge (GPU). The default is Playwright's bundled Chromium, which renders in software at roughly 2 s per frame for this game; its time limits are four times longer, and the real-time movement check skips itself there |
@@ -207,6 +207,31 @@ With `?watch=1` (the Watch is off in other automated runs).
   at the lagoon checkpoint, aboard the skiff.
 - Chapter Two's completion card offers "Continue: Chapter Three".
 
+### `tests/e2e/feel.spec.ts`: game feel and the movement lab (9)
+
+The movement lab is `?lab=1` (docs/MOVEMENT_2_0.md, B7). The Watch is not in it; the chapter
+checks in this spec only read the ground under Mara, so they run without `?watch=1`.
+
+- The lab loads with its one checkpoint; no errors.
+- A standing jump: the take-off stretches her above 1.06 of her height; the arms come up once she
+  falls; an ordinary jump never windmills; the landing squashes her below 0.98; she is back to
+  her normal shape within half a second.
+- The 10 m drop off the ramp tower: the arms windmill (above 0.5), the camera's view tips more
+  than 0.1 rad further down during the fall, the landing squashes her below 0.85, no fall
+  respawn, landing impact above 20 m/s.
+- Jumping under the low beam fires one head bump and stops her rise at the beam; the same jump
+  in the open fires none.
+- Footsteps by material: each of the seven lab pads (stone, metal, wood, grass, gravel, sand,
+  shallow water); Chapter Two's cove (gravel), lane (gravel), lawn (grass) and yard (stone);
+  Chapter Three's slipway (stone) and the first sandbar (sand).
+- Swimming in the lab pool uses the swim clips: treading water at rest (weight above 0.7, no walk
+  cycle), the crawl when moving (above 0.7).
+- Aboard the skiff in Chapter Three she plays the driving clip.
+- The pound plate registers a ground pound.
+- A scripted lap of the lab through the real input pipeline (the autopilot): the four gaps (the
+  3.3 m one with the double jump), two vaults, the 34° ramps up the tower and the 10 m drop off
+  it; no falls.
+
 ## Review captures
 
 All of these need `npm run dev` running in another terminal. Output goes to `artifacts/` (ignored by git).
@@ -219,6 +244,7 @@ All of these need `npm run dev` running in another terminal. Output goes to `art
 | `node scripts/audit-route.mjs --channel msedge` | The whole chapter from the normal gameplay camera, every 2 s (`--every`), with a log of checkpoint, objective, mode, camera zone, arm length and subtitle (see [CHAPTER_ONE_AUDIT.md](CHAPTER_ONE_AUDIT.md)) |
 | `node scripts/capture-character.mjs --channel msedge` | Turntable of Mara in the dev viewer: front, three-quarter, side, back, face, hands, boots, walk, jog, jump, climb |
 | `node scripts/capture-video.mjs --channel msedge --quality high` | Real-time WebM clips of the autopilot: cell and shaft, tier-one vault and climb, split feed and exit |
+| `node scripts/capture-feel.mjs --channel msedge` | The game-feel pass in the lab, exact frames read back from the canvas (no HUD): take-off stretch, apex, falling arms, landing squash, the 10 m fall and its landing, the head bump, treading water, swimming; and the skiff in Chapter Three. Default output `docs/evidence/game-feel/` |
 | `node scripts/normal-mode-run.mjs --channel msedge --quality high` (or `low`) | Plays the whole route in normal mode (title, Begin, real-time loop) and reports completion, falls, time and console errors |
 
 Watch the scripted route live: open http://localhost:5173/?autoplay=1 and click **Begin**.
@@ -235,6 +261,7 @@ and load with `?intro=0`.
 | `node scripts/trace-stalls.mjs --quality low --runs 3` (or `high`) | Plays the whole route with the autopilot through the input pipeline. Prints the GPU, frame count, mean, p95 and longest frame, plus every frame over 100 ms with the WebGL calls over 2 ms inside it (shader programs named), and three.js program and texture counts |
 | `node scripts/trace-stalls.mjs --quality high --gpu discrete` | The same on the high-performance GPU of a dual-GPU laptop (`--force_high_performance_gpu`) |
 | `node scripts/trace-stalls.mjs --channel chromium` | Playwright's bundled Chromium. Windows' per-app GPU setting does not cover it, so on the test laptop it runs on the integrated Intel GPU even when Edge is set to the NVIDIA one (`--force_low_power_gpu` does not override that setting) |
+| `node scripts/measure-frames.mjs --chapter 1 --quality low --uncapped 1` (`--channel chromium` for the Intel GPU; `--lab 1` for the movement lab) | Frame times at every checkpoint with the camera turning slowly (1.5 s to settle, then `--seconds`, default 6): mean, p95 and worst frame, JS heap, geometries and textures, the GPU. `--uncapped 1` turns vsync and the frame-rate limit off, so the times show a frame's cost rather than the display's refresh rate. One JSON line per run |
 | `node scripts/count-draws.mjs [--root artifacts/base-xxxx]` | Draw calls and triangles per frame (all passes) at each checkpoint, from the player's camera: a deterministic cost proxy, independent of the machine's load. `--root` measures another build, e.g. an older commit built with `git archive <sha> \| tar -x -C artifacts/base-<sha>` and `vite build --base ./` inside it |
 | `node scripts/profile-render.mjs --quality low` | Frame times at six checkpoints with one rendering feature off at a time (shadows, MSAA, AO, bloom, resolution 0.75, all post-processing). `--only name,name` picks configurations, and `--headless 1` runs without a window (it still renders on the GPU, and gave the same Low preset numbers here). The four `no-msaa+…` configurations have not been run yet |
 
@@ -300,6 +327,14 @@ environment (OS, browser, GPU, resolution, quality setting), severity, reproduct
 expected vs actual, evidence, and acceptance criteria for the fix.
 
 ## Latest results
+
+At commit `b3f907d` (game feel, Phase B of the overhaul), same machine: **115/115 Edge e2e in
+13.3 min** (one run; the new `feel.spec.ts` is 9 of them), unit tests **68/68** (14 new: 11 in
+`feel.test.ts`, 3 camera framing). The baseline before any change, at `f95f398`: e2e 106/106 in
+17.1 min, unit 54/54. The game-feel checks alone:
+`PW_CHANNEL=msedge npx playwright test tests/e2e/feel.spec.ts`.
+
+### Earlier: Chapter Three
 
 At commit `bba9f29` (Chapter Three), same machine: **106/106 Edge e2e in 13.2 min**, unit tests
 54/54. Chapter Three's checks alone:
