@@ -9,10 +9,19 @@ const SAMPLED: Record<string, Layer[]> = {
   'footstep:stone': [['step.stone', 0.55, 0.92, 1.08]],
   'footstep:wood': [['step.wood', 0.6, 0.92, 1.08]],
   'footstep:metal': [['step.metal', 0.32, 0.95, 1.1]],
+  'footstep:grass': [['step.grass', 0.5, 0.9, 1.08]],
+  'footstep:gravel': [['step.gravel', 0.42, 0.92, 1.08]],
+  // Snow steps, pitched down, read as dry sand.
+  'footstep:sand': [['step.sand', 0.45, 0.72, 0.84]],
   jump: [['cloth', 0.45, 0.95, 1.12]],
   land: [['land', 0.75, 0.92, 1.05]],
   'land:metal': [['land.metal', 0.5, 0.92, 1.05], ['land', 0.4, 0.95, 1.05]],
   'land:heavy': [['land.heavy', 0.85, 0.85, 0.95]],
+  'land:grass': [['land', 0.6, 0.9, 1.0], ['step.grass', 0.45, 0.8, 0.9]],
+  'land:gravel': [['land', 0.55, 0.92, 1.02], ['step.gravel', 0.5, 0.8, 0.9]],
+  'land:sand': [['land', 0.5, 0.85, 0.95], ['step.sand', 0.5, 0.62, 0.72]],
+  'land:wood': [['land', 0.55, 0.95, 1.05], ['wood.medium', 0.35, 1.1, 1.2]],
+  bump: [['cloth', 0.4, 1.2, 1.3], ['wood.medium', 0.3, 1.3, 1.45]],
   doubleJump: [['thruster', 0.3, 1.25, 1.4], ['cloth', 0.35, 1.05, 1.15]],
   airDash: [['thruster', 0.45, 0.95, 1.08], ['cloth', 0.35, 0.9, 1.0]],
   roll: [['cloth', 0.6, 0.82, 0.92], ['land', 0.25, 1.1, 1.2]],
@@ -432,8 +441,11 @@ export class AudioSystem {
   play(name: string, pos?: THREE.Vector3Like, volume = 1): void {
     if (!this.ctx || this.ctx.state !== 'running') return;
     if (this.playSample(name, pos, volume) && !ALSO_SYNTH.has(name)) return;
-    // Surface variants fall back to the plain synthesised sound.
-    if (name.startsWith('footstep:')) name = 'footstep';
+    // Wading and landing in water are splashes; other surface variants fall back to the plain
+    // synthesised sound.
+    if (name === 'footstep:water') name = 'wade';
+    else if (name === 'land:water') name = 'splash';
+    else if (name.startsWith('footstep:')) name = 'footstep';
     else if (name.startsWith('land:')) name = 'land';
     const o = (g = 1) => this.out(pos, g * volume);
     switch (name) {
@@ -578,6 +590,11 @@ export class AudioSystem {
         this.tone('square', 660, 990, 0.16, 0.05, o(), 0.004);
         this.tone('square', 880, 1320, 0.18, 0.05, o(), 0.004, 0.2);
         this.burst('bandpass', 3200, 1.2, 0.7, 0.04, o(), 0.02, 0.05);
+        break;
+      case 'wade':
+        // A foot through shallow water: a slap and a short wash.
+        this.burst('bandpass', 1100 + Math.random() * 400, 0.8, 0.12, 0.09 * volume, o(), 0.004, 0, 600);
+        this.burst('lowpass', 900, 0.6, 0.3, 0.06 * volume, o(), 0.02, 0.03, 300);
         break;
       case 'swimStroke':
         // A hand into the water: a short wet slap.

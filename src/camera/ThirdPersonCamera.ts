@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Physics, RAPIER } from '../physics/Physics';
-import { clamp, damp, dampAngle, lerp } from '../core/math';
+import { clamp, damp, dampAngle, lerp, smoothstep } from '../core/math';
 import type { LookDelta } from '../core/Input';
 
 /** A region that changes how the camera frames the player (tight in the cell, wide over the hall). */
@@ -35,6 +35,10 @@ export interface CameraContext {
   interacting: boolean;
   /** How much the movement stick points forward relative to the camera: -1..1, 0 with no input. */
   forwardInput: number;
+  /** Vertical speed (m/s, + up): a long fall lowers the aim to show the landing. */
+  verticalSpeed?: number;
+  /** What she rides in mode 'ride' (swing, slide, ladder, boat): some get their own framing. */
+  ridePose?: string;
 }
 
 export const CAMERA_DEFAULTS = { distance: 4.9, height: 1.5, fov: 60, fovHorizontal: 90 };
@@ -67,6 +71,21 @@ const PROBE_RADIUS = 0.26;
 const MIN_ARM = 0.35;
 /** The view aims this far above the pivot (scaled with the arm), so Mara sits low in the frame. */
 const FRAME_LIFT = 0.42;
+/** On a long fall the aim sinks by up to this much (m), so the landing comes into view in time. */
+const FALL_LOOK = 1.1;
+
+/**
+ * Framing per traversal mode (or ride pose), added to the zone's distance (m), pivot height (m) and
+ * field of view (degrees). Grinding stands back to show the drop; swimming sits low and close, the
+ * waterline in the lower third; the swing stands back to show its whole arc and where the leap
+ * lands; the slide stands back at speed. docs/MOVEMENT_2_0.md, B5.
+ */
+export const MODE_FRAMING: Record<string, { distance: number; height: number; fov: number }> = {
+  grind: { distance: 1.2, height: 0.4, fov: 6 },
+  swim: { distance: -0.6, height: -0.45, fov: 0 },
+  swing: { distance: 1.3, height: 0.5, fov: 5 },
+  slide: { distance: 0.8, height: 0.3, fov: 5 },
+};
 
 /**
  * Third-person orbit camera on a spring arm.
@@ -111,6 +130,9 @@ export class ThirdPersonCamera {
   private readonly lookAhead = new THREE.Vector3();
   private trauma = 0;
   private fovKick = 0;
+  /** How long she has been falling (s), and how far the aim has sunk for it (m). */
+  private fallingFor = 0;
+  private fallLook = 0;
   private time = 0;
   /** Whether the assist turned the camera on the last update (debug overlay, tests). */
   assisting = false;
@@ -274,10 +296,11 @@ export class ThirdPersonCamera {
     }
     this.activeZone = zone?.id ?? 'default';
     const zl = this.initialised ? 3 : 1000;
-    const gl = grinding ? 2 : zl;
-    this.zoneDist = damp(this.zoneDist, (zone?.distance ?? CAMERA_DEFAULTS.distance) + (grinding ? 1.2 : 0), gl, dt);
-    this.zoneHeight = damp(this.zoneHeight, (zone?.height ?? CAMERA_DEFAULTS.height) + (grinding ? 0.4 : 0), gl, dt);
-    this.zoneFov = damp(this.zoneFov, (zone?.fov ?? CAMERA_DEFAULTS.fov) + (grinding ? 6 : 0), gl, dt);
+    const framing = MODE_FRAMING[c.mode === 'ride' ? (c.ridePose ?? '') : c.mode];
+    const gl = framing && this.initialised ? 2 : zl;
+    this.zoneDist = damp(this.zoneDist, (zone?.distance ?? CAMERA_DEFAULTS.distance) + (framing?.distance ?? 0), gl, dt);
+    this.zoneHeight = damp(this.zoneHeight, (zone?.height ?? CAMERA_DEFAULTS.height) + (framing?.height ?? 0), gl, dt);
+    this.zoneFov = damp(this.zoneFov, (zone?.fov ?? CAMERA_DEFAULTS.fov) + (framing?.fov ?? 0), gl, dt);
 
     // --- pivot: tight horizontally; vertically steady through jumps, quick when climbing or falling
     const targetY = feet.y + this.zoneHeight + this.pivotOffset;
@@ -349,8 +372,14 @@ export class ThirdPersonCamera {
     const ahead = this.velocity.clone().multiplyScalar(clamp(v / 5, 0, 1) * 0.14);
     this.lookAhead.lerp(ahead, 1 - Math.exp(-4 * dt));
     const lift = FRAME_LIFT * clamp(this.currentDist / CAMERA_DEFAULTS.distance, 0.25, 1);
+    // A long fall sinks the aim with the fall speed, so the ground comes into view before she
+    // lands. Ordinary jumps (about 0.3 s of falling) never move it.
+    const vy = c.verticalSpeed ?? 0;
+    this.fallingFor = !c.grounded && c.mode === 'move' && vy < -1.5 ? this.fallingFor + dt : 0;
+    const fallTarget = FALL_LOOK * smoothstep(0.3, 0.6, this.fallingFor) * smoothstep(4, 14, -vy);
+    this.fallLook = damp(this.fallLook, fallTarget, fallTarget > this.fallLook ? 6 : 4, dt);
     this.lookPoint.copy(this.focus).add(this.lookAhead).addScaledVector(right, this.lateral);
-    this.lookPoint.y += lift;
+    this.lookPoint.y += lift - this.fallLook;
     this.camera.lookAt(this.lookPoint);
     this.applyShake();
 

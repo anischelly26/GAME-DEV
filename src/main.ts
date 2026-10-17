@@ -14,6 +14,8 @@ const options: GameOptions = {
   watch: params.has('watch') ? flag('watch') : !flag('test') && !flag('autoplay'),
   start: params.get('start'),
   chapter: Number(params.get('chapter') ?? 1) || 1,
+  // The movement lab (docs/MOVEMENT_2_0.md): stations for every move, outside the story.
+  lab: flag('lab'),
   quality: params.get('quality') === 'low' ? 'low' : params.get('quality') === 'high' ? 'high' : null,
 };
 

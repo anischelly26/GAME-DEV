@@ -5,8 +5,8 @@
  * mean, p95 and worst frame per checkpoint, the JS heap, and the GPU the browser reports.
  *
  *   npm run build
- *   node scripts/measure-frames.mjs [--chapter 1] [--quality low|high] [--channel msedge|chromium]
- *                                   [--seconds 6] [--port 5237]
+ *   node scripts/measure-frames.mjs [--chapter 1 | --lab 1] [--quality low|high] [--channel msedge|chromium]
+ *                                   [--seconds 6] [--uncapped 1] [--port 5237]
  *
  * Edge on this laptop runs on the RTX 2050 (Windows graphics setting); Playwright's bundled
  * Chromium runs on the Intel UHD. By default frames are capped by the display's refresh rate;
@@ -20,6 +20,7 @@ const args = Object.fromEntries(
 );
 const port = Number(args.port || 5237);
 const chapter = Number(args.chapter || 1);
+const lab = args.lab === '1';
 const quality = args.quality || 'low';
 const seconds = Number(args.seconds || 6);
 const server = await preview({ preview: { host: '127.0.0.1', port, strictPort: true } });
@@ -30,7 +31,7 @@ const channel = args.channel === 'chromium' ? undefined : args.channel || 'msedg
 const browser = await chromium.launch({ channel, headless: false, args: flags });
 try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-  await page.goto(`http://127.0.0.1:${port}/?test=1&realtime=1&dev=1&quality=${quality}&chapter=${chapter}&intro=0`);
+  await page.goto(`http://127.0.0.1:${port}/?test=1&realtime=1&dev=1&quality=${quality}&${lab ? 'lab=1' : `chapter=${chapter}`}&intro=0`);
   await page.waitForFunction(() => window.__GAME?.ready, null, { timeout: 240000 });
   const gpu = await page.evaluate(() => {
     const gl = document.createElement('canvas').getContext('webgl2');
@@ -78,7 +79,7 @@ try {
       [id, seconds],
     );
   }
-  console.log(JSON.stringify({ chapter, quality, channel: channel ?? 'chromium', uncapped, gpu, rows }));
+  console.log(JSON.stringify({ chapter: lab ? 'lab' : chapter, quality, channel: channel ?? 'chromium', uncapped, gpu, rows }));
 } finally {
   await browser.close();
   await new Promise((r) => server.httpServer.close(r));

@@ -4,6 +4,7 @@ import type { InputFrame } from '../core/Input';
 import type { EventBus, GameEvents } from '../core/Events';
 import { dampAngle, smoothstep } from '../core/math';
 import { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
+import { FEEL } from './feel';
 import { findLedge, findVault, TRAVERSAL, type Ledge, type TraversalSurfaces, type Vault } from './Traversal';
 import type { GrindRail } from './GrindRail';
 
@@ -426,7 +427,10 @@ export class PlayerController {
     if (this.grounded && this.velocity.y < -2 && this.pound !== 'fall') this.velocity.y = -2;
 
     // Ceiling bonk.
-    if (this.velocity.y > 0 && moved.y < desired.y - 1e-4) this.velocity.y = 0;
+    if (this.velocity.y > 0 && moved.y < desired.y - 1e-4) {
+      if (this.velocity.y > FEEL.bumpSpeed && !this.grounded) this.events.emit('bump', { x: this.feet.x, y: this.feet.y, z: this.feet.z, speed: this.velocity.y });
+      this.velocity.y = 0;
+    }
 
     // Walls: remove the velocity that was absorbed so the player doesn't "stick" to geometry.
     const carryX = isCarried && platform ? platform.stepDelta.x : 0;
@@ -495,6 +499,9 @@ export class PlayerController {
 
     if (!wasGrounded && this.grounded) {
       this.jumping = false;
+      // The ground probe ran before this step's move: look again from where she landed, so the
+      // landing (its sound, a ground pound's target) knows what she landed on.
+      this.probeGround({ x: this.feet.x, y: this.feet.y + PLAYER_CENTER_OFFSET, z: this.feet.z });
       this.events.emit('land', { impact: this.lastFallSpeed });
       this.lastFallSpeed = 0;
       if (this.pound === 'fall') {
