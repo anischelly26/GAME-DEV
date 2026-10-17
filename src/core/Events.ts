@@ -32,6 +32,8 @@ export interface GameEvents {
   doubleJump: { x: number; y: number; z: number };
   /** Mara got on (`on`) or off a grind pipe. */
   grind: { on: boolean; x: number; y: number; z: number };
+  /** Mara went into (`on`) or out of the water. */
+  swim: { on: boolean; x: number; y: number; z: number };
   dash: { air: boolean; x: number; y: number; z: number };
   groundPound: { x: number; y: number; z: number; collider: number | null };
   land: { impact: number };

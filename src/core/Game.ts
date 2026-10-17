@@ -411,7 +411,15 @@ export class Game {
       const d = e.x !== undefined ? Math.hypot(e.x - this.player.feet.x, (e.y ?? 0) - this.player.feet.y, (e.z ?? 0) - this.player.feet.z) : 0;
       this.camera.shake(weight * Math.max(0, 1 - d / 12));
     });
-    this.avatar.onFootstep = (speed) => this.audio.play(`footstep:${this.physics.surfaceOf(this.player.groundCollider?.handle)}`, this.player.feet, Math.min(1, speed / 6) * 0.8);
+    this.avatar.onFootstep = (speed) => {
+      if (this.player.mode === 'swim') this.audio.play('swimStroke', this.player.feet, 0.6);
+      else this.audio.play(`footstep:${this.physics.surfaceOf(this.player.groundCollider?.handle)}`, this.player.feet, Math.min(1, speed / 6) * 0.8);
+    };
+    this.events.on('swim', (p) => {
+      this.effects.ring(p, 1.6);
+      this.effects.burst({ x: p.x, y: p.y + 0.1, z: p.z }, { count: p.on ? 14 : 8, color: '#e8f2f4', speed: p.on ? 3 : 2, spread: 1.4, life: 0.7, size: [0.15, 0.6], opacity: 0.6 });
+      this.audio.play('splash', p, p.on ? 1 : 0.6);
+    });
 
     this.input.onPauseRequest = () => {
       if (this.hud.documentOpen) this.hud.hideDocument();
@@ -737,7 +745,8 @@ export class Game {
       facing: this.player.facing,
       speed: this.player.speed,
       verticalSpeed: this.player.velocity.y,
-      grounded: this.player.grounded,
+      // Swimming drives the walk cycle (the kick) under the crawl.
+      grounded: this.player.grounded || this.player.mode === 'swim',
       carrying: false,
       reach: this.player.isLocked && !this.player.frozen ? 0.5 : this.reachPulse,
       lookAt: focus ? focus.position : (this.level.pointOfInterest?.(feet, this.player.facing) ?? null),
@@ -822,6 +831,8 @@ export class Game {
       }
     };
     (window as unknown as { __GAME: unknown }).__GAME = this.testApi();
+    // three.js itself, for probes (raycasts, vectors) from the dev console and test scripts.
+    (window as unknown as { __THREE: unknown }).__THREE = THREE;
   }
 
   private testApi() {

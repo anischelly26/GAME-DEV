@@ -266,7 +266,7 @@ test('tall grass and the concrete pipe hide Mara from a Watch that would otherwi
   expect(r.hiddenInPipe).toBe(true);
 });
 
-test('the ending: across the yard to the causeway gate completes the chapter (no Chapter Three yet)', async ({ page }) => {
+test('the ending: across the yard to the causeway gate completes the chapter and offers Chapter Three', async ({ page }) => {
   await boot(page);
   await page.evaluate(() => {
     const G = (window as any).__GAME;
@@ -283,7 +283,7 @@ test('the ending: across the yard to the causeway gate completes the chapter (no
   const s = await state(page);
   expect(s.complete).toBe(true);
   await expect(page.locator('.screen .card h2')).toHaveText("The Warders' Green");
-  await expect(page.locator('.screen [data-a="next"]')).toHaveCount(0);
+  await expect(page.locator('.screen [data-a="next"]')).toHaveText('Continue: Chapter Three');
   expect(errors).toEqual([]);
 });
 
@@ -298,8 +298,10 @@ test('Chapter One is still the default, and its completion card offers Chapter T
   expect(errors).toEqual([]);
 });
 
-test('the title screen lists the other chapter and goes there', async ({ page }) => {
+test('the title screen lists the other chapters and goes there', async ({ page }) => {
   await page.goto('/?dev=1&quality=low');
+  await page.waitForSelector('.screen [data-chapter="3"]', { timeout: 120_000 });
+  await expect(page.locator('.screen [data-chapter="3"]')).toHaveText('Chapter Three: The Low Tide');
   await page.waitForSelector('.screen [data-chapter="2"]', { timeout: 120_000 });
   await expect(page.locator('.screen [data-chapter="2"]')).toHaveText("Chapter Two: The Warders' Green");
   await page.locator('.screen [data-chapter="2"]').click();

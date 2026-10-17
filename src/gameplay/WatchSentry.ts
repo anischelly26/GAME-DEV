@@ -33,7 +33,10 @@ export interface SentryTrack {
   nearest(p: THREE.Vector3Like): number;
 }
 
-/** A circle round the origin (the engine collar's deck), riding a parent that moves up and down. */
+/**
+ * A circle (the engine collar's deck round the column; a patrol boat's round of a lighthouse),
+ * riding a parent placed at its centre that may move up and down.
+ */
 export class RingTrack implements SentryTrack {
   readonly loop = true;
   readonly length: number;
@@ -43,6 +46,8 @@ export class RingTrack implements SentryTrack {
     readonly parent: THREE.Object3D,
     readonly radius: number,
     private readonly floorY: () => number,
+    /** The ring's centre in the world (x, z); the parent stands there. */
+    readonly centre = new THREE.Vector2(0, 0),
   ) {
     this.length = Math.PI * 2 * radius;
   }
@@ -59,11 +64,11 @@ export class RingTrack implements SentryTrack {
   }
 
   offset(): THREE.Vector3 {
-    return this.off.set(0, this.floorY(), 0);
+    return this.off.set(this.centre.x, this.floorY(), this.centre.y);
   }
 
   nearest(p: THREE.Vector3Like): number {
-    return this.at(Math.atan2(p.x, p.z));
+    return this.at(Math.atan2(p.x - this.centre.x, p.z - this.centre.y));
   }
 }
 

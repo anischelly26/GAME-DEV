@@ -44,6 +44,10 @@ export interface MaterialLibrary {
   shingle: THREE.MeshStandardMaterial;
   slate: THREE.MeshStandardMaterial;
   mossyStone: THREE.MeshStandardMaterial;
+  /** Wet sand (Chapter Three's flats). */
+  sand: THREE.MeshStandardMaterial;
+  /** Natural rock: boulders, cliffs, the lagoon's arms. */
+  rock: THREE.MeshStandardMaterial;
 }
 
 export function createMaterials(tex: TextureLibrary): MaterialLibrary {
@@ -81,6 +85,8 @@ export function createMaterials(tex: TextureLibrary): MaterialLibrary {
     shingle: textured(tex.stone, { roughness: 0.9, metalness: 0, color: new THREE.Color('#a39d94') }),
     slate: textured(tex.stone, { roughness: 0.75, metalness: 0, color: new THREE.Color('#4a5257') }),
     mossyStone: textured(tex.stone, { roughness: 0.95, metalness: 0, color: new THREE.Color('#8f9b80') }),
+    sand: textured(tex.floor, { roughness: 0.9, metalness: 0, color: new THREE.Color('#b9a888') }),
+    rock: textured(tex.stone, { roughness: 0.9, metalness: 0, color: new THREE.Color('#7d7a74') }),
   };
 }
 
@@ -104,6 +110,8 @@ export function applySurfaces(m: MaterialLibrary, s: SurfaceLibrary): void {
     [m.shingle, s.shingle],
     [m.slate, s.slate],
     [m.mossyStone, s.mossyStone],
+    [m.sand, s.sand],
+    [m.rock, s.rock],
   ] as const;
   for (const [mat, set] of outdoor) {
     if (!set) continue;

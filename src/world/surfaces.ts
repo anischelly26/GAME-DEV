@@ -16,7 +16,7 @@ export interface SurfaceSet {
 
 type CoreSurface = 'stone' | 'stoneDark' | 'floor' | 'grate' | 'iron' | 'wood';
 /** Chapter Two's outdoor sets: the green, the lane, the shingle, roofs and garden walls. */
-type OutdoorSurface = 'grass' | 'gravel' | 'shingle' | 'slate' | 'mossyStone';
+type OutdoorSurface = 'grass' | 'gravel' | 'shingle' | 'slate' | 'mossyStone' | 'sand' | 'rock';
 export type SurfaceKey = CoreSurface | OutdoorSurface;
 export type SurfaceLibrary = Record<CoreSurface, SurfaceSet> & Partial<Record<OutdoorSurface, SurfaceSet>>;
 

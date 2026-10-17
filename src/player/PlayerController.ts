@@ -11,7 +11,19 @@ import type { GrindRail } from './GrindRail';
  * Traversal state: normal movement, hanging from a ledge, pulling up, vaulting, grinding a pipe, or
  * riding something that carries her (a swing, a slide).
  */
-export type MoveMode = 'move' | 'hang' | 'climb' | 'vault' | 'grind' | 'ride';
+export type MoveMode = 'move' | 'hang' | 'climb' | 'vault' | 'grind' | 'ride' | 'swim';
+
+/** Open water a level provides: the surface height at (x, z), or null where there is none. */
+export interface WaterSurface {
+  level(x: number, z: number): number | null;
+}
+
+/**
+ * Swimming: she starts to swim where the water is deeper than `enter` (above her waist) and stands
+ * again where it is shallower than `exit`. Swimming, she lies forward with her feet `float` below
+ * the surface, so her back and head are out of the water.
+ */
+export const SWIM = { enter: 0.95, exit: 0.75, float: 0.42, speed: 2.9, accel: 7, decel: 5, hop: 1.6 };
 
 /**
  * Something Mara rides: it places her feet each fixed step and decides when she lets go, and how
@@ -19,7 +31,7 @@ export type MoveMode = 'move' | 'hang' | 'climb' | 'vault' | 'grind' | 'ride';
  */
 export interface Ride {
   /** Avatar pose while riding. */
-  readonly pose: 'swing' | 'slide' | 'ladder';
+  readonly pose: 'swing' | 'slide' | 'ladder' | 'boat';
   /** Lean for the avatar (radians, + forward), about the seat. */
   readonly tilt?: number;
   step(dt: number, input: InputFrame, cameraYaw: number): RideStep;
@@ -131,6 +143,10 @@ export class PlayerController {
   grinds = 0;
   /** What she is riding (mode 'ride'). */
   ride: Ride | null = null;
+  /** Open water (null: none in this level). */
+  water: WaterSurface | null = null;
+  /** Times she has gone into the water (tests). */
+  swims = 0;
 
   constructor(
     private readonly physics: Physics,
@@ -187,6 +203,7 @@ export class PlayerController {
     // Taken off a pipe mid-grind (respawn, restart, a dev teleport): end it like any other exit.
     if (this.mode === 'grind') this.events.emit('grind', { on: false, x: this.feet.x, y: this.feet.y, z: this.feet.z });
     if (this.mode === 'ride') this.ride?.cancel?.();
+    if (this.mode === 'swim') this.events.emit('swim', { on: false, x: feet.x, y: feet.y, z: feet.z });
     this.ride = null;
     this.mode = 'move';
     this.ledge = null;
@@ -389,6 +406,13 @@ export class PlayerController {
 
     // --- move
     const desired = new THREE.Vector3(this.velocity.x * dt, this.velocity.y * dt, this.velocity.z * dt);
+    // Walking on a slope (a ramp, a stair): follow it, with only a light press into it. The full
+    // press (-2 m/s) would outweigh a walk from a standstill and slide her back down every step.
+    const n = this.groundNormal;
+    if (onGround && !carried && this.velocity.y <= 0 && this.pound === 'none' && n.y > 0.5 && n.y < 0.995) {
+      const follow = -(n.x * this.velocity.x + n.z * this.velocity.z) / n.y;
+      desired.y = (follow - 0.4) * dt;
+    }
     // Ride along with the platform's motion for this step. The platform is not excluded from the
     // sweep: rising platforms move away from the feet, and a descending one lags by at most one
     // step. (Excluding it caused the controller to stall at deck/gantry edges.)
@@ -431,6 +455,15 @@ export class PlayerController {
 
     this.body.setNextKinematicTranslation(next);
     this.feet.set(next.x, next.y - PLAYER_CENTER_OFFSET, next.z);
+
+    // Water: deep enough here and she floats (walking in from a beach, or falling in).
+    if (this.water && this.velocity.y <= 0.5 && this.pound !== 'hover') {
+      const level = this.water.level(this.feet.x, this.feet.z);
+      if (level !== null && this.feet.y < level - SWIM.enter) {
+        this.startSwim(level);
+        return;
+      }
+    }
 
     // Grind: feet coming down onto a registered pipe ride it.
     if (!this.grounded && this.railCooldown <= 0 && this.traversal && this.traversal.rails.length && !this.isLocked && this.pound !== 'fall') {
@@ -603,6 +636,94 @@ export class PlayerController {
     this.events.emit('grind', { on: true, x: f.x, y: f.y, z: f.z });
   }
 
+  private startSwim(level: number): void {
+    this.mode = 'swim';
+    this.modeT = 0;
+    this.swims++;
+    this.resetMoves();
+    this.pound = 'none';
+    this.dashT = 0;
+    this.jumping = false;
+    this.grounded = false;
+    // A fall into the water keeps a little of its speed as a plunge; then she bobs up.
+    this.velocity.y = 0;
+    this.events.emit('swim', { on: true, x: this.feet.x, y: level, z: this.feet.z });
+  }
+
+  /** Swimming: the stick moves her across the surface; she climbs out where a ledge allows. */
+  private updateSwim(dt: number, input: InputFrame, cameraYaw: number): void {
+    const level = this.water?.level(this.feet.x, this.feet.z) ?? null;
+    if (level === null) {
+      this.mode = 'move';
+      this.events.emit('swim', { on: false, x: this.feet.x, y: this.feet.y, z: this.feet.z });
+      return;
+    }
+    this.modeT += dt;
+    this.lockTimer = Math.max(0, this.lockTimer - dt);
+    const fx = -Math.sin(cameraYaw);
+    const fz = -Math.cos(cameraYaw);
+    const rx = Math.cos(cameraYaw);
+    const rz = -Math.sin(cameraYaw);
+    this.wish.set(fx * input.moveY + rx * input.moveX, 0, fz * input.moveY + rz * input.moveX);
+    if (this.isLocked) this.wish.set(0, 0, 0);
+    const wishLen = Math.min(1, this.wish.length());
+    const tvx = wishLen > 0 ? (this.wish.x / Math.max(this.wish.length(), 1e-6)) * wishLen * SWIM.speed : 0;
+    const tvz = wishLen > 0 ? (this.wish.z / Math.max(this.wish.length(), 1e-6)) * wishLen * SWIM.speed : 0;
+    const accel = (wishLen > 0.05 ? SWIM.accel : SWIM.decel) * dt;
+    const dvx = tvx - this.velocity.x;
+    const dvz = tvz - this.velocity.z;
+    const dl = Math.hypot(dvx, dvz);
+    if (dl <= accel) {
+      this.velocity.x = tvx;
+      this.velocity.z = tvz;
+    } else {
+      this.velocity.x += (dvx / dl) * accel;
+      this.velocity.z += (dvz / dl) * accel;
+    }
+    if (this.speed > 0.3) this.facing = dampAngle(this.facing, Math.atan2(this.velocity.x, this.velocity.z), MOVEMENT.turnRate * 0.6, dt);
+
+    // Climbing out: swimming into a registered ledge (a dock, a rock shelf) she can reach.
+    if (this.traversal && wishLen > 0.3 && !this.isLocked) {
+      const ledge = findLedge(this.physics, this.traversal, this.feet, this.wish, this.collider);
+      if (ledge) {
+        const rel = ledge.topY - this.feet.y;
+        this.events.emit('swim', { on: false, x: this.feet.x, y: level, z: this.feet.z });
+        if (rel < 1.25) this.startClimb(ledge, this.feet.clone());
+        else this.startHang(ledge);
+        return;
+      }
+    }
+    // Jump: a kick up out of the water (onto something low, or just a splash).
+    if (input.jumpPressed && !this.isLocked) {
+      this.mode = 'move';
+      this.velocity.y = Math.sqrt(2 * MOVEMENT.gravity * SWIM.hop);
+      this.jumping = true;
+      this.lastJumpTime = this.time;
+      this.timeSinceGrounded = MOVEMENT.coyoteTime + 1;
+      this.events.emit('swim', { on: false, x: this.feet.x, y: level, z: this.feet.z });
+      this.events.emit('jump', { speed: this.speed });
+      return;
+    }
+
+    // Float at the surface with a gentle bob; the controller keeps her out of rocks and walls.
+    const pos = this.body.translation();
+    const floatY = level - SWIM.float + Math.sin(this.time * 2.3) * 0.035;
+    const desired = new THREE.Vector3(this.velocity.x * dt, (floatY - this.feet.y) * Math.min(1, dt * 8), this.velocity.z * dt);
+    this.kcc.computeColliderMovement(this.collider, desired, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, PLAYER_GROUPS);
+    const moved = this.kcc.computedMovement();
+    const next = new THREE.Vector3(pos.x + moved.x, pos.y + moved.y, pos.z + moved.z);
+    this.body.setNextKinematicTranslation(next);
+    this.feet.set(next.x, next.y - PLAYER_CENTER_OFFSET, next.z);
+    this.velocity.y = 0;
+
+    // Shallow enough to stand: walk out.
+    const ground = this.heightAboveGround();
+    if (ground < 3 && level - (this.feet.y - ground) < SWIM.exit) {
+      this.mode = 'move';
+      this.events.emit('swim', { on: false, x: this.feet.x, y: level, z: this.feet.z });
+    }
+  }
+
   /** Get on a swing or a slide: it carries her until it lets her go. */
   startRide(ride: Ride): void {
     if (this.mode === 'grind') this.events.emit('grind', { on: false, x: this.feet.x, y: this.feet.y, z: this.feet.z });
@@ -648,6 +769,10 @@ export class PlayerController {
 
   /** Scripted traversal moves. Endpoints were validated as free when the move started. */
   private updateTraversal(dt: number, input: InputFrame, cameraYaw: number): void {
+    if (this.mode === 'swim') {
+      this.updateSwim(dt, input, cameraYaw);
+      return;
+    }
     if (this.mode === 'ride' && this.ride) {
       this.modeT += dt;
       const r = this.ride.step(dt, this.isLocked ? { ...input, jumpPressed: false, moveX: 0, moveY: 0 } : input, cameraYaw);

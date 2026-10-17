@@ -70,7 +70,7 @@ export const CHAPTERS: Chapter[] = [
     title: "The Warders' Green",
     blurb: "Dawn on the spur behind Breakwater: the village where the prison's keepers once raised their children, and the Watch that still patrols it.",
     loading: 'Waiting for first light…',
-    surfaces: [...CORE, 'grass', 'gravel', 'shingle', 'slate', 'mossyStone'],
+    surfaces: [...CORE, 'grass', 'gravel', 'shingle', 'slate', 'mossyStone', 'rock'],
     atmosphere: {
       // Blue hour turning gold: a low sun over the sea, cool mist in the hollows.
       skyTop: '#2c4a6e',
@@ -92,6 +92,34 @@ export const CHAPTERS: Chapter[] = [
     create: async (ctx) => {
       const { WardersGreenLevel } = await import('./green/WardersGreenLevel');
       return WardersGreenLevel.create(ctx);
+    },
+  },
+  {
+    number: 3,
+    title: 'The Low Tide',
+    blurb: 'Late morning on the water between the spur and Knoll Rock, where a lighthouse burns that should be dark.',
+    loading: 'Waiting for the tide to turn…',
+    surfaces: [...CORE, 'sand', 'rock'],
+    atmosphere: {
+      // A bright, cool late morning: a high sun through thin cloud over open water.
+      skyTop: '#5f8fbf',
+      skyHorizon: '#cfdfe8',
+      fog: '#bcd0db',
+      fogDensity: 0.006,
+      light: '#fff0da',
+      lightIntensity: 3.0,
+      lightDir: [0.35, 0.62, -0.7],
+      hemiSky: '#c3d9ea',
+      hemiGround: '#6d6450',
+      hemiIntensity: 1.45,
+      stars: 0,
+      disc: 1.6,
+      env: { low: '#5a6a74', high: '#b5d0e4', glow: '#ffe6c4', glowStrength: 0.35 },
+      envIntensity: 1.05,
+    },
+    create: async (ctx) => {
+      const { LowTideLevel } = await import('./coast/LowTideLevel');
+      return LowTideLevel.create(ctx);
     },
   },
 ];

@@ -19,10 +19,10 @@ export interface AvatarState {
   /** World point Mara glances at (nearby interactable), or null. */
   lookAt: THREE.Vector3 | null;
   /** Traversal mode from the controller, and its progress (seconds for hang, 0..1 otherwise). */
-  mode?: 'move' | 'hang' | 'climb' | 'vault' | 'grind' | 'ride';
+  mode?: 'move' | 'hang' | 'climb' | 'vault' | 'grind' | 'ride' | 'swim';
   modeT?: number;
   /** While riding: sitting on a swing (gripping its chains), going down a slide, up a ladder. */
-  ridePose?: 'swing' | 'slide' | 'ladder';
+  ridePose?: 'swing' | 'slide' | 'ladder' | 'boat';
   /** Lean while riding (radians, + forward), about the seat. */
   rideTilt?: number;
   /** Increments each time the controller applies a knockback. */
@@ -90,6 +90,7 @@ export class PlayerAvatar {
   private lastKnockbacks = 0;
   private lastMode: AvatarState['mode'] = 'move';
   private rideTilt = 0;
+  private swimT = 0;
   private lastReach = 0;
   private lastFacing = 0;
   private turnRate = 0;
@@ -584,7 +585,8 @@ export class PlayerAvatar {
     this.hangLift = damp(this.hangLift, liftTarget, 14, dt);
     this.visual.position.set(0, P - P * Math.cos(a) + this.hangLift * this.fit.hangLift, -P * Math.sin(a));
     // Riding a swing or a slide: lean with the chains or the chute, about the seat.
-    this.rideTilt = damp(this.rideTilt, mode === 'ride' ? (s.rideTilt ?? 0) : 0, 14, dt);
+    // Swimming: lying forward in the water, the crawl stroke below.
+    this.rideTilt = damp(this.rideTilt, mode === 'ride' ? (s.rideTilt ?? 0) : mode === 'swim' ? 1.2 : 0, mode === 'swim' ? 6 : 14, dt);
     if (Math.abs(this.rideTilt) > 1e-4) {
       const Q = 0.33;
       this.visual.rotation.x += this.rideTilt;
@@ -612,6 +614,15 @@ export class PlayerAvatar {
     // The toy's short arms swing clear of her round middle.
     this.rollBone('upperarm_l', 0.24);
     this.rollBone('upperarm_r', -0.24);
+    // Swimming: a front crawl, one arm over as the other pulls; a flutter kick.
+    if (s.mode === 'swim') {
+      this.swimT += dt * (1.6 + Math.min(1, s.speed / 2.5) * 1.6);
+      const a = this.swimT * Math.PI * 2;
+      this.turnBone('upperarm_l', 0, -1.5 + Math.sin(a) * 1.4);
+      this.turnBone('upperarm_r', 0, -1.5 + Math.sin(a + Math.PI) * 1.4);
+      this.turnBone('thigh_l', 0, Math.sin(a * 2) * 0.3);
+      this.turnBone('thigh_r', 0, Math.sin(a * 2 + Math.PI) * 0.3);
+    }
     this.turnBone('neck_01', this.headYaw * 0.4, this.headPitch * 0.4);
     this.turnBone('Head', this.headYaw * 0.6, this.headPitch * 0.6);
     // Nodding off: a slow sag toward the level the story sets, a quicker lift if she jerks awake.
