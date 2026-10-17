@@ -36,6 +36,11 @@ const SFX = {
   'step.stone': ['impact-sounds', range('footstep_concrete_', 5)],
   'step.wood': ['impact-sounds', range('footstep_wood_', 5)],
   'step.metal': ['impact-sounds', range('impactPlate_light_', 5)],
+  'step.grass': ['impact-sounds', range('footstep_grass_', 5)],
+  // Snow steps; played pitched down for sand.
+  'step.sand': ['impact-sounds', range('footstep_snow_', 5)],
+  // RPG Audio's footsteps (a dry, crunchy step) for gravel and shingle.
+  'step.gravel': ['rpg-audio', range('footstep', 10, 2)],
   land: ['impact-sounds', range('impactSoft_medium_', 5)],
   'land.heavy': ['impact-sounds', range('impactSoft_heavy_', 5)],
   'land.metal': ['impact-sounds', range('impactPlate_medium_', 5)],
