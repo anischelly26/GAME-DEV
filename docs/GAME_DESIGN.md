@@ -55,16 +55,78 @@ whistle, the grind's scrape. The workshop's rain is generated in code. Sources a
 
 - **Chapter One, *The Quiet Cell*** (built): Mara wakes up in the cell and escapes the cell block
   through the turbine hall and the Breathing Engine. Detailed below.
-- **Chapter Two, *Wings in a Cage*** (owner's direction, 2026-10-15; not built): the hangar cell
-  and an old aircraft; a flight; a simulation in which Mara is in another world; a crash into an
-  original voxel world. Before it starts, the camera gets It Takes Two–style options: separate
-  horizontal and vertical sensitivity, invert X and Y, chase assist (none, weak, strong), a camera
-  shake toggle, and FOV. Third-party models are used only where their licence allows, with credit.
+- **Chapter Two, *The Warders' Green*** (built, see below): the abandoned playground the
+  owner's 2026-10-16 brief asked for, on the spur behind the prison, with the Watch.
+- **Chapter Three, *The Low Tide*** (owner's 2026-10-16 brief; not built): the coastal escape:
+  swimming, a skiff, and the lighthouse on Knoll Rock (the CC BY scan, already optimised).
+- **Chapter Four, the arcade** (owner's 2026-10-16 brief; not built): an arcade mystery. The
+  reference the owner gave is a Minion Rush rip and cannot be used, so the arcade must be an
+  original environment.
+- **The hangar and the aircraft** (*Wings in a Cage*, owner's direction of 2026-10-15) are kept as
+  the destination both chapters point to (the hangar at the end of the causeway). Where the flight,
+  the simulation and the voxel world go now that the four-chapter list exists is the owner's call.
 - **Later regions** from the prompt packs: archive workshop → flooded cistern → freight harbour →
   cliff stormworks → beacon crown → outer tidal channel. Each region gets a safe introduction, a
   developed problem and one signature challenge. The full mission list, with later mechanics
   (stealth, swimming, the skiff, gliding), is in the prompt packs. They enter production only
   through the gates in [STATUS.md](STATUS.md).
+
+## Chapter Two, *The Warders' Green* (implemented, unreviewed)
+
+Dawn on the spur behind Breakwater, where the prison's keepers once lived with their children.
+Load it with `?chapter=2`, from the title screen's chapter buttons, or from Chapter One's
+completion card. About 3 to 6 minutes; nobody has played it yet.
+
+### The Watch (stealth, both chapters)
+
+The automated Watch from the pitch is now on screen: steam automata in warden's caps that run on
+rails (the collar's deck in Chapter One, a lane and a playground rim here), so their patrol routes
+are visible on the ground.
+
+| Rule | Value |
+| --- | --- |
+| Sight | A cone of ±25° (±72° within 1.9 m), 7.5 m long (13 m for the Watch on the playground rim, which looks down); solid geometry (walls, houses, hedges, the engine column) blocks it; railings and bars do not |
+| Hidden | In tall grass or inside the concrete pipe it only notices Mara within 1.3 m |
+| Suspicion | About 0.8 s to fill right in front of it, 2.4 s at the edge of its range; drains when she is out of sight. "?" while it fills, "!" when full |
+| Alarm | Rail-side: it rolls after her at 3.1 m/s and grabs her (no sooner than 0.35 s after the "!"). Out of its reach: 0.9 s after the "!", still seeing her, it fires a tether (0.45 s flight). Either way she is caught: back to the checkpoint, not counted as a fall |
+| Giving up | 2.6 s unseen, then it searches (lamp sweeping toward where the noise or Mara was), then returns to its round |
+| Patrol | 1.25 m/s; every 6.5 s it stops and looks back for 2.2 s; at the end of a line it turns round |
+| Hearing | Noise within a radius (the swing's creak: up to 12 m) sends it to the nearest point of its rail, lamp turned toward the sound |
+| Ground pound | Within 1.7 m: knocked out for 6 s |
+
+In automated route tests the Watch is off unless `?watch=1`.
+
+### Beats
+
+1. **The cove.** Mara wakes on the shingle (a 9 s skippable opening). The cove wall is a 1.7 m
+   ledge: catch and climb.
+2. **Cottage Lane.** Three cottages each side, front gardens behind tall hedges. A Watch runs up
+   and down a rail in the middle of the lane. The gardens connect through a gap by each house (the
+   sneaking way); the back gardens on the west side are another way round (low walls to vault).
+   The lane ends in a 3.2 m compound wall whose only gate is in the middle of the lane, so the last
+   step is a timed crossing behind the Watch's back.
+3. **The green.** The playground is sunk 2.4 m into the green. A second Watch circles its rim
+   on a U-shaped rail (it cannot see into the far corners or the concrete pipe).
+4. **The slide** (the CC BY model, ridden): from the green over a plank onto its platform, then
+   down the chute: gravity along the measured chute, a hop off the end into the playground. A
+   ladder climbs back up.
+5. **The swing.** The sea wall has fallen in over the playground, but its top is 4.8 m above the
+   floor: a double jump (2.5 m) plus a ledge catch (2.2 m) falls short. Mara sits on the swing
+   and pumps it (push the stick the way it is swinging); its creak carries, and the rim Watch
+   comes to look. High on a forward swing, a leap (the seat's speed x1.35, plus a kick) carries
+   her to the wall's top, where she catches it and climbs. Swing while the Watch is far away, or
+   hide (pipe, tall grass) until it gives up.
+6. **The yard.** Across the hangar yard to the causeway gate, locked from the far side. The old
+   hangar waits beyond it, and out on Knoll Rock a lighthouse (the CC BY scan) is burning that
+   should have been dark for years. Completion card; Chapter Three is next.
+
+### Swing and slide specifications
+
+| | |
+| --- | --- |
+| Swing | Pendulum, chain 2.7 m, its own gravity 14 m/s² (period about 2.8 s), damping 0.12/s; pumping adds up to 2.6 rad/s² when the push agrees with the swing's direction; capped at 70°. An empty swing damps at 1.0/s and can be sat on once it is low and slow (|θ| < 0.45 rad, |ω| < 1.6 rad/s) |
+| Leap | Velocity of the seat x1.35, +5.0 m/s up, +1.4 m/s forward when swinging forward. Verified: a leap from a swing pumped past 1.1 rad catches the wall; from a 0.35 rad swing it falls short |
+| Slide | The chute's centre line measured from the model (raycast profile, scale 1.6); speed gains 0.75 g along the slope less 1.2 m/s² friction, 1.5 to 9 m/s; leaves the end with a 2.2 m/s hop; Jump leaves early |
 
 ## Movement capabilities (measured)
 
@@ -339,6 +401,14 @@ her up once, a fall at the breach recovers with the ram primed again, so a misse
 the puzzle twice. "Restart section" restores everything.
 
 ## Deviations from the prompt packs (flagged for the owner)
+
+- **Four chapters.** The owner's 2026-10-16 brief lists four chapters (prison escape, abandoned
+  playground, coastal escape, arcade mystery). The playground became Chapter Two, on the spur where
+  the hangar from Chapter One's ending stands: Breakwater's old warders' village. This replaces
+  *Wings in a Cage* as Chapter Two; the hangar is still the destination (see the outline).
+- **The player character.** The brief asked to replace Mara with a Minion. Minions are Illumination's
+  characters and cannot be used; at the owner's choice, Mara became an original toy-like hero
+  ("between a Minion and an It Takes Two character"), with a living face.
 
 - **The ending's destination** is a seaplane hangar on a rock spur outside the prison, seen from
   the breach. The earlier text said "the hangar cell"; the intercom now points to "the old hangar

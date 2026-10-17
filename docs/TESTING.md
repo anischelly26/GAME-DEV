@@ -1,4 +1,4 @@
-# Testing: Chapter One, *The Quiet Cell*
+# Testing: Chapter One, *The Quiet Cell*, and Chapter Two, *The Warders' Green*
 
 ## Automated checks
 
@@ -159,6 +159,41 @@ is recomputed from the live camera each step. Tests 11–13 hold one fixed input
    land, and the camera's yaw does not change while airborne. A +30° start point 3 m back stands
    against the hall-side railing, so that side stops at 20°.
 
+### `tests/e2e/stealth.spec.ts`: the Watch on the engine collar (6)
+
+With `?watch=1` (the Watch is off in other automated runs).
+
+- Off by default in automated runs: no sentry, no collider.
+- It patrols the deck, sees Mara 2.5 m ahead in its lamp, fills its suspicion over 0.6 to 1.5 s
+  (measured from the first "?"), raises the alarm (sound, "Inmate out of bounds. Halt!"), grabs her
+  and returns her to the engine gantry; a catch is not a fall.
+- The engine column blocks its sight (a point 120° round the ring is in its cone but hidden); a
+  point straight behind it is outside the cone.
+- A ground pound beside it knocks it out; standing in front of it for three seconds raises no
+  suspicion; about six seconds later it comes round and notices her.
+- Out of sight long enough, it searches and goes back to its round.
+- Boarding behind it as it passes and riding the collar up: not caught.
+
+### `tests/e2e/chapter2.spec.ts`: Chapter Two (12)
+
+- Loads at dawn (`?chapter=2`) with its own checkpoints and objective, the slide model loaded, no
+  errors.
+- The autopilot route: the cove wall (ledge catch and climb), the west front gardens, the lane
+  gate, the green, onto the slide's platform and down the chute into the playground; no falls.
+- The slide: onto the chute from the platform, a ride, a hop off the end onto the playground floor.
+- The swing: pumped past 1.1 rad, a leap at the top of a forward swing catches the fallen sea wall
+  (wall checkpoint). From a 0.35 rad swing the leap falls short, and so does a double jump from
+  the floor right under the wall (the wall cannot be reached without the swing).
+- The ladder back up to the slide's platform.
+- With `?watch=1`: the lane Watch passes Mara behind a hedge without any suspicion, and catches
+  her in the open lane (back at the lane checkpoint); the rim Watch hears the swing, comes to look
+  and raises the alarm on seeing her; tall grass and the concrete pipe hide her.
+- The ending: across the yard to the causeway gate completes the chapter; no "next chapter"
+  button yet.
+- Chapter One is still the default, and its completion card offers "Continue: Chapter Two".
+- The title screen (normal mode) lists the other chapter, goes there, and credits the CC BY
+  models.
+
 ## Review captures
 
 All of these need `npm run dev` running in another terminal. Output goes to `artifacts/` (ignored by git).
@@ -252,6 +287,14 @@ environment (OS, browser, GPU, resolution, quality setting), severity, reproduct
 expected vs actual, evidence, and acceptance criteria for the fix.
 
 ## Latest results
+
+At commit `97a527d` (toy hero, the Watch, Chapter Two), same machine: **99/100 Edge e2e in one
+run (24.4 min)**; the one failure, a test locator fixed during the run, passes on its own (1/1).
+Unit tests 54/54. Per-spec counts and draw calls: [STATUS.md](STATUS.md#verification-this-pass).
+Run Chapter Two's checks alone with
+`PW_CHANNEL=msedge npx playwright test tests/e2e/chapter2.spec.ts tests/e2e/stealth.spec.ts`.
+
+### Earlier: Chapter One v2
 
 At commit `3e1b230` (Chapter One v2), on Windows 11 Pro with Node 22.13.1. Edge runs on the RTX
 2050 through the Windows setting.

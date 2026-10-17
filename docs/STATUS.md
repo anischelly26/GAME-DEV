@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Branch** | `claude/chapter-one-v2` (draft PR #5), stacked on `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
-| **Build** | Chapter One, *The Quiet Cell*: the workshop opening → pressure-hatch puzzle → maintenance shaft (the steam kicker) → lookout → the feed-pipe grind or the scaffold → parkour practice route → *The Breathing Engine* and the split feed → chapter ending; five hidden chalk marks along the way |
-| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PR #3: the Chapter One story and the R1–R4 fixes; PR #4: the quality pass; PR #5: v2, below) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
+| **Branch** | `claude/toy-hero` (draft PR #6), stacked on `claude/chapter-one-v2` (PR #5) → `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
+| **Build** | Chapter One, *The Quiet Cell*: the workshop opening → pressure-hatch puzzle → maintenance shaft (the steam kicker) → lookout → the feed-pipe grind or the scaffold → parkour practice route → *The Breathing Engine* (now with the Watch) and the split feed → chapter ending; five hidden chalk marks. Chapter Two, *The Warders' Green*: the cove → Cottage Lane (stealth) → the green → the slide → the swing leap → the yard |
+| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PRs #3 to #6) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
 
 ## Launch
 
@@ -14,7 +14,8 @@ npm run dev
 ```
 
 Open http://localhost:5173, click **Begin**, then click the view to capture the mouse. The story
-opening plays first (about 39 s; Space or E skips it). Production build: `npm run build`, then
+opening plays first (about 39 s; Space or E skips it). Chapter Two: the title screen's chapter
+button, or http://localhost:5173/?chapter=2 (its opening is about 9 s). Production build: `npm run build`, then
 `npm run preview` (http://localhost:4173). Character viewer: http://localhost:5173/?viewer=mara.
 
 **Dual-GPU laptops.** Windows runs browsers on the integrated GPU unless told otherwise.
@@ -22,6 +23,111 @@ Settings → System → Display → Graphics → Microsoft Edge (or Chrome) → 
 the browser to the dedicated GPU. On the test laptop (Intel UHD plus NVIDIA RTX 2050), Edge now
 runs on the RTX this way. The Intel measurements below use Playwright's bundled Chromium, which
 that setting does not cover.
+
+## Toy hero, the Watch, Chapter Two (`claude/toy-hero`, draft PR #6)
+
+The owner's request of 2026-10-16 (the "master development prompt") asked for four chapters, a
+Minion as the player character, four specific Sketchfab models, guards with patrol, detection,
+pursuit and hiding, and a report labelled COMPLETED / PARTIALLY IMPLEMENTED / BLOCKED / NOT
+STARTED. This branch is stacked on `claude/chapter-one-v2` (PR #5). No person has played any of
+it yet.
+
+| Commit | What |
+| --- | --- |
+| `0462ffe` | Mara as a toy hero: an original stylised character (not a Minion: see Blocked), re-proportioned on the same skeleton, with a living face (blinks, looks, moods) |
+| `00d22b7` | The Watch: a sentry automaton on the Breathing Engine's collar (stealth in Chapter One) |
+| `97a527d` | Chapters (registry, per-chapter light and surfaces, chapter select, "Continue: Chapter Two"); the Watch on rails (any track, hearing, a tether); Chapter Two, *The Warders' Green*; the two CC BY models; a render safety pass |
+| this commit | These documents |
+
+### The toy hero (`0462ffe`)
+
+At the owner's choice ("something between a Minion and an It Takes Two character"), Mara is an
+original toy-like hero built in code on the same CC0 skeleton and clips: a big head with a living
+face (eyes that blink, look about and follow points of interest; lids, brows and a mouth for
+neutral, happy, surprised, worried and determined; she dozes off in the opening), a pear-shaped
+ochre jacket with a belt and pouch, goggles pushed up on her hair, mittens and boots, the coral
+scarf and the steam kicker. She is 1.40 m tall (the camera's pivot is lowered to match). The
+opening's camera shots were re-framed for her. Measured pelvis heights: sitting 0.33 m, lying
+0.13 m, standing 0.47 m (the story test checks all three). Viewer: `/?viewer=mara`.
+
+### Report
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| Branch and PR | COMPLETED | `claude/toy-hero`, draft PR #6, stacked on PR #5; not merged |
+| Player character | COMPLETED (as an original character) | Replacing Mara with a Minion is **BLOCKED** (Illumination's character; no rights). At the owner's choice Mara is now a toy-like original hero "between a Minion and an It Takes Two character" |
+| Chapter One, prison escape | COMPLETED | Built earlier; this branch adds the Watch on the engine collar (patrol, detection, chase, return to patrol, hiding behind the column, ground-pound stun) |
+| Chapter Two, abandoned playground | COMPLETED (first version, unplayed by a person) | *The Warders' Green*: cove, stealth lane, sunken playground, the slide (CC BY model, ridden), the swing leap, the yard, opening and ending |
+| Chapter Three, coastal escape | NOT STARTED (asset ready) | Swimming, a boat and the lighthouse are not built. The lighthouse scan is optimised and already seen across the water in Chapter Two |
+| Chapter Four, arcade mystery | NOT STARTED; reference asset BLOCKED | The Minion Rush arcade is a game rip; an original arcade is needed |
+| Enemy AI | COMPLETED | Patrol on rails, a vision cone with line of sight, suspicion, alarm, pursuit (rail) or tether (off-rail), catch to checkpoint, search, return to patrol, hearing noise, hiding (walls, hedges, the engine column, tall grass, the pipe), ground-pound stun |
+| Swimming | NOT STARTED | Chapter Three |
+| Boat | NOT STARTED | Chapter Three |
+| Model: Seven Foot Knoll Lighthouse (Katie Wolfe, CC BY 4.0) | COMPLETED (integrated as a distant landmark) | Plaza removed, 994k to 54k triangles, 58 MB to 3.8 MB; credited. Close-up use waits for Chapter Three (its real organisation's sign must be covered first) |
+| Model: Abandoned children's slide (sergeilihandristov, CC BY 4.0) | COMPLETED | 13.4 MB to 0.7 MB, scaled 1.6x, ridden |
+| Model: Minion Rush arcade | BLOCKED | A rip of a copyrighted game; a "CC BY" label on Sketchfab does not grant rights to it |
+| Model: Minion Rush prison cutscene | BLOCKED | Same |
+
+### Verification (this pass)
+
+Environment: Windows 11 Pro, Intel UHD 0x46A3 and NVIDIA RTX 2050, Node 22.13.1, Edge on the RTX
+(Windows graphics setting).
+
+- **Unit tests: 54/54** (unchanged).
+- **Edge e2e at `97a527d`: 99/100 in one run (24.4 min)**, and the one failure passes on its own
+  (1/1). It was a test locator: the title screen gained a credits paragraph during the run, and
+  the test was fixed then. Per spec:
+
+  | Spec | Tests | Spec | Tests |
+  | --- | ---: | --- | ---: |
+  | chapter2 (new) | 12 | stealth (new) | 6 |
+  | engine | 8 | moves | 6 |
+  | input | 11 | audio | 1 |
+  | jumps | 20 | sequence | 5 |
+  | parkour | 13 | secrets | 5 |
+  | slice | 8 | grind | 3 |
+  | story | 2 | | |
+
+  The Chapter Two tests take most of the time: each loads the chapter (about a minute per test in
+  this run). `00d22b7` (the Watch) passed 88/88 on its own; `0462ffe` (the toy hero) passed 82/82.
+- **What the Chapter Two tests prove** (deterministic stepping, input through the real pipeline):
+  the autopilot plays cove → ledge → gardens → lane gate → green → slide → playground with no
+  falls; a pumped swing's leap reaches the wall and a low one, or a double jump from the floor,
+  does not; the slide and the ladder work; hedges hide Mara from the lane Watch and the open lane
+  does not; the rim Watch hears the swing and spots her; tall grass and the pipe hide her; the
+  ending completes; Chapter One is still the default and offers Chapter Two; the title screen
+  switches chapters and credits the CC BY models.
+- **Draw calls** (`node scripts/count-draws.mjs --channel msedge [--chapter 2]`, Low): Chapter
+  One a mean of 515 per frame over its nine checkpoints (495 at PR #5: the Watch on the collar adds
+  about 20); Chapter Two a mean of 223 over its five, about 300k triangles (most of it grass).
+- **Not measured:** frame times and load time for Chapter Two (on either GPU). Chapter Two loads
+  4.5 MB of models and 13 MB more textures than Chapter One.
+- **Production build:** `npm run build` passes; each chapter is its own chunk.
+- **Each commit type-checks** (built from a `git archive` copy).
+- **Screenshots:** [evidence/toy-hero/](evidence/toy-hero/): the toy hero (viewer and in game),
+  the Watch in Chapter One, and Chapter Two from the opening to the ending.
+
+### Known limitations (this pass)
+
+- **No person has played Chapter Two.** Its difficulty (the lane crossing, the swing's timing
+  with the rim Watch) is tuned by tests, not by players.
+- **Swing pose.** Mara sits and leans with the chains, but her hands do not hold them (no IK).
+- **Ladder.** A scripted climb with the climbing clip looped; her hands do not meet the rungs.
+- **Distant pieces.** Breakwater across the water is a few lit blocks; the hangar is Chapter One's
+  distant set piece, seen closer here than it was designed for.
+- **No new music.** Chapter Two reuses the title theme and the waves; no one has listened to it.
+- **Chapter Two's grass** is 9,000 instanced tufts; its cost on the Intel GPU is not measured.
+- **The Watch** is rail-bound by design; it cannot leave its rail to chase.
+
+### Areas for independent review (Codex)
+
+1. **The Watch's fairness**: suspicion times, the 0.35 s grab beat, the tether at 0.9 s, the
+   hedge cover in the lane, the swing noise radius.
+2. **Chapter Two's skips**: anything that reaches the fallen wall without the swing, or the green
+   without the lane gate.
+3. **The chapter plumbing**: loading Chapter Two directly, from the title screen, and from Chapter
+   One's completion card; settings carry over.
+4. **The CC BY credits**: title screen, ASSETS.md and the files' `asset.extras`.
 
 ## Chapter One v2 (`claude/chapter-one-v2`, draft PR #5)
 
@@ -456,11 +562,12 @@ e2e suite, headed for frame times).
 
 ## Next
 
-1. An uncoached first-time playtest of Chapter One, including the opening.
-2. Codex's review of this branch.
-3. Then, per the owner's direction, Chapter Two: the hangar cell and the aircraft. Its prompt
-   lists It Takes Two–style camera settings (separate horizontal and vertical sensitivity,
-   invert X and Y, chase assist, camera shake, FOV); those come first.
+1. Uncoached first-time playtests of Chapters One and Two (the Watch's fairness, the swing).
+2. Codex's review of PRs #3 to #6.
+3. Chapter Three, *The Low Tide* (the owner's coastal escape: swimming, a boat, the lighthouse),
+   then Chapter Four (an original arcade). The camera settings the earlier Chapter Two prompt
+   asked for (separate sensitivities, inverts, chase assist, shake, FOV) are already in the
+   settings menu (PR #4).
 
 ---
 
