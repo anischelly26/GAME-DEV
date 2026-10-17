@@ -25,7 +25,7 @@ type Sentry = { state: string; suspicion: number; angle: number; catches: number
 const sentry = (page: Page) =>
   page.evaluate(() => {
     const s = (window as any).__GAME.game.level.engine.sentry;
-    return { state: s.state, suspicion: s.suspicion, angle: s.angle, catches: s.catches, stuns: s.stuns, enabled: s.enabled, visible: s.group.visible, pos: s.position().toArray() } as Sentry;
+    return { state: s.state, suspicion: s.suspicion, angle: s.s / s.track.radius, catches: s.catches, stuns: s.stuns, enabled: s.enabled, visible: s.group.visible, pos: s.position().toArray() } as Sentry;
   });
 
 /** At the engine gantry with the collar braked and held at boarding height. */
@@ -46,12 +46,11 @@ async function stage(page: Page, angleFromGap: number, dir: number, ahead: numbe
       const G = (window as any).__GAME;
       const e = G.game.level.engine;
       const s = e.sentry;
-      s.reset(e.sentryGap + a);
+      const ring = e.sentryRing;
+      s.reset(ring.at(e.sentryGap + a), d);
       s.graceT = 0;
-      s.dir = d;
-      s.place();
-      const r = s.ring.radius;
-      const at = s.angle + (d * ahead) / r;
+      const r = ring.radius;
+      const at = (s.s + d * ahead) / r;
       G.setPlayer(Math.sin(at) * r, e.collar.deckY + lift, Math.cos(at) * r, 0);
     },
     [angleFromGap, dir, ahead, lift],
@@ -127,13 +126,11 @@ test('the engine column blocks its sight; out of its cone it sees nothing', asyn
     const g = G.game;
     const e = g.level.engine;
     const s = e.sentry;
-    s.reset(e.sentryGap + 0.8);
-    s.dir = 1;
-    s.place();
-    const R = s.ring.radius;
+    s.reset(e.sentryRing.at(e.sentryGap + 0.8), 1);
+    const R = e.sentryRing.radius;
     const deck = e.collar.deckY;
     const chestAt = (dA: number) => {
-      const a = s.angle + dA;
+      const a = s.s / R + dA;
       return new (s.position().constructor)(Math.sin(a) * R, deck + 1.0, Math.cos(a) * R);
     };
     /** Turn its head to face `chest` (if it can) and ask whether it sees it. */
@@ -184,8 +181,8 @@ test('a ground pound beside it knocks it out; it sees nothing until it comes rou
   await page.evaluate(() => {
     const G = (window as any).__GAME;
     const s = G.game.level.engine.sentry;
-    const r = s.ring.radius;
-    const at = s.angle + (s.dir * 1.6) / r;
+    const r = s.track.radius;
+    const at = (s.s + s.dir * 1.6) / r;
     G.setPlayer(Math.sin(at) * r, G.game.level.engine.collar.deckY + 0.05, Math.cos(at) * r, 0);
   });
   await step(page, 60 * 3);
@@ -235,14 +232,12 @@ test('sneaking aboard behind it: brake, board as it passes, ride up unseen', asy
     const G = (window as any).__GAME;
     const e = G.game.level.engine;
     const s = e.sentry;
-    s.reset(e.sentryGap);
-    s.graceT = 0;
     // Away from the deck lever, which sits just round from the gap.
     const lever = e.deckLeverAnchor;
     const leverAngle = Math.atan2(lever.x, lever.z);
-    s.dir = Math.sin(leverAngle - e.sentryGap) > 0 ? -1 : 1;
-    s.angle = e.sentryGap + s.dir * 0.35;
-    s.place();
+    const dir = Math.sin(leverAngle - e.sentryGap) > 0 ? -1 : 1;
+    s.reset(e.sentryRing.at(e.sentryGap + dir * 0.35), dir);
+    s.graceT = 0;
   });
   await step(page, 30);
   await page.evaluate(() => {

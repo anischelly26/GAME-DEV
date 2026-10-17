@@ -7,8 +7,34 @@ import { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
 import { findLedge, findVault, TRAVERSAL, type Ledge, type TraversalSurfaces, type Vault } from './Traversal';
 import type { GrindRail } from './GrindRail';
 
-/** Traversal state: normal movement, hanging from a ledge, pulling up, vaulting, or grinding a pipe. */
-export type MoveMode = 'move' | 'hang' | 'climb' | 'vault' | 'grind';
+/**
+ * Traversal state: normal movement, hanging from a ledge, pulling up, vaulting, grinding a pipe, or
+ * riding something that carries her (a swing, a slide).
+ */
+export type MoveMode = 'move' | 'hang' | 'climb' | 'vault' | 'grind' | 'ride';
+
+/**
+ * Something Mara rides: it places her feet each fixed step and decides when she lets go, and how
+ * fast she leaves. The level owns the rules (a swing's pendulum, a slide's chute).
+ */
+export interface Ride {
+  /** Avatar pose while riding. */
+  readonly pose: 'swing' | 'slide' | 'ladder';
+  /** Lean for the avatar (radians, + forward), about the seat. */
+  readonly tilt?: number;
+  step(dt: number, input: InputFrame, cameraYaw: number): RideStep;
+  /** She was taken off (respawn, teleport, restart). */
+  cancel?(): void;
+}
+
+export interface RideStep {
+  feet: THREE.Vector3;
+  facing: number;
+  /** Let go with this velocity (a leap off a swing, the end of a slide). */
+  release?: THREE.Vector3;
+  /** The release was a jump (plays the jump). */
+  jumped?: boolean;
+}
 
 export { MOVEMENT, PLAYER_CENTER_OFFSET } from './movement';
 
@@ -103,6 +129,8 @@ export class PlayerController {
   private carryT = 0;
   /** Pipes ridden so far (tests, the avatar). */
   grinds = 0;
+  /** What she is riding (mode 'ride'). */
+  ride: Ride | null = null;
 
   constructor(
     private readonly physics: Physics,
@@ -158,6 +186,8 @@ export class PlayerController {
   teleport(feet: THREE.Vector3, facing: number): void {
     // Taken off a pipe mid-grind (respawn, restart, a dev teleport): end it like any other exit.
     if (this.mode === 'grind') this.events.emit('grind', { on: false, x: this.feet.x, y: this.feet.y, z: this.feet.z });
+    if (this.mode === 'ride') this.ride?.cancel?.();
+    this.ride = null;
     this.mode = 'move';
     this.ledge = null;
     this.vault = null;
@@ -573,6 +603,21 @@ export class PlayerController {
     this.events.emit('grind', { on: true, x: f.x, y: f.y, z: f.z });
   }
 
+  /** Get on a swing or a slide: it carries her until it lets her go. */
+  startRide(ride: Ride): void {
+    if (this.mode === 'grind') this.events.emit('grind', { on: false, x: this.feet.x, y: this.feet.y, z: this.feet.z });
+    this.resetMoves();
+    this.mode = 'ride';
+    this.modeT = 0;
+    this.ride = ride;
+    this.rail = null;
+    this.ledge = null;
+    this.vault = null;
+    this.velocity.set(0, 0, 0);
+    this.grounded = false;
+    this.jumping = false;
+  }
+
   /** Off the end of the pipe, or a jump off it: momentum carries her on. */
   private leaveRail(t: THREE.Vector3, jumped: boolean): void {
     const rail = this.rail!;
@@ -603,6 +648,26 @@ export class PlayerController {
 
   /** Scripted traversal moves. Endpoints were validated as free when the move started. */
   private updateTraversal(dt: number, input: InputFrame, cameraYaw: number): void {
+    if (this.mode === 'ride' && this.ride) {
+      this.modeT += dt;
+      const r = this.ride.step(dt, this.isLocked ? { ...input, jumpPressed: false, moveX: 0, moveY: 0 } : input, cameraYaw);
+      this.velocity.subVectors(r.feet, this.feet).divideScalar(dt);
+      this.facing = r.facing;
+      this.setFeet(r.feet);
+      if (r.release) {
+        this.mode = 'move';
+        this.ride = null;
+        this.velocity.copy(r.release);
+        this.carryT = MOVEMENT.grindCarry;
+        this.jumping = !!r.jumped;
+        this.timeSinceGrounded = MOVEMENT.coyoteTime + 1;
+        this.lastJumpTime = this.time;
+        this.airJumps = 1;
+        this.airDashes = 1;
+        if (r.jumped) this.events.emit('jump', { speed: Math.hypot(r.release.x, r.release.z) });
+      }
+      return;
+    }
     if (this.mode === 'grind' && this.rail) {
       const rail = this.rail;
       const t = rail.tangentAt(this.railS).multiplyScalar(this.railDir);

@@ -36,6 +36,8 @@ export interface LevelContext {
   camera: ThirdPersonCamera;
   hud: HUD;
   moonDir: THREE.Vector3;
+  /** The key light (the moon, or the sun at dawn): outdoor levels move its shadows with Mara. */
+  keyLight: THREE.DirectionalLight;
   /** Register climbable ledges and vaultable obstacles here. */
   traversal: TraversalSurfaces;
   /** Pooled puffs and rings (dust, splinters, chalk). */

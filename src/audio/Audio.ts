@@ -34,6 +34,7 @@ const SAMPLED: Record<string, Layer[]> = {
   uiSelect: [['ui.select', 0.35, 1, 1]],
   doorCreak: [['creak', 0.55, 0.62, 0.68]],
   watchCatch: [['latch', 0.9, 0.8, 0.9], ['metal.heavy', 0.6, 0.7, 0.8]],
+  swingCreak: [['creak', 0.5, 1.25, 1.45]],
   boardsBreak: [['wood.medium', 0.9, 0.7, 0.8], ['land.heavy', 0.45, 1.15, 1.25], ['wood.medium', 0.6, 1.1, 1.2]],
 };
 /** These keep their synthesised layer too (steam, hiss and machinery read better with it). */
@@ -577,6 +578,14 @@ export class AudioSystem {
         this.tone('square', 660, 990, 0.16, 0.05, o(), 0.004);
         this.tone('square', 880, 1320, 0.18, 0.05, o(), 0.004, 0.2);
         this.burst('bandpass', 3200, 1.2, 0.7, 0.04, o(), 0.02, 0.05);
+        break;
+      case 'watchHear':
+        // It heard something: one questioning pip, rising.
+        this.tone('square', 520, 760, 0.22, 0.035, o(), 0.004);
+        break;
+      case 'slide':
+        // Down the chute: a rising rush of air.
+        this.burst('bandpass', 700, 0.8, 1.1, 0.07, o(), 0.05, 0, 1600);
         break;
       case 'watchStun':
         // Knocked out: the boiler's whine sags and the valves dump steam.

@@ -17,6 +17,12 @@ export const SURFACES = {
   grate: 'metal_grate_rusty',
   iron: 'metal_plate',
   wood: 'old_planks_02',
+  // Chapter Two, the Warders' Green: the green, the lane, the shingle, roofs and garden walls.
+  grass: 'leafy_grass',
+  gravel: 'gravel_road',
+  shingle: 'pebbles',
+  slate: 'roof_slates_02',
+  mossyStone: 'mossy_stone_wall',
 };
 
 const api = async (path) => {

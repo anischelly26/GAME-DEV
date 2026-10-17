@@ -19,8 +19,12 @@ export interface AvatarState {
   /** World point Mara glances at (nearby interactable), or null. */
   lookAt: THREE.Vector3 | null;
   /** Traversal mode from the controller, and its progress (seconds for hang, 0..1 otherwise). */
-  mode?: 'move' | 'hang' | 'climb' | 'vault' | 'grind';
+  mode?: 'move' | 'hang' | 'climb' | 'vault' | 'grind' | 'ride';
   modeT?: number;
+  /** While riding: sitting on a swing (gripping its chains), going down a slide, up a ladder. */
+  ridePose?: 'swing' | 'slide' | 'ladder';
+  /** Lean while riding (radians, + forward), about the seat. */
+  rideTilt?: number;
   /** Increments each time the controller applies a knockback. */
   knockbacks?: number;
   /** Movement 2.0 state from the controller (steam kicker, dash, sprint, ground pound). */
@@ -85,6 +89,7 @@ export class PlayerAvatar {
   private fidgetT = 0;
   private lastKnockbacks = 0;
   private lastMode: AvatarState['mode'] = 'move';
+  private rideTilt = 0;
   private lastReach = 0;
   private lastFacing = 0;
   private turnRate = 0;
@@ -440,7 +445,9 @@ export class PlayerAvatar {
       else if (mode === 'climb') this.play('climb', this.clipDuration('climb') / TRAVERSAL.pullUpTime, 0.02);
       else if (mode === 'vault') this.play('vault', this.clipDuration('vault') / (TRAVERSAL.vaultTime * 1.6), 0.1);
       else if (mode === 'grind') this.play('grindPose', 0, 0.4);
-      else if (this.oneShot && /climb|vault|grindPose/.test(this.oneShot.name)) this.oneShot.target = 0;
+      else if (mode === 'ride' && s.ridePose === 'ladder') this.cinematic('climb', 0.8, 0, true, 10);
+      else if (mode === 'ride') this.cinematic('sitIdle', 1, 0, true, 8);
+      else if (this.oneShot && /climb|vault|grindPose|sitIdle/.test(this.oneShot.name)) this.oneShot.target = 0;
       this.lastMode = mode;
     }
     if ((s.knockbacks ?? 0) > this.lastKnockbacks) {
@@ -576,6 +583,14 @@ export class PlayerAvatar {
     const liftTarget = mode === 'hang' ? 1 : mode === 'climb' ? 1 - (s.modeT ?? 0) : 0;
     this.hangLift = damp(this.hangLift, liftTarget, 14, dt);
     this.visual.position.set(0, P - P * Math.cos(a) + this.hangLift * this.fit.hangLift, -P * Math.sin(a));
+    // Riding a swing or a slide: lean with the chains or the chute, about the seat.
+    this.rideTilt = damp(this.rideTilt, mode === 'ride' ? (s.rideTilt ?? 0) : 0, 14, dt);
+    if (Math.abs(this.rideTilt) > 1e-4) {
+      const Q = 0.33;
+      this.visual.rotation.x += this.rideTilt;
+      this.visual.position.y += Q - Q * Math.cos(this.rideTilt);
+      this.visual.position.z += -Q * Math.sin(this.rideTilt);
+    }
     this.visual.rotation.z = damp(this.visual.rotation.z, clamp(-this.turnRate * 0.02, -0.12, 0.12) * clamp(v / 4, 0, 1), 8, dt);
 
     // --- head: glance at points of interest, otherwise a slow idle look-around

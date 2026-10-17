@@ -29,6 +29,8 @@ export class Sky {
         moonDir: { value: moonDir.clone().normalize() },
         moonColor: { value: Palette.moon },
         time: { value: 0 },
+        stars: { value: 1 },
+        disc: { value: 1 },
       },
       vertexShader: /* glsl */ `
         varying vec3 vDir;
@@ -40,7 +42,7 @@ export class Sky {
       `,
       fragmentShader: /* glsl */ `
         uniform vec3 top, horizon, moonDir, moonColor;
-        uniform float time;
+        uniform float time, stars, disc;
         varying vec3 vDir;
         ${NOISE_GLSL}
         void main() {
@@ -52,15 +54,16 @@ export class Sky {
           vec3 cell = floor(d * 260.0);
           float s = fract(sin(dot(cell, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
           float twinkle = 0.6 + 0.4 * sin(time * 2.0 + s * 60.0);
-          col += vec3(0.8, 0.88, 1.0) * step(0.9965, s) * twinkle * smoothstep(0.05, 0.4, h) * 1.4;
+          col += vec3(0.8, 0.88, 1.0) * step(0.9965, s) * twinkle * smoothstep(0.05, 0.4, h) * 1.4 * stars;
           // Clouds lit by the moon.
           vec2 cp = d.xz / (d.y + 0.25) * 1.6 + vec2(time * 0.006, time * 0.002);
           float c = smoothstep(0.48, 0.85, fbm2(cp));
           float md = max(dot(d, moonDir), 0.0);
           col = mix(col, horizon * 1.25 + moonColor * 0.12 * pow(md, 6.0), c * 0.65 * smoothstep(0.0, 0.2, h));
           // Moon disc and halo.
-          float disc = smoothstep(0.99955, 0.9997, md);
-          col += moonColor * (disc * 4.0 + pow(md, 400.0) * 0.6 + pow(md, 18.0) * 0.12);
+          float r0 = 1.0 - 0.00045 * disc * disc;
+          float d0 = smoothstep(r0, r0 + 0.00015 * disc, md);
+          col += moonColor * (d0 * 4.0 + pow(md, 400.0 / disc) * 0.6 * disc + pow(md, 18.0 / disc) * 0.12 * disc);
           gl_FragColor = vec4(col, 1.0);
         }
       `,
@@ -73,6 +76,12 @@ export class Sky {
   update(time: number, cameraPos: THREE.Vector3): void {
     this.material.uniforms.time.value = time;
     this.mesh.position.copy(cameraPos);
+  }
+
+  /** Star brightness (0 hides them) and the moon or sun disc size (1: the moon). */
+  setLook(stars: number, disc: number): void {
+    this.material.uniforms.stars.value = stars;
+    this.material.uniforms.disc.value = disc;
   }
 }
 
@@ -91,6 +100,8 @@ export interface WaterOptions {
   /** Foam ring at the outer radius (for the walls of the Well). */
   foamRadius?: number;
   horizonFade?: number;
+  /** How much of the sky above (rather than the horizon) the water reflects (0: horizon only). */
+  skyMix?: number;
 }
 
 export class Water {
@@ -112,6 +123,8 @@ export class Water {
         scale: { value: o.scale },
         foamRadius: { value: o.foamRadius ?? 1e6 },
         horizonFade: { value: o.horizonFade ?? 0 },
+        skyTop: { value: Palette.skyTop },
+        skyMix: { value: o.skyMix ?? 0 },
       },
       vertexShader: /* glsl */ `
         varying vec3 vWorld;
@@ -122,8 +135,8 @@ export class Water {
         }
       `,
       fragmentShader: /* glsl */ `
-        uniform float time, fogDensity, scale, foamRadius, horizonFade;
-        uniform vec3 deep, sky, moonDir, moonColor, fogColor;
+        uniform float time, fogDensity, scale, foamRadius, horizonFade, skyMix;
+        uniform vec3 deep, sky, moonDir, moonColor, fogColor, skyTop;
         varying vec3 vWorld;
         ${NOISE_GLSL}
         float waves(vec2 p) {
@@ -145,6 +158,7 @@ export class Water {
           float fres = 0.04 + 0.96 * pow(1.0 - max(dot(n, V), 0.0), 4.0);
           vec3 R = reflect(-V, n);
           vec3 refl = mix(sky * 0.7, sky * 1.4, clamp(R.y, 0.0, 1.0));
+          refl = mix(refl, mix(sky, skyTop, 0.65), skyMix);
           // Moon glint: kept near the bloom threshold so it sparkles without washing over the deck.
           float spec = pow(max(dot(R, moonDir), 0.0), 120.0) * 0.9 + pow(max(dot(R, moonDir), 0.0), 900.0) * 1.8;
           vec3 col = mix(deep, refl, fres) + moonColor * spec;

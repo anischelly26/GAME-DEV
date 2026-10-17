@@ -9,7 +9,7 @@ import { FlowStrip } from '../../world/props/FlowStrip';
 import { EngineCollar, PistonPlatform } from '../../world/props/EngineRides';
 import { braceGantry, buildBarrierBeam, buildSparesRack, catchPlateTexture, dialTexture, feedPlateTexture, hazardStripeTexture } from '../../world/props/Maintenance';
 import { SplitFeedLogic } from '../../gameplay/puzzles/SplitFeedLogic';
-import { WatchSentry } from '../../gameplay/WatchSentry';
+import { RingTrack, WatchSentry } from '../../gameplay/WatchSentry';
 import { mulberry32 } from '../../core/math';
 import { HALL, sideAngle, sideFraction, halfSide } from './layout';
 
@@ -86,6 +86,8 @@ export class EngineRoute {
   readonly collar: EngineCollar;
   /** The Watch automaton that patrols the collar deck. */
   readonly sentry: WatchSentry;
+  /** The collar deck's ring, and the boarding gap's angle on it. */
+  readonly sentryRing: RingTrack;
   private sentryGap = 0;
   private lastWatchLine = -99;
   private readonly chest = new THREE.Vector3();
@@ -371,9 +373,10 @@ export class EngineRoute {
     this.deckLever.group.rotation.y = thE;
     this.collar.group.add(this.deckLever.group);
     // The Watch: a sentry rolling round the collar deck, starting opposite the boarding gap.
-    this.sentry = new WatchSentry(physics, m, { parent: this.collar.group, deckY: () => this.collar.deckY, radius: rCollar - collarWidth / 2 + 0.02 }, thE + Math.PI);
-    this.sentry.enabled = ctx.watch;
+    this.sentryRing = new RingTrack(this.collar.group, rCollar - collarWidth / 2 + 0.02, () => this.collar.deckY);
     this.sentryGap = thE;
+    this.sentry = new WatchSentry(physics, m, this.sentryRing, this.sentryHome());
+    this.sentry.enabled = ctx.watch;
     ctx.events.on('groundPound', (e) => {
       if (this.sentry.enabled && this.sentry.pound(e)) {
         const p = this.sentry.position();
@@ -682,6 +685,11 @@ export class EngineRoute {
     return this.feed.curtainOn;
   }
 
+  /** Where the sentry starts its round: opposite the boarding gap. */
+  private sentryHome(): number {
+    return this.sentryRing.at(this.sentryGap + Math.PI);
+  }
+
   /** Whether Mara is where the collar's sentry can act: on its deck, or at the boarding gap. */
   private inWatchZone(): boolean {
     const f = this.ctx.player.feet;
@@ -705,12 +713,12 @@ export class EngineRoute {
     dialogue.interrupt();
     dialogue.say('Watch', 'Inmate returned to the gantry.', 2.6, { story: true, maxWait: 2 });
     dialogue.sayOnce('watch-caught', 'Tip', 'Keep the column between you and its lamp. A ground pound beside it knocks it out for a while.', 5, { maxWait: 4 });
-    this.sentry.reset(this.sentryGap + Math.PI);
+    this.sentry.reset(this.sentryHome());
   }
 
   /** After a fall past the curtain, the solved ram is waiting again (a missed jump never costs the puzzle). */
   onRespawn(checkpointId: string): void {
-    this.sentry.reset(this.sentryGap + Math.PI);
+    this.sentry.reset(this.sentryHome());
     if ((checkpointId === 'breach' || checkpointId === 'exit') && this.ctx.progression.has('ram.released') && !this.feed.primed) {
       this.feed.reset();
       this.feed.toggleCatch();
@@ -981,7 +989,7 @@ export class EngineRoute {
     this.lastEmptyRises = 0;
     this.catchLever.set(false);
     this.collar.setMode('cycling', 0);
-    this.sentry.reset(this.sentryGap + Math.PI);
+    this.sentry.reset(this.sentryHome());
     for (const l of this.lights) l.extinguish();
     if (this.routeOpen) {
       this.routeOpen = false;
