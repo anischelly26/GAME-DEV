@@ -1,0 +1,119 @@
+[  0.00] Stormworks self-test: start
+[  0.00] -- start
+[  2.29] PASS  the player character spawned
+[  2.29] PASS  the tether component is there, not yet picked up
+[  2.29] PASS  starts at checkpoint 0
+[  2.29] PASS  an objective is shown: "Find a way out of the workshop"
+[  2.29] screenshot 01_workshop_window
+[  2.29] -- no tether yet
+[  2.70] PASS  before the pickup, Tether does nothing
+[  2.70] -- pick up the tether
+[  3.31] -- picked up
+[  3.75] PASS  walking to the workbench picks up the tether
+[  3.75] screenshot 02_tether_picked_up
+[  3.75] -- to the door
+[  4.98] -- aim at the door crate
+[  5.41] PASS  the door crate's ring is targeted
+[  5.41] screenshot 03_target_door_crate
+[  5.41] -- pull the door crate
+[  5.92] screenshot 04_pulling_door_crate
+[  6.18] screenshot 04_pulling_door_crate
+[  6.41] PASS  one tug runs the crate off the doorway
+[  6.41] -- into the corridor
+[  7.52] -- repeat: pull it back and again
+[  9.87] PASS  repeating the interaction: back over the door and off again, three arrivals, ends open
+[  9.87] -- leave
+[ 10.72] -- return
+[ 11.71] -- still targetable
+[ 12.06] PASS  after walking away and back, the ring is targeted again
+[ 12.06] -- corridor 2
+[ 12.57] -- gallery
+[ 12.89] -- gallery north
+[ 14.82] -- gallery checkpoint
+[ 14.85] PASS  the gallery checkpoint is reached
+[ 14.85] -- chasm edge
+[ 15.82] -- the anchor is too far
+[ 16.35] PASS  from the edge, the far anchor shows as too far
+[ 16.35] PASS  firing at it is refused (too far), nothing flies
+[ 16.35] screenshot 05_anchor_too_far
+[ 16.35] -- aim at the cargo crate
+[ 16.79] PASS  the cargo crate's ring is targeted
+[ 16.79] -- pull the cargo crate
+[ 18.00] screenshot 06_pulling_cargo_crate
+[ 18.27] screenshot 06_pulling_cargo_crate
+[ 19.72] PASS  the cargo crate runs along its girder to the near edge
+[ 19.72] -- onto the crate
+[ 20.27] -- on the crate
+[ 20.82] PASS  she is standing on the crate, not in the sea
+[ 20.82] PASS  from the crate, the far anchor is in reach
+[ 20.82] -- tether across
+[ 21.30] screenshot 07_tether_across
+[ 21.30] a 0.3 s stall in mid-carry
+[ 22.09] PASS  the tether carries her across the gap, despite the stall
+[ 22.09] PASS  she lands on the far gallery
+[ 22.09] -- far checkpoint
+[ 22.42] PASS  the far gallery checkpoint is reached
+[ 22.42] -- fall off the far edge
+[ 24.30] -- recovered
+[ 25.13] PASS  falling into the sea counts one fall
+[ 25.13] PASS  she is back at the far gallery checkpoint
+[ 25.13] PASS  the crate stays where she pulled it (nothing solved is undone)
+[ 25.13] screenshot 08_after_fall_recovery
+[ 25.13] -- to the coupling
+[ 26.14] -- engage the coupling
+[ 26.57] PASS  the storm coupling's ring is targeted
+[ 26.57] -- the storm engine
+[ 28.18] screenshot 09_storm_engine_live
+[ 28.47] screenshot 09_storm_engine_live
+[ 30.24] PASS  engaging the coupling starts the storm engine
+[ 30.24] PASS  the sluice gate opens
+[ 30.24] PASS  the old catwalk is armed
+[ 30.24] -- to the gate
+[ 30.85] -- climax checkpoint
+[ 30.87] PASS  the climax checkpoint is reached
+[ 30.87] -- hesitate on the catwalk
+[ 34.30] -- walkway reset
+[ 34.83] PASS  falling with the catwalk resets it: every segment back, not running
+[ 34.83] PASS  back at the climax checkpoint
+[ 34.83] -- run 1
+[ 35.56] -- run 2
+[ 36.07] screenshot 10_climax_run
+[ 36.34] screenshot 10_climax_run
+[ 37.26] -- tether A2
+[ 37.45] -- across G1
+[ 37.95] screenshot 11_climax_tether
+[ 38.21] screenshot 11_climax_tether
+[ 38.46] PASS  climax: carried over the first break
+[ 38.46] -- run 3
+[ 38.92] -- jump G2
+[ 40.07] jump at x 6230, speed 600, mode 1
+[ 40.29]   x 6360 z 178 vz 287 mode 3
+[ 40.50]   x 6486 z 216 vz 82 mode 3
+[ 40.71]   x 6611 z 212 vz -122 mode 3
+[ 40.92]   x 6735 z 164 vz -330 mode 3
+[ 41.10] PASS  climax: jumped the second break (landed at x 6801)
+[ 41.10] -- run 5
+[ 42.08] -- tether A3
+[ 42.28] -- onto the tower
+[ 43.62] PASS  climax: carried up onto the tower roof
+[ 43.62] climax run took 8.1 s
+[ 43.62] -- final checkpoint
+[ 44.65] PASS  the tower roof checkpoint is reached
+[ 44.65] -- the view
+[ 45.27] screenshot 12_roof_view
+[ 45.27] -- to the note
+[ 46.25] -- read the note
+[ 46.68] PASS  the note is in reach
+[ 46.68] -- note open
+[ 47.12] PASS  the note opens and the sequence is complete
+[ 47.12] screenshot 13_ivos_note
+[ 47.12] -- close the note
+[ 48.15] PASS  E closes the note
+[ 48.15] screenshot 14_complete
+[ 48.15] -- restart from checkpoint
+[ 48.15] PASS  R is bound to restart from the checkpoint
+[ 48.98] PASS  pressing restart puts her at the last checkpoint (respawns +1, 8 cm from its spawn point)
+[ 48.98] -- not stuck
+[ 50.01] PASS  at the end she can still walk about (not stuck)
+[ 50.01] frames: 2040, mean 24.5 ms (41 fps), worst 400.0 ms, 62 over 33 ms
+[ 50.01] SELFTEST RESULT: 40 passed, 0 failed, 50.0 s

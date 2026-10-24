@@ -45,6 +45,14 @@ Knoll Rock:
 gaps, ledges, vaults, 3/6/10 m drops off a ramp tower, footstep pads for each material, a low
 beam, a pound plate and a pool.
 
+**In Unreal Engine 5.8: *The Stormworks Escape*** (a separate Unreal project; code in
+`unreal/Source`, build scripts in `tools/unreal`): a short sequence built around Ivo's
+maintenance tether. You pull machines along their tracks, or are carried across gaps to brass
+anchor rings. Six beats run from Ivo's workshop to a collapsing catwalk in a storm and the signal
+tower's roof. It is played with the Third Person template's character (Mara is imported but not
+yet wired in), and so far only by a scripted bot. See
+[docs/UNREAL_STORMWORKS.md](docs/UNREAL_STORMWORKS.md).
+
 First-play length has not been measured with a player yet. The autopilot, which never hesitates,
 plays the route in about a minute; the opening adds about 40 seconds unless it is skipped.
 
@@ -56,6 +64,8 @@ plays the route in about a minute; the opening adds about 40 seconds unless it i
 - What works, what doesn't, what's temporary: [docs/STATUS.md](docs/STATUS.md)
 - Test route and acceptance checks: [docs/TESTING.md](docs/TESTING.md)
 - Asset sources and licences: [docs/ASSETS.md](docs/ASSETS.md)
+- Unreal Engine: [the chapters as art](docs/UNREAL_EXPORT.md),
+  [The Stormworks Escape](docs/UNREAL_STORMWORKS.md)
 - Independent reviews (Codex): [docs/reviews/](docs/reviews/)
 
 ## Requirements
@@ -167,6 +177,10 @@ bundled Chromium. Review captures (with `npm run dev` running in another termina
 - `node scripts/export-unreal.mjs`: every chapter's world and Mara (with her animations) as
   `.glb` files for Unreal Engine 5 or other 3D tools; art only, no gameplay
   ([docs/UNREAL_EXPORT.md](docs/UNREAL_EXPORT.md)).
+- `tools/unreal/`: the Unreal side. `import_it_takes_one.py` imports those files;
+  `make_stormworks_sounds.py` and `build_stormworks.py` build The Stormworks Escape;
+  `run_selftest.ps1` plays it with the scripted bot; `make_clip.py` turns a `-Clip` run into a
+  GIF ([docs/UNREAL_STORMWORKS.md](docs/UNREAL_STORMWORKS.md)).
 
 Performance tools (after `npm run build`; headed Edge, real GPU, normal real-time loop):
 
