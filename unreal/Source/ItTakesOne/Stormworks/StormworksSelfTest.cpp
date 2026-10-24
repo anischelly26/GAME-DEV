@@ -16,7 +16,14 @@
 #include "Misc/CommandLine.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Stormworks/CollapsingWalkway.h"
+#include "Stormworks/MaraAnimInstance.h"
+#include "Stormworks/LaundryLine.h"
+#include "Stormworks/MaraFootsteps.h"
+#include "Stormworks/WindChimes.h"
+#include "Stormworks/WorkshopToy.h"
 #include "Stormworks/StormCheckpoint.h"
 #include "Stormworks/StormDirector.h"
 #include "Stormworks/StormworksGameMode.h"
@@ -161,6 +168,26 @@ void AStormworksSelfTest::Build()
 	auto Wait = [](float Seconds) { return [Seconds](float T) { return T >= Seconds; }; };
 
 	// --- Beat 1: the start, the view.
+	// --- Mara: her meshes, her animation, a look at her from the front.
+	Steps.Add({TEXT("mara"), [this]() {}, [this](float T) {
+		if (T < 0.1f)
+		{
+			// Turn the camera round to her front, a little above her eyes.
+			if (APlayerController* P = PC())
+			{
+				P->SetControlRotation(FRotator(-12.f, Char()->GetActorRotation().Yaw + 160.f, 0.f));
+			}
+			return false;
+		}
+		if (T < 1.0f) return false;
+		TArray<USkeletalMeshComponent*> Meshes;
+		Char()->GetComponents<USkeletalMeshComponent>(Meshes);
+		const UMaraAnimInstance* Anim = Cast<UMaraAnimInstance>(Char()->GetMesh()->GetAnimInstance());
+		Check(Anim != nullptr && Anim->Clips.Num() >= 20 && Meshes.Num() > 1, FString::Printf(TEXT("the hero is Mara: her animation (%d clips) on %d mesh parts"), Anim ? Anim->Clips.Num() : 0, Meshes.Num()));
+		Check(FMath::IsNearlyEqual(Char()->GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight(), 66.f, 1.f), TEXT("her capsule fits her 1.3 m"));
+		Shot(TEXT("00_mara"));
+		return true;
+	}, 6.f});
 	Steps.Add({TEXT("start"), [this]() {}, [this, GM, Tether](float T) {
 		if (T < 2.5f)
 		{
@@ -185,6 +212,34 @@ void AStormworksSelfTest::Build()
 	}});
 
 	// --- Beat 2: learn safely.
+	// --- Ivo's toy: E winds it; a second press while it runs does nothing; winding it again sends
+	// it back where it started.
+	auto Toy = [this]() { TActorIterator<AWorkshopToy> It(GetWorld()); return It ? *It : nullptr; };
+	Steps.Add({TEXT("to the toy"), []() {}, Walk(TEXT("WP_Toy"), 30.f), 10.f});
+	Steps.Add({TEXT("wind the toy"), [this]() { Stop(); bFlag = false; }, [this, GM, Toy](float T) {
+		AimAt(Toy()->GetActorLocation());
+		if (T < 0.4f) return false;
+		if (!bFlag)
+		{
+			bFlag = true;
+			Check(GM()->ToyInReach(Char()) == Toy(), TEXT("in front of the bench, the toy is in reach ([E] Wind up)"));
+			Count0 = Toy()->Plays;
+			GM()->TryInteract(Char());
+			GM()->TryInteract(Char());
+			Check(Toy()->IsPlaying(), TEXT("E winds the toy"));
+			return false;
+		}
+		if (FMath::IsNearlyEqual(T, 1.4f, 0.03f)) Shot(TEXT("01b_toy"));
+		if (Toy()->IsPlaying()) return false;
+		Check(Toy()->Plays == Count0 + 1 && FMath::IsNearlyEqual(Toy()->GetOffset(), 28.f, 1.f), FString::Printf(TEXT("one run (a second press while it ran did nothing), %.0f cm along the bench"), Toy()->GetOffset()));
+		return true;
+	}, 8.f});
+	Steps.Add({TEXT("wind it back"), [this, GM]() { GM()->TryInteract(Char()); }, [this, Toy](float T) {
+		AimAt(Toy()->GetActorLocation());
+		if (T < 0.2f || Toy()->IsPlaying()) return false;
+		Check(Toy()->Plays == Count0 + 2 && FMath::Abs(Toy()->GetOffset()) < 1.f, TEXT("wound again, it runs back to where it started"));
+		return true;
+	}, 8.f});
 	Steps.Add({TEXT("pick up the tether"), []() {}, Walk(TEXT("WP_Pickup"), 40.f), 15.f});
 	Steps.Add({TEXT("picked up"), []() {}, [this, Tether, GM](float T) {
 		if (T < 0.4f) return false;
@@ -236,6 +291,16 @@ void AStormworksSelfTest::Build()
 	Steps.Add({TEXT("corridor 2"), []() {}, Walk(TEXT("WP_Corridor2")), 12.f});
 	Steps.Add({TEXT("gallery"), []() {}, Walk(TEXT("WP_Gallery")), 12.f});
 	Steps.Add({TEXT("gallery north"), []() {}, Walk(TEXT("WP_GalleryN")), 15.f});
+	// --- The washing along the gallery: swinging in the wind, flapping as she runs past.
+	auto Laundry = [this]() { TActorIterator<ALaundryLine> It(GetWorld()); return It ? *It : nullptr; };
+	Steps.Add({TEXT("laundry"), [this]() { Stop(); }, [this, Laundry](float T) {
+		AimAt(Laundry()->GetActorLocation() + FVector(700.f, 0.f, -60.f));
+		if (T < 0.6f) return false;
+		const float Swing = Laundry()->SwingNear(Char()->GetActorLocation());
+		Check(FMath::Abs(Swing) > 4.f && Laundry()->Brushes > 0, FString::Printf(TEXT("the washing swings in the wind (%.0f degrees) and flapped as she ran past (%d)"), Swing, Laundry()->Brushes));
+		Shot(TEXT("04b_laundry"));
+		return true;
+	}});
 	Steps.Add({TEXT("gallery checkpoint"), []() {}, [this, GM](float T) {
 		Check(GM()->Checkpoint && GM()->Checkpoint->Order >= 1, TEXT("the gallery checkpoint is reached"));
 		return true;
@@ -251,6 +316,8 @@ void AStormworksSelfTest::Build()
 		Tether()->TryFire();
 		Check(Tether()->TooFar == Count0 + 1 && Tether()->GetState() == ETetherState::Idle, TEXT("firing at it is refused (too far), nothing flies"));
 		Shot(TEXT("05_anchor_too_far"));
+		const AWindChimes* Chimes = [this]() { TActorIterator<AWindChimes> It(GetWorld()); return It ? *It : nullptr; }();
+		Check(Chimes && Chimes->Rings >= 1 && Chimes->Notes >= 5, FString::Printf(TEXT("walking up to the edge rings Ivo's chimes down the scale (%d rings, %d notes)"), Chimes ? Chimes->Rings : 0, Chimes ? Chimes->Notes : 0));
 		return true;
 	}});
 	Steps.Add({TEXT("aim at the cargo crate"), []() {}, [this, Tether](float T) {
@@ -422,9 +489,18 @@ void AStormworksSelfTest::Build()
 		Tether()->TryFire();
 		return true;
 	}, 3.f});
-	Steps.Add({TEXT("onto the tower"), []() {}, [this, Tether, GM](float T) {
+	Steps.Add({TEXT("onto the tower"), [this]() { bFlag = false; }, [this, Tether, GM](float T) {
+		if (!bFlag && T > 0.78f)
+		{
+			// A long hitch two thirds of the way through the 1 s arc: the next frame (game time is
+			// clamped to 0.4 s) carries the arc past its end. She must still land on the roof, not
+			// stop in mid-air over the gap. (It adds about 0.4 s to the climax time.)
+			bFlag = true;
+			FPlatformProcess::Sleep(0.5f);
+			Log(TEXT("a 0.5 s stall that ends the carry"));
+		}
 		if (T < 0.8f || !Char()->GetCharacterMovement()->IsMovingOnGround()) return false;
-		Check(Tether()->ReelArrivals == Count0 + 1 && Char()->GetActorLocation().Z > 350.f, TEXT("climax: carried up onto the tower roof"));
+		Check(Tether()->ReelArrivals == Count0 + 1 && Char()->GetActorLocation().Z > 350.f, TEXT("climax: carried up onto the tower roof, despite the stall"));
 		Log(FString::Printf(TEXT("climax run took %.1f s"), Total - Mark));
 		return true;
 	}, 6.f});
@@ -465,6 +541,22 @@ void AStormworksSelfTest::Build()
 		if (T < 1.0f) return false;
 		Check(GM()->OpenNote == nullptr, TEXT("E closes the note"));
 		Shot(TEXT("14_complete"));
+		return true;
+	}});
+
+	// --- Her feet: one sound per plant, by surface, and the landings.
+	Steps.Add({TEXT("footsteps"), []() {}, [this](float T) {
+		const UMaraFootsteps* F = Char()->FindComponentByClass<UMaraFootsteps>();
+		const UMaraAnimInstance* Anim = Cast<UMaraAnimInstance>(Char()->GetMesh()->GetAnimInstance());
+		if (!F || !Anim)
+		{
+			Check(false, TEXT("Mara's footsteps component is there"));
+			return true;
+		}
+		auto N = [F](const TCHAR* S) { const int32* V = F->StepsBySurface.Find(S); return V ? *V : 0; };
+		Check(F->Steps > 30 && F->Steps == Anim->FootDowns + F->Landings, FString::Printf(TEXT("a footstep for each foot plant: %d steps, %d plants, %d landings"), F->Steps, Anim->FootDowns, F->Landings));
+		Check(N(TEXT("stone")) > 0 && N(TEXT("metal")) > 0, FString::Printf(TEXT("footsteps follow the surface: stone %d, wood %d, metal %d"), N(TEXT("stone")), N(TEXT("wood")), N(TEXT("metal"))));
+		Check(F->Landings > 0, FString::Printf(TEXT("landings make a sound (%d)"), F->Landings));
 		return true;
 	}});
 
