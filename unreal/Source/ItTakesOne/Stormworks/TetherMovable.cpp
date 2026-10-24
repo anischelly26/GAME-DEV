@@ -1,5 +1,6 @@
 #include "Stormworks/TetherMovable.h"
 
+#include "Components/AudioComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "ItTakesOne.h"
 #include "Stormworks/StormworksAssets.h"
@@ -56,13 +57,22 @@ bool ATetherMovable::Tug()
 	To = Alpha > 0.5f ? 0.f : 1.f;
 	MoveT = 0.f;
 	MoveDuration = FMath::Max(0.6f, TrackEnd.Size() / FMath::Max(1.f, Speed));
-	Stormworks::Sound(this, *MoveSound.ToString(), Body->GetComponentLocation(), 0.9f, FMath::FRandRange(0.95f, 1.05f));
+	if (MoveAudio)
+	{
+		MoveAudio->Stop();
+	}
+	MoveAudio = Stormworks::SoundAttached(Body, *MoveSound.ToString(), 0.9f, FMath::FRandRange(0.95f, 1.05f));
 	UE_LOG(LogStormworks, Log, TEXT("%s: tugged, running %.0f -> %.0f over %.2f s"), *GetName(), From, To, MoveDuration);
 	return true;
 }
 
 void ATetherMovable::ResetToStart()
 {
+	if (MoveAudio)
+	{
+		MoveAudio->Stop();
+		MoveAudio = nullptr;
+	}
 	MoveT = -1.f;
 	Alpha = 0.f;
 	Apply();
@@ -90,7 +100,15 @@ void ATetherMovable::Tick(float DeltaSeconds)
 		Alpha = To;
 		Apply();
 		++Arrivals;
-		Stormworks::Sound(this, TEXT("S_TOS_Clunk"), Body->GetComponentLocation(), 1.f, FMath::FRandRange(0.9f, 1.05f));
+		if (MoveAudio)
+		{
+			MoveAudio->FadeOut(0.15f, 0.f);
+			MoveAudio = nullptr;
+		}
+		// The stop: a recorded heavy metal impact under the synthesised clunk.
+		LastClunk = Stormworks::Variant(5, LastClunk);
+		Stormworks::Sound(this, *FString::Printf(TEXT("SFX_MetalHeavy_%d"), LastClunk), Body->GetComponentLocation(), 0.8f, FMath::FRandRange(0.9f, 1.05f));
+		Stormworks::Sound(this, TEXT("S_TOS_Clunk"), Body->GetComponentLocation(), 0.6f, FMath::FRandRange(0.9f, 1.05f));
 		OnArrived.Broadcast(this);
 	}
 }

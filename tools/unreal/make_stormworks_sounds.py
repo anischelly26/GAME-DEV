@@ -201,6 +201,14 @@ def build(out_dir):
     n = secs(1.0)
     S["S_TOS_Splash"] = add(mul(lowpass(noise(n), ramp(n, 4000, 300)), env(n, 0.005, 0.9)), gain(mul(tone(n, ramp(n, 140, 60)), env(n, 0.002, 0.3)), 0.5))
 
+    # Wind chimes: five brass tubes tuned to a pentatonic scale (D E F# A B), each with a hanging
+    # tube's inharmonic partials (1, 2.756, 5.404) and a slow shimmer from a second, detuned voice.
+    n = secs(2.8)
+    for k, f in enumerate([1175.0, 1319.0, 1480.0, 1760.0, 1976.0]):
+        partials = [(1.0, 1.0, 2.6), (2.756, 0.45, 1.3), (5.404, 0.18, 0.6)]
+        voices = [gain(mul(tone(n, f * r * d), env(n, 0.002, t)), g * (0.6 if d != 1.0 else 1.0)) for r, g, t in partials for d in (1.0, 1.0025)]
+        S["S_TOS_Chime_%d" % k] = add(*voices)
+
     for name, x in S.items():
         looped = name in ("S_TOS_Wind", "S_TOS_Alarm")
         write(out_dir, name, normalise(x if looped else fade(x)))
