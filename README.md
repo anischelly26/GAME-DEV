@@ -164,6 +164,9 @@ bundled Chromium. Review captures (with `npm run dev` running in another termina
 - `node scripts/capture-video.mjs`: real-time movement clips.
 - `node scripts/normal-mode-run.mjs`: plays the whole route in normal mode.
 - `node scripts/capture-feel.mjs`: the game-feel poses in the lab (exact frames).
+- `node scripts/export-unreal.mjs`: every chapter's world and Mara (with her animations) as
+  `.glb` files for Unreal Engine 5 or other 3D tools; art only, no gameplay
+  ([docs/UNREAL_EXPORT.md](docs/UNREAL_EXPORT.md)).
 
 Performance tools (after `npm run build`; headed Edge, real GPU, normal real-time loop):
 
