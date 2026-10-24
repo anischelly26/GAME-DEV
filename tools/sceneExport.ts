@@ -80,8 +80,17 @@ async function toBase64(root: THREE.Object3D, options: Record<string, unknown>):
   return { base64: btoa(bin), bytes: bytes.length };
 }
 
-/** The chapter's static world as one glTF scene. `skip`: subtrees to leave out (Mara, her scarf). */
-export async function exportLevel(scene: THREE.Scene, name: string, skip: THREE.Object3D[] = []): Promise<ExportResult> {
+/** A named point to carry into the export (checkpoints, for placing a player start elsewhere). */
+export interface Marker {
+  name: string;
+  position: [number, number, number];
+}
+
+/**
+ * The chapter's static world as one glTF scene. `skip`: subtrees to leave out (Mara, her scarf).
+ * `markers` become 5 cm cubes with those names (importers drop empty nodes; a mesh survives).
+ */
+export async function exportLevel(scene: THREE.Scene, name: string, skip: THREE.Object3D[] = [], markers: Marker[] = []): Promise<ExportResult> {
   scene.updateMatrixWorld(true);
   const skipped = new Set<THREE.Object3D>();
   for (const s of skip) s.traverse((o) => skipped.add(o));
@@ -161,8 +170,17 @@ export async function exportLevel(scene: THREE.Scene, name: string, skip: THREE.
     meshes++;
   });
 
+  const markerGeo = new THREE.BoxGeometry(0.05, 0.05, 0.05);
+  const markerMat = new THREE.MeshBasicMaterial({ name: 'Marker', color: '#ff00ff' });
+  for (const mk of markers) {
+    const m = new THREE.Mesh(markerGeo, markerMat);
+    m.name = mk.name;
+    m.position.fromArray(mk.position);
+    root.add(m);
+  }
+
   const { base64, bytes } = await toBase64(root, {});
-  return { base64, stats: { name, bytes, meshes, mergedInstances: merged, lights, triangles: Math.round(tris), leftOut: left } };
+  return { base64, stats: { name, bytes, meshes, mergedInstances: merged, lights, triangles: Math.round(tris), markers: markers.length, leftOut: left } };
 }
 
 /** The toy hero as a skinned glTF with every clip (her face, goggles, canister and scarf wrap ride on bones). */

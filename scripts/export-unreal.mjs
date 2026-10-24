@@ -5,7 +5,7 @@
  * Gameplay (TypeScript) does not come along: only meshes, materials, textures and lights.
  *
  *   npm run dev            (in another terminal)
- *   node scripts/export-unreal.mjs [--url http://localhost:5173] [--channel msedge] [--out ../ItTakesOne-Unreal/Import]
+ *   node scripts/export-unreal.mjs [--url http://localhost:5173] [--channel msedge|chromium (default)] [--out ../ItTakesOne-Unreal/Import]
  *
  * The export runs in the game page (tools/sceneExport.ts). Each chapter is loaded with the Watch on
  * (?watch=1) so the sentries are in the scene.
@@ -28,7 +28,7 @@ const LEVELS = [
   { query: 'lab=1', file: 'MovementLab', character: true },
 ];
 
-const browser = await chromium.launch({ channel: args.channel || 'msedge' });
+const browser = await chromium.launch({ channel: args.channel && args.channel !== 'chromium' ? args.channel : undefined });
 const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
@@ -44,7 +44,16 @@ try {
         const g = G.game;
         const mod = await import('/tools/sceneExport.ts');
         const skip = [g.avatar.root, g.dropShadow.mesh, ...g.avatar.scarves.map((s) => s.mesh)];
-        const res = [await mod.exportLevel(g.scene, name, skip)];
+        // Each checkpoint as two markers: where Mara stands, and a point 1 m the way she faces
+        // (so another engine can place and aim a player start whatever its axis conventions).
+        const markers = g.checkpoints.all().flatMap((cp) => {
+          const f = cp.feet;
+          return [
+            { name: `Checkpoint_${cp.order}_${cp.id}`, position: [f.x, f.y + 0.05, f.z] },
+            { name: `Aim_${cp.order}_${cp.id}`, position: [f.x + Math.sin(cp.facing), f.y + 0.05, f.z + Math.cos(cp.facing)] },
+          ];
+        });
+        const res = [await mod.exportLevel(g.scene, name, skip, markers)];
         if (character) {
           const clips = [...g.avatar.actions.entries()].filter(([n]) => n !== 'grindPose').map(([, a]) => a.getClip());
           res.push(await mod.exportCharacter(g.avatar.model, clips));
