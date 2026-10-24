@@ -8,6 +8,8 @@
 #include "ItTakesOne.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
+#include "Stormworks/MaraAnimInstance.h"
+#include "Stormworks/MaraFootsteps.h"
 #include "Stormworks/StormCheckpoint.h"
 #include "Stormworks/StormDirector.h"
 #include "Stormworks/StormworksAssets.h"
@@ -15,6 +17,7 @@
 #include "Stormworks/StormworksSelfTest.h"
 #include "Stormworks/StoryNote.h"
 #include "Stormworks/TetherComponent.h"
+#include "Stormworks/WorkshopToy.h"
 #include "UObject/ConstructorHelpers.h"
 
 AStormworksGameMode::AStormworksGameMode()
@@ -75,6 +78,12 @@ void AStormworksGameMode::RestartPlayer(AController* NewPlayer)
 	Super::RestartPlayer(NewPlayer);
 	if (ACharacter* C = NewPlayer ? Cast<ACharacter>(NewPlayer->GetPawn()) : nullptr)
 	{
+		// Mara herself, if her import is in the project (else the template's mannequin stays).
+		if (!C->FindComponentByClass<UMaraFootsteps>() && UMaraAnimInstance::Dress(C))
+		{
+			UMaraFootsteps* F = NewObject<UMaraFootsteps>(C, TEXT("Footsteps"));
+			F->RegisterComponent();
+		}
 		if (!C->FindComponentByClass<UTetherComponent>())
 		{
 			UTetherComponent* T = NewObject<UTetherComponent>(C, TEXT("Tether"));
@@ -205,6 +214,25 @@ AStoryNote* AStormworksGameMode::NoteInReach(const ACharacter* Who) const
 	return Best;
 }
 
+AWorkshopToy* AStormworksGameMode::ToyInReach(const ACharacter* Who) const
+{
+	if (!Who)
+	{
+		return nullptr;
+	}
+	const APlayerController* PC = Cast<APlayerController>(Who->GetController());
+	const FVector View = PC && PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraRotation().Vector() : Who->GetActorForwardVector();
+	for (TActorIterator<AWorkshopToy> It(GetWorld()); It; ++It)
+	{
+		const FVector To = It->GetActorLocation() - Who->GetActorLocation();
+		if (To.Size2D() < 170.f && FVector::DotProduct(View.GetSafeNormal2D(), To.GetSafeNormal2D()) > 0.35f)
+		{
+			return *It;
+		}
+	}
+	return nullptr;
+}
+
 bool AStormworksGameMode::TryInteract(ACharacter* Who)
 {
 	if (OpenNote)
@@ -222,6 +250,12 @@ bool AStormworksGameMode::TryInteract(ACharacter* Who)
 		{
 			Complete();
 		}
+		return true;
+	}
+	if (AWorkshopToy* Toy = ToyInReach(Who))
+	{
+		// Pressing it again while it runs does nothing (and does not fire the tether either).
+		Toy->Play();
 		return true;
 	}
 	return false;

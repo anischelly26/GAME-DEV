@@ -67,6 +67,8 @@ public:
 	/** Interact (read a note in front of her, or close the open one). True if used. */
 	bool TryInteract(ACharacter* Who);
 	AStoryNote* NoteInReach(const ACharacter* Who) const;
+	/** Ivo's toy, if she is close to it and facing it. */
+	class AWorkshopToy* ToyInReach(const ACharacter* Who) const;
 	void CloseNote();
 
 	void Complete();

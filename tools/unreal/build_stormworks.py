@@ -112,6 +112,48 @@ def import_sounds():
     log("sounds: %d" % len(names))
 
 
+# Recorded sounds: Kenney's CC0 packs (see docs/ASSETS.md). The web game's selection in
+# public/assets/audio/sfx is in the repository; the rest comes from the packs as downloaded into
+# the git-ignored import-cache/audio/kenney (node scripts/build-audio.mjs fetches them).
+SFX_DIR = os.path.join(REPO, "public", "assets", "audio", "sfx")
+KENNEY_DIR = os.path.join(REPO, "import-cache", "audio", "kenney")
+RECORDED = []
+for _i in range(5):
+    RECORDED += [
+        ("SFX_Step_Stone_%d" % _i, SFX_DIR, "impact-sounds-footstep_concrete_%03d.ogg" % _i),
+        ("SFX_Step_Wood_%d" % _i, SFX_DIR, "impact-sounds-footstep_wood_%03d.ogg" % _i),
+        ("SFX_Step_Metal_%d" % _i, SFX_DIR, "impact-sounds-impactPlate_light_%03d.ogg" % _i),
+        ("SFX_Land_%d" % _i, SFX_DIR, "impact-sounds-impactSoft_medium_%03d.ogg" % _i),
+        ("SFX_LandHeavy_%d" % _i, SFX_DIR, "impact-sounds-impactSoft_heavy_%03d.ogg" % _i),
+        ("SFX_MetalLight_%d" % _i, SFX_DIR, "impact-sounds-impactMetal_light_%03d.ogg" % _i),
+        ("SFX_MetalHeavy_%d" % _i, SFX_DIR, "impact-sounds-impactMetal_heavy_%03d.ogg" % _i),
+        ("SFX_Bell_%d" % _i, os.path.join(KENNEY_DIR, "impact-sounds", "Audio"), "impactBell_heavy_%03d.ogg" % _i),
+        ("SFX_Tin_%d" % _i, os.path.join(KENNEY_DIR, "impact-sounds", "Audio"), "impactTin_medium_%03d.ogg" % _i),
+        ("SFX_Glass_%d" % _i, os.path.join(KENNEY_DIR, "impact-sounds", "Audio"), "impactGlass_light_%03d.ogg" % _i),
+    ]
+RECORDED += [
+    ("SFX_Click", SFX_DIR, "rpg-audio-metalClick.ogg"),
+    ("SFX_Latch", SFX_DIR, "rpg-audio-metalLatch.ogg"),
+] + [("SFX_Creak_%d" % i, SFX_DIR, "rpg-audio-creak%d.ogg" % (i + 1)) for i in range(3)] + [
+    ("SFX_Cloth_%d" % i, SFX_DIR, "rpg-audio-cloth%d.ogg" % (i + 1)) for i in range(4)] + [
+    ("SFX_PageFlip_%d" % i, os.path.join(KENNEY_DIR, "rpg-audio", "Audio"), "bookFlip%d.ogg" % (i + 1)) for i in range(3)] + [
+    ("SFX_BookOpen", os.path.join(KENNEY_DIR, "rpg-audio", "Audio"), "bookOpen.ogg"),
+    ("SFX_BookClose", os.path.join(KENNEY_DIR, "rpg-audio", "Audio"), "bookClose.ogg"),
+]
+
+
+def import_recorded_sounds():
+    done, missing = 0, []
+    for name, folder, fname in RECORDED:
+        src = os.path.join(folder, fname)
+        if not os.path.exists(src):
+            missing.append(fname)
+            continue
+        if import_file(src, ROOT + "/Audio", name):
+            done += 1
+    log("recorded sounds: %d imported, %d missing%s" % (done, len(missing), (" (" + ", ".join(missing[:6]) + ")") if missing else ""))
+
+
 SETS = {
     # name: (Poly Haven id, tile size in metres)
     "stone": ("castle_wall_slates", 2.5),
@@ -268,6 +310,8 @@ def make_translucent_master():
     m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     prop(vparam(m, "Color", (0.7, 0.75, 0.8, 1), -500, 0), "", MP.MP_EMISSIVE_COLOR)
     prop(sparam(m, "Opacity", 0.25, -500, 200), "", MP.MP_OPACITY)
+    # The rain is an instanced mesh: without this flag the game falls back to the default material.
+    m.set_editor_property("used_with_instanced_static_meshes", True)
     MEL.recompile_material(m)
     return m
 
@@ -318,9 +362,14 @@ def make_materials(tex):
     surf_mi("MI_TOS_LampGlow", (1, 0.8, 0.5, 1), 0.5, 0.0, (1, 0.72, 0.42, 1), 40.0)
     surf_mi("MI_TOS_WindowGlow", (1, 0.7, 0.4, 1), 0.5, 0.0, (1, 0.62, 0.3, 1), 6.0)
     surf_mi("MI_TOS_WarningRed", (0.5, 0.05, 0.03, 1), 0.4, 0.0, (1, 0.08, 0.04, 1), 3.0)
-    surf_mi("MI_TOS_Hazard", (0.78, 0.55, 0.08, 1), 0.55, 0.2)
+    # Old painted iron, weathered: it should read as "machinery, careful" without shouting.
+    surf_mi("MI_TOS_Hazard", (0.42, 0.27, 0.06, 1), 0.62, 0.3)
     surf_mi("MI_TOS_Sea", (0.01, 0.025, 0.035, 1), 0.06, 0.0)
     surf_mi("MI_TOS_Cloth", (0.32, 0.2, 0.16, 1), 0.95, 0.0)
+    # The prisoners' washing: faded linen, coral, sea blue and ochre (none of them the tether's teal).
+    for i, c in enumerate(((0.72, 0.69, 0.62, 1), (0.56, 0.24, 0.19, 1), (0.24, 0.33, 0.46, 1), (0.58, 0.44, 0.2, 1))):
+        surf_mi("MI_TOS_Laundry_%d" % i, c, 0.95, 0.0)
+    surf_mi("MI_TOS_ToyRed", (0.55, 0.08, 0.05, 1), 0.45, 0.2)
     M["MI_TOS_Rain"] = mi("MI_TOS_Rain", trans, {"Color": (0.55, 0.62, 0.7, 1)}, {"Opacity": 0.22})
     log("materials: %d instances" % len(M))
     return M
@@ -542,6 +591,8 @@ def build_level(M):
     b.text("Workshop_IvoMark", "IV", -7.98, -2.5, 2.6, 0, 40)
     b.lamp("Workshop_Lamp_Bench", -5.5, -3.3, 2.4, 6000, 7, shadows=True)
     b.lamp("Workshop_Lamp_Door", -3.5, 3.4, 3.2, 3500, 6)
+    # Ivo's wind-up tin boat at the end of his bench (E winds it).
+    b.spawn(unreal.WorkshopToy, V(-6.6, -3.15, 0.92), label="Ivo_Toy", folder="Story")
     pick = b.spawn(unreal.TetherPickup, V(-5.4, -3.4, 1.1), label="TetherPickup", folder="Tether")
     pick.set_editor_property("objective", "Pull the crate off the door")
 
@@ -585,6 +636,14 @@ def build_level(M):
     b.text("Gallery_ChalkArrow", "IV ->", 12.6, 10.03, 1.4, 90, 34)
     b.lamp("Gallery_Lamp_Door", -3.5, 10.3, 3.2, 4000, 8)
     b.lamp("Gallery_Lamp_Far", 27.5, 10.3, 3.6, 4000, 8)
+    # The washing, pegged along the wall side of the gallery, and the hooks that hold its rope.
+    line = b.spawn(unreal.LaundryLine, V(-1.5, 10.55, 2.5), label="Gallery_Laundry", folder=F)
+    line.set_editor_property("length", 1250.0)
+    for x in (-1.5, 11.0):
+        b.box("Gallery_LaundryHook_%d" % int(x), x - 0.04, x + 0.04, 10.0, 10.6, 2.46, 2.54, "MI_TOS_Iron", F, collide=False)
+    # Ivo's chimes by his chalk arrow, just before the break: they ring as she walks up.
+    b.spawn(unreal.WindChimes, V(12.3, 10.35, 2.7), label="Gallery_Chimes", folder=F)
+    b.box("Gallery_ChimesArm", 12.0, 12.6, 10.0, 10.4, 2.7, 2.76, "MI_TOS_Iron", F, collide=False)
 
     # ---------------------------------------------------------------- Beat 4: the storm coupling and the gate
     F = "Coupling"
@@ -680,7 +739,7 @@ def build_level(M):
 
     # ---------------------------------------------------------------- the self-test's route
     for tag, x, y, z in (
-        ("WP_Pickup", -5.4, -2.6, 0), ("WP_DoorView", -3.5, 2.2, 0), ("WP_RoomCenter", -5.0, 0.0, 0),
+        ("WP_Toy", -6.3, -2.2, 0), ("WP_Pickup", -5.4, -2.6, 0), ("WP_DoorView", -3.5, 2.2, 0), ("WP_RoomCenter", -5.0, 0.0, 0),
         ("WP_Corridor1", -3.5, 7.6, 0), ("WP_Corridor2", -3.5, 9.6, 0), ("WP_Gallery", -3.5, 11.5, 0),
         ("WP_GalleryN", 8.0, 11.5, 0), ("WP_ChasmEdge", 13.65, 11.5, 0), ("WP_CrateFront", 15.8, 11.5, 0),
         ("WP_FarLanding", 26.8, 11.5, 0), ("WP_FallOff", 23.6, 11.5, 0), ("WP_Coupling", 30.5, 12.15, 0),
@@ -731,6 +790,7 @@ def main():
     log("project %s; textures from %s; audio from %s" % (PROJECT_DIR, TEXTURES_SRC, AUDIO_SRC))
     try:
         import_sounds()
+        import_recorded_sounds()
         tex = import_textures()
         M = make_materials(tex)
         EAL.save_directory(ROOT, only_if_is_dirty=False, recursive=True)

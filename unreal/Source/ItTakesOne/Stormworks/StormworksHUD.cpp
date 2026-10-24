@@ -8,6 +8,7 @@
 #include "Stormworks/StormworksGameMode.h"
 #include "Stormworks/StoryNote.h"
 #include "Stormworks/TetherComponent.h"
+#include "Stormworks/WorkshopToy.h"
 #include "Stormworks/TetherPoint.h"
 
 namespace
@@ -153,6 +154,10 @@ void AStormworksHUD::DrawHUD()
 		if (AStoryNote* Note = GM->NoteInReach(C))
 		{
 			DrawLabel(TEXT("[E]  Read"), Mid.X, SY * 0.62f, Ink, 0.95f * UI, true, true);
+		}
+		else if (AWorkshopToy* Toy = GM->ToyInReach(C); Toy && !Toy->IsPlaying())
+		{
+			DrawLabel(FString::Printf(TEXT("[E]  %s"), *Toy->Prompt), Mid.X, SY * 0.62f, Ink, 0.95f * UI, true, true);
 		}
 	}
 
