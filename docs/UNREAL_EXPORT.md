@@ -11,8 +11,8 @@ colliders, the sky, the water's waves and the glows are all code in this reposit
 have to be rebuilt (Blueprints or C++). The sea becomes a flat translucent surface.
 
 **Tested how:** each file was parsed with glTF-Transform and loaded back into an empty three.js
-scene and rendered (Mara with an animation playing). **Not tested in Unreal**: Unreal Engine was not
-installed on the machine that made the export.
+scene and rendered (Mara with an animation playing), then imported into Unreal Engine 5.8 by the
+script below (2026-10-24).
 
 ## The files
 
@@ -28,7 +28,30 @@ installed on the machine that made the export.
 | `Mara.glb` | The toy hero: skinned mesh, skeleton (Unreal-style bone names), 29 animations | 8.2 MB |
 | `export-report.json` | What each file holds and what was left out | |
 
-## In Unreal Engine 5
+## Automatic import (tested with Unreal Engine 5.8)
+
+`tools/unreal/import_it_takes_one.py` builds the levels inside an existing project (e.g. one made
+from the Third Person template) whose folder sits next to `Import/`. With the editor closed:
+
+```
+UnrealEditor-Cmd.exe <Project>.uproject -run=pythonscript -script="<repo>/tools/unreal/import_it_takes_one.py" -nullrhi -unattended -nosplash
+```
+
+(`UnrealEditor-Cmd.exe` is in the engine's `Engine/Binaries/Win64`.) It runs without a window or
+GPU and took 164 s here. It creates `/Game/ItTakesOne/Maps/` with one level per chapter (from the
+engine's Basic template: sun, sky, fog; its floor removed), imports each chapter into its level,
+makes every mesh walkable except the sea, puts a Player Start at a chapter checkpoint aimed the way
+Mara faces (the export carries 5 cm marker cubes at every checkpoint, hidden in game, in an
+outliner folder "Checkpoints"), and imports Mara as assets (92: skeletal mesh, skeleton, 29
+animations, materials). Log: `Saved/ItTakesOne_import.log`. Measured: 1 m in the game = 100
+Unreal units (Interchange converts the units).
+
+Results on 2026-10-24 (Unreal Engine 5.8, the owner's laptop): all four levels built and saved;
+the editor opened Chapter Two and Play in Editor started with the Third Person character.
+Known: translucent materials (the sea, glass) on Nanite meshes are not supported by Nanite and
+log a warning; those meshes need Nanite turned off.
+
+## By hand, in Unreal Engine 5
 
 1. **Install** Unreal Engine 5 from the Epic Games Launcher (Unreal Engine → Library → +). It needs
    about 40–60 GB; in the install options you can untick the Android, iOS and Linux platforms.
