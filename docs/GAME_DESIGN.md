@@ -161,6 +161,42 @@ or Chapter Two's completion card). About 3 to 5 minutes; nobody has played it ye
 | Surge | Every 9 s: the sea rises 0.85 m and falls over 3.6 s (sin²); an engine thump marks its start |
 | The patrol | The Watch's rules (above), lamp 13 m, a ring of 19 m round the lighthouse; a catch tows Mara back to the checkpoint, aboard |
 
+## The maintenance tether and *The Stormworks Escape* (Unreal Engine; implemented, unreviewed)
+
+The owner's brief of 2026-10-24 asked for one signature mechanic, built properly in Unreal, inside
+a short sequence. Build details, controls and test results are in
+[UNREAL_STORMWORKS.md](UNREAL_STORMWORKS.md).
+
+**Why a tether.** It fits Pillar 1: it works with the prison's own machinery (the brass
+maintenance rings Ivo's crews use) instead of a superpower. It is also one action with two
+readings, so combining them is the puzzle. *Pull* moves the world (a crate, a lever, a gate).
+*Anchor* moves Mara (carried across a gap). Ivo leaves it on his workbench, in keeping with his
+role: he leaves tools and marks, and never plays for her.
+
+**Rules the player can learn in one go.**
+
+- A teal brass ring means the tether works there. There are no other teal things in the level.
+- What you aim at is what you get. A ring out of reach shows as grey "Too far" and is refused, so
+  the player learns the reach (12 m) by seeing it, not by guessing.
+- Pull moves a machine to the other end of a visible track, and a second pull brings it back (one-way
+  machines say so by not moving). Anchor carries her along an arc to a fixed landing; Space lets go.
+- The camera is never taken away during movement.
+
+**The sequence's shape**, following the brief's six beats: a destination seen first (the
+lighthouse through the workshop window); the mechanic learnt where failure is impossible (the
+door crate); two uses combined (pull the cargo crate to the edge, stand on it, then the far anchor
+is in reach); one complication that changes the situation (the storm coupling opens the gate and
+arms the catwalk); a short climax using everything (about 8 s: tether, jump, tether while the
+catwalk falls behind her); relief and a story beat (the roof, the view, Ivo's note).
+
+**Story.** Ivo's note ties the sequence to the chapters: he lit the lamp on Knoll Rock to stop
+Sorn's diversion, and there is a skiff under the light. That is Chapter Three's destination. Where
+the Unreal sequence sits in the campaign (a reworked Chapter One exit, or a new chapter) is the
+owner's decision.
+
+**Recovery (Pillar 4).** Falls cost seconds: five forward-only checkpoints, solved machines stay
+solved, the catwalk rebuilds if she falls during the climax, and R returns to the checkpoint.
+
 ## Movement capabilities (measured)
 
 Measured by the automated test `measure jump capability` at the tested revision. Tuning lives in

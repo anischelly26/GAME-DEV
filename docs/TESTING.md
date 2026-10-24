@@ -326,7 +326,45 @@ Please put review findings in `docs/reviews/` (one file per tested commit), with
 environment (OS, browser, GPU, resolution, quality setting), severity, reproduction steps,
 expected vs actual, evidence, and acceptance criteria for the fix.
 
+## Unreal Engine: The Stormworks Escape
+
+The Unreal sequence (see [UNREAL_STORMWORKS.md](UNREAL_STORMWORKS.md)) has its own scripted
+self-test, run in the rendered standalone game:
+
+```
+powershell -File tools/unreal/run_selftest.ps1                          # 40 checks, ~90 s
+powershell -File tools/unreal/run_selftest.ps1 -ExecCmds "r.VolumetricFog 0"   # A/B a console variable
+powershell -File tools/unreal/run_selftest.ps1 -Clip; python tools/unreal/make_clip.py   # climax GIF
+```
+
+Results: `<Project>/Saved/StormworksSelfTest/results.txt` (also printed), screenshots 01–14 beside
+it. The bot drives the template character with movement input and control rotation, fires the
+tether with `TryFire()`, and presses restart through the Enhanced Input action. It covers a normal
+start, the full route, a missed jump and recovery, repeated interactions, leaving and returning to
+an interaction, a fall during the climax, restarting from a checkpoint, and reaching the end
+without getting stuck. It is not a playtest: nobody has played the sequence by hand yet.
+
+**Manual check (about 3 minutes), for the first person to play it:**
+
+1. Play `/Game/ItTakesOne/Maps/Stormworks`. The window should frame the lighthouse beam.
+2. Walk into the glowing canister on the bench, aim at the door crate's ring, press E. The crate
+   should slide aside. Press E again to bring it back, then once more.
+3. In the gallery, aim at the far ring from the edge. It should say "Too far". Pull the cargo crate,
+   climb onto it, and tether across.
+4. Walk off the gallery into the sea. You should come back at the far-gallery checkpoint, with
+   the crate still where you left it.
+5. Pull the coupling. On the catwalk, keep moving: tether, jump, tether. Fall once on purpose:
+   the catwalk should be whole again.
+6. On the roof, read the note (E), close it, press R.
+7. Report anything confusing or stuck, with the checkpoint name shown on screen.
+
 ## Latest results
+
+**The Stormworks Escape (Unreal, 2026-10-24):** with the committed game code, six runs: 40/40 in
+four; in the other two, one self-test timing check failed each time (a screenshot hitch next to the
+check; both checks fixed, then 40/40). With Virtual Shadow Maps on, 2 of 9 launches ended in a GPU
+crash before the route started; with regular shadow maps (now the project setting), 0 of 13 (see
+UNREAL_STORMWORKS.md). The web game's tests were not rerun in this pass: no web code changed.
 
 At commit `b3f907d` (game feel, Phase B of the overhaul), same machine: **115/115 Edge e2e in
 13.3 min** (one run; the new `feel.spec.ts` is 9 of them), unit tests **68/68** (14 new: 11 in

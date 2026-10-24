@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Branch** | `claude/game-feel` (draft PR #8), stacked on `claude/low-tide` (PR #7) → `claude/toy-hero` (PR #6) → `claude/chapter-one-v2` (PR #5) → `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
-| **Build** | Chapter One, *The Quiet Cell*: the workshop opening → pressure-hatch puzzle → maintenance shaft (the steam kicker) → lookout → the feed-pipe grind or the scaffold → parkour practice route → *The Breathing Engine* (now with the Watch) and the split feed → chapter ending; five hidden chalk marks. Chapter Two, *The Warders' Green*: the cove → Cottage Lane (stealth) → the green → the slide → the swing leap → the yard. Chapter Three, *The Low Tide*: the slipway → the swim → the skiff → the bar and the surge → the patrol boat → the lighthouse. The movement lab (`?lab=1`). The cinematic overhaul's audit and plans (Phase A) and game feel (Phase B) |
-| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PRs #3 to #8) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
+| **Branch** | `claude/unreal-stormworks` (draft PR, The Stormworks Escape in Unreal Engine), stacked on `claude/unreal-export` (PR #11) → `claude/game-feel` (draft PR #8) → `claude/low-tide` (PR #7) → `claude/toy-hero` (PR #6) → `claude/chapter-one-v2` (PR #5) → `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
+| **Build** | Chapter One, *The Quiet Cell*: the workshop opening → pressure-hatch puzzle → maintenance shaft (the steam kicker) → lookout → the feed-pipe grind or the scaffold → parkour practice route → *The Breathing Engine* (now with the Watch) and the split feed → chapter ending; five hidden chalk marks. Chapter Two, *The Warders' Green*: the cove → Cottage Lane (stealth) → the green → the slide → the swing leap → the yard. Chapter Three, *The Low Tide*: the slipway → the swim → the skiff → the bar and the surge → the patrol boat → the lighthouse. The movement lab (`?lab=1`). The cinematic overhaul's audit and plans (Phase A) and game feel (Phase B). In Unreal Engine 5.8 (a separate project): the chapters imported as art (PR #11), and *The Stormworks Escape*, a six-beat sequence built around Ivo's maintenance tether |
+| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PRs #3 to #11 and the Stormworks PR) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
 
 ## Launch
 
@@ -23,6 +23,34 @@ Settings → System → Display → Graphics → Microsoft Edge (or Chrome) → 
 the browser to the dedicated GPU. On the test laptop (Intel UHD plus NVIDIA RTX 2050), Edge now
 runs on the RTX this way. The Intel measurements below use Playwright's bundled Chromium, which
 that setting does not cover.
+
+## The Stormworks Escape, in Unreal Engine 5.8 (`claude/unreal-stormworks`)
+
+Stacked on `claude/unreal-export` (PR #11). The owner's brief of 2026-10-24: one signature
+mechanic, built properly in Unreal, inside a short sequence. The mechanic is **Ivo's maintenance
+tether** (pull a machine along its track, or be carried along an arc to an anchor). The sequence is
+*The Stormworks Escape*, `/Game/ItTakesOne/Maps/Stormworks` in the owner's Unreal project: the
+view from Ivo's workshop, learning the tether on a door crate, a broken seawall crossed by
+combining a pull and a carry, the storm coupling that opens the sluice gate and arms the catwalk,
+a collapsing-catwalk climax, and the signal tower's roof with Ivo's note. Full write-up, controls,
+rebuild steps, measurements and defects: [UNREAL_STORMWORKS.md](UNREAL_STORMWORKS.md).
+
+- **Code:** a C++ module, `unreal/Source/ItTakesOne` (reusable Actors and Components; no level
+  Blueprint logic), on the Third Person template's character and controller.
+- **Content:** `tools/unreal/build_stormworks.py` builds the level, materials and sound assets
+  headless; `tools/unreal/make_stormworks_sounds.py` synthesises the 19 sounds.
+- **Verification:** a scripted bot plays the whole route in the rendered game
+  (`tools/unreal/run_selftest.ps1`): 40 of 40 checks in the final runs (two earlier runs each
+  failed one timing check in the test itself, since fixed), including a missed jump
+  and recovery, repeated interactions, leaving and returning, a fall during the climax, restart
+  from the checkpoint (R, through Enhanced Input) and not being stuck at the end. Screenshots and
+  a climax clip: [evidence/stormworks/](evidence/stormworks/). **No person has played it.**
+- **Known limitations:** the hero is the template mannequin, not Mara; greybox shapes with CC0
+  textures; synthesised placeholder sounds; a GPU crash inside the engine's Virtual Shadow Maps on
+  2 of 9 launches with Virtual Shadow Maps, 0 of 13 since the project switched to regular shadow
+  maps (see the write-up).
+- **Changes to the owner's Unreal project:** a broken Fab plugin disabled
+  (PerformanceCaptureToolkit), hardware ray tracing off, the module added (backups kept).
 
 ## The cinematic overhaul: audit, plans, and Phase B, game feel (`claude/game-feel`, draft PR #8)
 

@@ -139,6 +139,21 @@ each chapter loads only the sets it uses (`surfaces` in `src/levels/chapters.ts`
 | Breakwater seen across the water (Chapter Two) | Simple blocks in `src/levels/green/Village.ts` |
 | UI fonts | The player's system fonts; nothing is bundled |
 
+## Unreal Engine: The Stormworks Escape
+
+What the Unreal sequence ([UNREAL_STORMWORKS.md](UNREAL_STORMWORKS.md)) uses. Nothing new was
+downloaded for it, and nothing is paid.
+
+| Content | Source | Licence |
+| --- | --- | --- |
+| Surface textures: Castle Wall Slates, Old Stone Wall, Cobblestone Floor 04, Metal Plate, Old Planks 02, Dark Rock, Metal Grate Rusty | The Poly Haven sets above, imported from `public/assets/textures` by `tools/unreal/build_stormworks.py` | CC0 |
+| The lighthouse on Knoll Rock | The Seven Foot Knoll Lighthouse scan above (Katie Wolfe), as imported with Chapter Three (`tools/unreal/import_it_takes_one.py`); placed about 80 m from the playable area | **CC BY 4.0**: the credit above applies to any build, video or screenshot of the sequence. In this sequence the sign on its railing is not covered (the web game's board is not part of the scan), but it is about 80 m away in the storm and not legible in the screenshots |
+| All 19 sounds (`S_TOS_*`: the tether's fire, latch, reel and refusal, grinding, clunks, landing, the catwalk's creak and crash, rumble, alarm, the storm engine, thunder, wind, pickup, checkpoint, completion, paper, splash) | Synthesised from noise, sines and envelopes by `tools/unreal/make_stormworks_sounds.py`; no recordings | Original (this repository) |
+| Materials, the level's geometry, the tether's rings, crates, the coupling, the gate, the catwalk, the hut, the rain, the lighthouse beam, the HUD | Engine basic shapes (`/Engine/BasicShapes`) placed by `build_stormworks.py`, and the C++ in `unreal/Source/ItTakesOne` | Original (this repository); engine content under the Unreal Engine EULA |
+| The player character, its animations and its controller | The Unreal Engine **Third Person template** (`/Game/ThirdPerson`, `/Game/Characters`) in the owner's project; not in this repository | Unreal Engine EULA (Epic's template content, usable in Unreal Engine projects) |
+| Mara | `/Game/ItTakesOne/Mara`, imported from `mara.glb` (the CC0 Quaternius sources above); not used by the sequence yet | CC0 |
+| Fonts | The engine's default font (Canvas HUD) | Unreal Engine EULA |
+
 ## Libraries
 
 | Library | Use | Licence |
