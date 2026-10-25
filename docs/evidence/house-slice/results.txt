@@ -1,0 +1,77 @@
+[  0.00] House self-test: start
+[  0.40] -- start
+[  1.57] PASS  Mara is on the jetty; the house director is in the level
+[  1.57] PASS  outside, the storm is heard in full
+[  1.57] screenshot 01_jetty
+[  1.57] -- space jumps
+[  2.20] PASS  the Space key makes her jump (through the input mappings)
+[  2.20] -- to the door
+[  4.13] -- inside
+[  5.17] PASS  through the door, the storm is muffled (low-pass at 650 Hz)
+[  5.17] screenshot 02_inside
+[  5.17] -- to WP_Kettle
+[  6.09] -- look: 03_kettle
+[  7.42] screenshot 03_kettle
+[  7.73] screenshot 03_kettle
+[  7.98] PASS  something funny: the kettle's steam leans toward the drain
+[  7.98] -- to WP_Marks
+[  9.16] -- look: 04_marks
+[ 10.47] screenshot 04_marks
+[ 10.75] screenshot 04_marks
+[ 10.96] PASS  something comforting: her height marks on the doorframe
+[ 10.96] -- to WP_Glass
+[ 12.04] -- look: 05_glass
+[ 13.35] screenshot 05_glass
+[ 13.61] screenshot 05_glass
+[ 13.86] PASS  something wrong: the water climbs out of its glass
+[ 13.86] PASS  ...and her reflection in the window turns its head late (0.90 s behind)
+[ 13.86] -- echo
+[ 13.88] PASS  something under the floor copies her steps (11 echoes)
+[ 13.88] -- to the bench
+[ 14.90] -- inspect
+[ 15.44] PASS  at the bench, the gauge offers [E] Look
+[ 15.44] PASS  E: Ivo's gauge, where he left it ("He kept it.")
+[ 15.44] screenshot 06_gauge
+[ 15.44] -- walk away
+[ 16.36] -- the theft
+[ 21.36] screenshot 07_tentacle
+[ 21.63] screenshot 07_tentacle
+[ 21.85] PASS  a tentacle comes up the sink drain and takes the gauge
+[ 21.85] -- looked at
+[ 22.89] PASS  looked at, it freezes ("That is not a pipe.")
+[ 22.89] -- look away
+[ 30.53] PASS  looked away from, it creeps on and hides behind the teacup
+[ 30.53] -- the teacup
+[ 31.16] screenshot 08_teacup
+[ 31.16] -- to the teacup
+[ 32.17] -- the lampshade
+[ 33.82] PASS  chased, it slips down the sink and up the floor drain, behind the lampshade
+[ 33.82] screenshot 09_lampshade
+[ 33.82] -- to the lamp
+[ 34.43] -- searchlight
+[ 36.03] PASS  a Watch searchlight: the tentacle flattens, deep blue ("hide")
+[ 36.03] screenshot 10_searchlight
+[ 36.03] -- the grab
+[ 39.21] screenshot 11_grab
+[ 40.67] PASS  the grab plays to its end once (a short cinematic)
+[ 40.67] PASS  she has an air bubble over her head
+[ 40.67] -- descent
+[ 43.17] screenshot 12_hallway
+[ 48.54] screenshot 13_flooded
+[ 54.50] PASS  the tow down through the folding house reaches the bottom (6 knocks, no failure)
+[ 54.50] PASS  under water: the storm is gone, a heartbeat
+[ 54.50] -- reveal
+[ 56.53] PASS  in the conservatory she swims
+[ 56.53] screenshot 14_reveal
+[ 56.53] -- swim to the gauge
+[ 64.45] -- take it
+[ 65.00] PASS  Nacre holds the gauge out: [E] Take it
+[ 65.00] PASS  she takes it back
+[ 65.00] -- thanks
+[ 66.00] screenshot 15_coral
+[ 66.29] screenshot 15_coral
+[ 69.82] PASS  Nacre flushes coral and taps the glass three times
+[ 69.82] PASS  the slice ends: to be continued
+[ 69.82] screenshot 16_end
+[ 69.82] frames: 2511, mean 27.6 ms, 184 over 33 ms
+[ 69.82] SELFTEST RESULT: 25 passed, 0 failed, 69.8 s

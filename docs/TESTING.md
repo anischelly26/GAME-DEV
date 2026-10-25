@@ -368,7 +368,54 @@ It is not a playtest: nobody has played the sequence by hand or listened to it y
    roof. Skip one cinematic early and let one finish.
 8. Report anything confusing or stuck, with the checkpoint name shown on screen.
 
+## Unreal Engine: the house under Knoll Rock
+
+The house slice (see [UNREAL_HOUSE.md](UNREAL_HOUSE.md)) has its own bot, started by a command-line
+switch. The runner above is for Stormworks only. From Git Bash, set `MSYS_NO_PATHCONV=1` first, or
+the map path is rewritten into a Windows path:
+
+```
+UnrealEditor.exe unreal/ItTakesOne.uproject /Game/ItTakesOne/Maps/House -game -windowed -ResX=1280 -ResY=720 -HouseSelfTest -log -nosplash
+```
+
+Results: `unreal/Saved/HouseSelfTest/results.txt`, same format as Stormworks, with screenshots 01–16
+beside it. The bot:
+
+- presses the real Space key once, to check the jump survives the house's own Space mapping;
+- walks the route, looks at each detail and inspects the gauge;
+- watches the theft, looks at the tentacle and away, and chases it to the teacup and the lamp;
+- waits out the searchlight, then lets the grab's cinematic play to its end;
+- rides the tow without steering, swims to Nacre and takes the gauge.
+
+It is not a playtest.
+
+**Manual check (about 5 minutes):**
+
+1. Play `/Game/ItTakesOne/Maps/House`. Walk up the jetty and in. Does the storm drop away at the
+   door?
+2. Find the three details (kettle, height marks, glass). Does each play when you look at it?
+3. E on the gauge, walk off. When the tentacle takes it, look straight at it: does it freeze? Look
+   away and follow it.
+4. When the searchlight comes, watch the tentacle: flat and deep blue. Let the grab play once.
+5. Steer the tow into the floating doors on purpose. You should be knocked aside, never stopped.
+6. Swim to the gauge (Space up, C down), press E. Listen for the three taps.
+
 ## Latest results
+
+**The house under Knoll Rock (Unreal, 2026-10-25):** 25/25 bot checks in 69.8 s, from the in-repo
+project at 1280×720 on the RTX 2050 laptop: mean frame 27.6 ms, 184 of 2,511 frames over 33 ms.
+The 25th check is new: her reflection in the window falls 0.9 s behind when the glass plays.
+
+The first runs found two real problems, both fixed:
+- **A soft-lock:** the tentacle froze whenever it was looked at, including mid-snatch and in front
+  of the camera, so it could stall forever. Now it does not freeze during the snatch. Stared at for
+  5 s, it flushes coral and slips on.
+- **A lost results file:** the bot's results file kept only its first line. It now keeps one writer
+  open for the whole run.
+
+The bot was also fixed to look away from the tentacle, not at the door. The same day, the Stormworks
+runner on the in-repo project passed 67/67; the extra check is the real Space key making her jump.
+Nobody has played the house slice by hand.
 
 **The Stormworks Escape, second pass (Unreal, 2026-10-25):** 62/62 self-test checks with the final
 code. In earlier runs of this pass, two failures were real bugs, found and fixed: a carry ended by a
