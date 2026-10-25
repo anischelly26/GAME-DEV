@@ -367,7 +367,8 @@ void UMaraAnimInstance::NativeUpdateAnimation(float Dt)
 	}
 
 	// --- locomotion: idle, walk, jog and sprint by ground speed, on one shared phase
-	const float Speed = !MC->IsFalling() ? V.Size2D() : 0.f;
+	// Walking speed only on the ground (swimming is not walking: no steps, no locomotion blend).
+	const float Speed = MC->IsMovingOnGround() ? V.Size2D() : 0.f;
 	GroundSpeed = Speed;
 	float WIdle = 0.f, WWalk = 0.f, WJog = 0.f, WSprint = 0.f;
 	if (Speed < 15.f)
@@ -403,16 +404,24 @@ void UMaraAnimInstance::NativeUpdateAnimation(float Dt)
 	}
 	const float Before = Phase;
 	Phase = FMath::Fmod(Phase + Dt * Rate, 1.f);
-	if (!MC->IsFalling() && Speed > 100.f && FMath::FloorToInt(Before * 2.f) != FMath::FloorToInt(Phase * 2.f))
+	if (MC->IsMovingOnGround() && Speed > 100.f && FMath::FloorToInt(Before * 2.f) != FMath::FloorToInt(Phase * 2.f))
 	{
 		++FootDowns;
 		OnFootDown.Broadcast(FMath::FloorToInt(Phase * 2.f) == 0, Speed);
 	}
 	IdleTime = Speed < 15.f && !MC->IsFalling() ? IdleTime + Dt : 0.f;
 
+	// --- the water: treading when slow, the crawl when moving, its stroke following her speed (the
+	// web game's tuning); towed through the flooded passages counts as swimming
+	const bool bInWater = MC->IsSwimming() || MC->IsFlying();
+	const float WaterSpeed = bInWater ? V.Size() : 0.f;
+	SwimBlend = Damp(SwimBlend, bInWater ? 1.f : 0.f, 10.f, Dt);
+	SwimMove = Damp(SwimMove, bInWater ? FMath::SmoothStep(25.f, 140.f, WaterSpeed) : 0.f, 5.f, Dt);
+	SwimPhase = FMath::Fmod(SwimPhase + Dt * (0.7f + 0.6f * FMath::Clamp(WaterSpeed / 290.f, 0.f, 1.f)) / Length(TEXT("swimFwd")), 1.f);
+
 	// --- the layers
-	const float Air = FMath::Max(AirBlend, CarryBlend);
-	const float Ground = (1.f - Air) * (1.f - Land) * (1.f - FullAction);
+	const float Air = FMath::Max(AirBlend, CarryBlend) * (1.f - SwimBlend);
+	const float Ground = (1.f - Air) * (1.f - Land) * (1.f - FullAction) * (1.f - SwimBlend);
 	Clock += Dt;
 	auto Add = [this](FName Name, float Time, float Weight)
 	{
@@ -430,7 +439,9 @@ void UMaraAnimInstance::NativeUpdateAnimation(float Dt)
 	Add(TEXT("sprint"), Phase * Length(TEXT("sprint")), WSprint * Ground);
 	Add(TEXT("jumpStart"), FMath::Min(JumpStartT, Length(TEXT("jumpStart"))), Air * JumpStartW * (1.f - FullAction));
 	Add(TEXT("jumpLoop"), FMath::Fmod(AirTime + Clock * (bCarried ? 1.f : 0.f), Length(TEXT("jumpLoop"))), Air * (1.f - JumpStartW) * (1.f - FullAction));
-	Add(TEXT("land"), FMath::Max(LandT, 0.f), Land * (1.f - FullAction));
+	Add(TEXT("land"), FMath::Max(LandT, 0.f), Land * (1.f - FullAction) * (1.f - SwimBlend));
+	Add(TEXT("swimIdle"), FMath::Fmod(Clock, Length(TEXT("swimIdle"))), SwimBlend * (1.f - SwimMove) * (1.f - FullAction));
+	Add(TEXT("swimFwd"), SwimPhase * Length(TEXT("swimFwd")), SwimBlend * SwimMove * (1.f - FullAction));
 	if (FullAction > 0.f)
 	{
 		Add(Action, ActionStart + ActionT * ActionRate, FullAction);

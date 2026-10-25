@@ -3,6 +3,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Materials/MaterialInterface.h"
 #include "Stormworks/StormworksAssets.h"
 
 AStormRain::AStormRain()
@@ -22,7 +23,10 @@ void AStormRain::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	Streaks->SetStaticMesh(Stormworks::Mesh(TEXT("Cube")));
-	Streaks->SetMaterial(0, Stormworks::Material(TEXT("MI_TOS_Rain")));
+	if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, *MaterialPath, nullptr, LOAD_NoWarn | LOAD_Quiet))
+	{
+		Streaks->SetMaterial(0, M);
+	}
 }
 
 void AStormRain::BeginPlay()
@@ -52,7 +56,7 @@ void AStormRain::Tick(float DeltaSeconds)
 	const FVector Cam = PC->PlayerCameraManager->GetCameraLocation();
 	// A streak points along its fall, stretched by its speed.
 	const FRotator Along = Velocity.Rotation() + FRotator(90.f, 0.f, 0.f);
-	const FVector Scale(0.006f, 0.006f, 0.55f);
+	const FVector Scale = StreakScale;
 	for (int32 i = 0; i < Count; ++i)
 	{
 		FVector& O = Offsets[i];

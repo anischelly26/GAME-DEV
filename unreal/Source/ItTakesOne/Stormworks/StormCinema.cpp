@@ -18,10 +18,11 @@ namespace
 		TEXT("/Game/ItTakesOne/Stormworks/Cinematics/LS_SW_Opening.LS_SW_Opening"),
 		TEXT("/Game/ItTakesOne/Stormworks/Cinematics/LS_SW_EngineReveal.LS_SW_EngineReveal"),
 		TEXT("/Game/ItTakesOne/Stormworks/Cinematics/LS_SW_Rooftop.LS_SW_Rooftop"),
+		TEXT("/Game/ItTakesOne/House/Cinematics/LS_House_Grab.LS_House_Grab"),
 	};
 	// Each shot's own sound, ended with the shot (the music is the game mode's).
-	const TCHAR* const ShotSounds[] = {TEXT("S_TOS_Thunder"), TEXT("S_TOS_Rumble"), TEXT("S_TOS_Chime_2")};
-	const TCHAR* const ShotNames[] = {TEXT("Opening"), TEXT("EngineReveal"), TEXT("Rooftop")};
+	const TCHAR* const ShotSounds[] = {TEXT("S_TOS_Thunder"), TEXT("S_TOS_Rumble"), TEXT("S_TOS_Chime_2"), TEXT("H_Grab")};
+	const TCHAR* const ShotNames[] = {TEXT("Opening"), TEXT("EngineReveal"), TEXT("Rooftop"), TEXT("HouseGrab")};
 	const TCHAR* const EndNames[] = {TEXT("completed"), TEXT("skipped"), TEXT("cancelled")};
 }
 

@@ -85,6 +85,10 @@ private:
 	float IdleTime = 0.f;
 	float Clock = 0.f;
 	float PullBlend = 0.f;
+	/** In the water (swimming) or towed through it (flying): the swim clips. */
+	float SwimBlend = 0.f;
+	float SwimMove = 0.f;
+	float SwimPhase = 0.f;
 
 	FName Action = NAME_None;
 	float ActionT = 0.f;

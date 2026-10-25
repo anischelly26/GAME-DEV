@@ -32,6 +32,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rain")
 	FVector Velocity = FVector(-350.f, 520.f, -2300.f);
 
+	/** Each streak's scale (a long thin cube for rain; small and round for drifting seeds). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rain")
+	FVector StreakScale = FVector(0.006f, 0.006f, 0.55f);
+
+	/** Its material, from the Stormworks or House material folders. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rain")
+	FString MaterialPath = TEXT("/Game/ItTakesOne/Stormworks/Materials/MI_TOS_Rain.MI_TOS_Rain");
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	/** Indoors (world space): no streak is drawn inside these (the workshop, the corridor, the hut). */

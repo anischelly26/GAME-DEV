@@ -13,6 +13,8 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/PlatformMisc.h"
+#include "GenericPlatform/GenericPlatformInputDeviceMapper.h"
+#include "InputKeyEventArgs.h"
 #include "HAL/PlatformProcess.h"
 #include "InputMappingContext.h"
 #include "Kismet/GameplayStatics.h"
@@ -279,6 +281,20 @@ void AStormworksSelfTest::Build()
 		Shot(TEXT("01_workshop_window"));
 		return true;
 	}, 10.f});
+	// Space through the real key path (Enhanced Input), not Jump() called directly: the tether's
+	// own mapping also listens to Space and must not swallow it.
+	Steps.Add({TEXT("space jumps"), [this]() { PC()->InputKey(FInputKeyEventArgs(GetWorld()->GetGameViewport() ? GetWorld()->GetGameViewport()->Viewport : nullptr, IPlatformInputDeviceMapper::Get().GetDefaultInputDevice(), EKeys::SpaceBar, IE_Pressed, FPlatformTime::Cycles64())); bFlag = false; Mark = 0.f; }, [this](float T) {
+		if (T > 0.05f && !bFlag)
+		{
+			bFlag = true;
+			PC()->InputKey(FInputKeyEventArgs(GetWorld()->GetGameViewport() ? GetWorld()->GetGameViewport()->Viewport : nullptr, IPlatformInputDeviceMapper::Get().GetDefaultInputDevice(), EKeys::SpaceBar, IE_Released, FPlatformTime::Cycles64()));
+		}
+		if (Char()->GetCharacterMovement()->IsFalling()) Mark = 1.f;
+		if (T < 0.8f) return false;
+		Check(Mark > 0.f, TEXT("the Space key makes her jump (through the input mappings)"));
+		bFlag = false;
+		return true;
+	}});
 	Steps.Add({TEXT("no tether yet"), [this, Tether]() { Count0 = Tether()->Fires; Tether()->TryFire(); }, [this, Tether](float T) {
 		if (T < 0.3f) return false;
 		Check(Tether()->Fires == Count0, TEXT("before the pickup, Tether does nothing"));

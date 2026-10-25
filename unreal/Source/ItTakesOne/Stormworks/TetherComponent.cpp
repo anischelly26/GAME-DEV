@@ -111,6 +111,10 @@ void UTetherComponent::SetupInput()
 	ReleaseAction = NewObject<UInputAction>(this, TEXT("IA_TetherRelease"));
 	RestartAction = NewObject<UInputAction>(this, TEXT("IA_RestartCheckpoint"));
 	SkipAction = NewObject<UInputAction>(this, TEXT("IA_SkipCinematic"));
+	// Space also jumps (Mara's own mapping, lower priority): letting go and skipping must not
+	// swallow the key, or Space would never jump.
+	ReleaseAction->bConsumeInput = false;
+	SkipAction->bConsumeInput = false;
 	Mapping = NewObject<UInputMappingContext>(this, TEXT("IMC_Tether"));
 	Mapping->MapKey(FireAction, EKeys::E);
 	Mapping->MapKey(FireAction, EKeys::LeftMouseButton);

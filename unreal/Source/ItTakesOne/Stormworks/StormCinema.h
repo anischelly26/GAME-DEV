@@ -17,6 +17,8 @@ enum class EStormShot : uint8
 	EngineReveal,
 	/** The signal tower's roof: the lighthouse ahead, Ivo's hut. */
 	Rooftop,
+	/** The house under Knoll Rock: the tentacles burst from the drains and take her. */
+	HouseGrab,
 	Count UMETA(Hidden),
 };
 

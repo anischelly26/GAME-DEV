@@ -952,4 +952,8 @@ def main():
         log("ERROR\n" + traceback.format_exc())
 
 
-main()
+# build_house.py imports this module for its helpers and the materials' names: it sets this flag so
+# importing does not rebuild Stormworks.
+import builtins  # noqa: E402
+if not getattr(builtins, "STORMWORKS_NO_MAIN", False):
+    main()
