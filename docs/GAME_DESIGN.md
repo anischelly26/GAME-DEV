@@ -197,6 +197,23 @@ owner's decision.
 **Recovery (Pillar 4).** Falls cost seconds: five forward-only checkpoints, solved machines stay
 solved, the catwalk rebuilds if she falls during the climax, and R returns to the checkpoint.
 
+**Second pass: mood and play** (2026-10-25). The owner's progression for the sequence: warm
+workshop → playful laundry gallery → musical discovery → challenging crossing → spectacular
+machinery transformation → exciting escape → peaceful rooftop. It was mapped onto the existing
+beats, not a new layout:
+- **Ivo's wind-up toy** on the workbench is something to play with before anything is at stake.
+- **The prisoners' washing** flaps along the gallery wall.
+- **His chimes** at the break ring down a pentatonic scale as Mara walks up. They also draw the
+  eye to the crossing.
+- **Three short cinematics** frame the destination (the light first, then Mara looking out at it),
+  the transformation (the gate grinding open, the catwalk ahead) and the relief (the light, close,
+  from the roof). They start only where she stands still and can always be skipped. Skipping still
+  grants what they grant.
+- **The music** follows the same moods and drops to silence for the reveal.
+
+The toy, the washing and the chimes animate with anticipation, action and settle, and never
+touch anything she stands on. Pip, the planned companion, is not in this sequence.
+
 ## Movement capabilities (measured)
 
 Measured by the automated test `measure jump capability` at the tested revision. Tuning lives in

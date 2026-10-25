@@ -2,7 +2,7 @@
 Turns the frames saved by a -StormClip self-test run into a short looping GIF.
 
     powershell -File tools/unreal/run_selftest.ps1 -Clip
-    python tools/unreal/make_clip.py [<clip folder>] [<out.gif>] [--width 480]
+    python tools/unreal/make_clip.py [--group climax|opening] [--width 480] [<clip folder>] [<out.gif>]
 
 The frames are 0.1 s apart in game time, so 10 fps plays back at real speed. Needs Pillow.
 """
@@ -14,18 +14,22 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CLIP = os.path.normpath(os.path.join(HERE, "..", "..", "..", "ItTakesOne-Unreal", "e", "Saved", "StormworksSelfTest", "clip"))
-DEFAULT_OUT = os.path.normpath(os.path.join(HERE, "..", "..", "docs", "evidence", "stormworks", "climax.gif"))
+EVIDENCE = os.path.normpath(os.path.join(HERE, "..", "..", "docs", "evidence", "stormworks"))
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("clip", nargs="?", default=DEFAULT_CLIP)
-    ap.add_argument("out", nargs="?", default=DEFAULT_OUT)
+    ap.add_argument("out", nargs="?", default=None)
+    ap.add_argument("--group", default="climax")
     ap.add_argument("--width", type=int, default=480)
     ap.add_argument("--fps", type=float, default=10.0)
+    ap.add_argument("--every", type=int, default=1, help="keep every Nth frame (plays at fps / N, real speed)")
     args = ap.parse_args()
 
-    paths = sorted(glob.glob(os.path.join(args.clip, "frame_*.png")))
+    args.out = args.out or os.path.join(EVIDENCE, args.group + ".gif")
+    paths = sorted(glob.glob(os.path.join(args.clip, args.group + "_*.png")))[::max(1, args.every)]
+    args.fps /= max(1, args.every)
     if not paths:
         raise SystemExit("no frames in %s: run run_selftest.ps1 -Clip first" % args.clip)
     frames = []

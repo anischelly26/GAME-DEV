@@ -1,0 +1,169 @@
+[  0.00] Stormworks self-test: start
+[  0.00] -- opening plays
+[  0.37] PASS  the opening plays (8.0 s): its own camera, her controls taken
+[  0.84] screenshot 00a_opening
+[  6.22] screenshot 00b_opening_mara
+[  6.59] screenshot 00b_opening_mara
+[  8.01] -- opening ends
+[  9.05] PASS  the opening ends by itself: completed, granted once (1), camera back on her, controls back
+[  9.05] PASS  the workshop's music comes in (MUS_QuietPiano)
+[  9.05] -- mara
+[ 10.08] PASS  the hero is Mara: her animation (29 clips) on 10 mesh parts
+[ 10.08] PASS  her capsule fits her 1.3 m
+[ 10.08] screenshot 00_mara
+[ 10.08] -- start
+[ 12.61] PASS  the player character spawned
+[ 12.61] PASS  the tether component is there, not yet picked up
+[ 12.61] PASS  starts at checkpoint 0
+[ 12.61] PASS  an objective is shown: "Find a way out of the workshop"
+[ 12.61] screenshot 01_workshop_window
+[ 12.61] -- no tether yet
+[ 12.95] PASS  before the pickup, Tether does nothing
+[ 12.95] -- to the toy
+[ 13.51] -- wind the toy
+[ 13.94] PASS  in front of the bench, the toy is in reach ([E] Wind up)
+[ 13.94] PASS  E winds the toy
+[ 14.92] screenshot 01b_toy
+[ 15.30] screenshot 01b_toy
+[ 16.71] PASS  one run (a second press while it ran did nothing), 28 cm along the bench
+[ 16.71] -- wind it back
+[ 19.46] PASS  wound again, it runs back to where it started
+[ 19.46] -- pick up the tether
+[ 19.80] -- picked up
+[ 20.23] PASS  walking to the workbench picks up the tether
+[ 20.23] screenshot 02_tether_picked_up
+[ 20.23] -- to the door
+[ 21.61] -- aim at the door crate
+[ 22.05] PASS  the door crate's ring is targeted
+[ 22.05] screenshot 03_target_door_crate
+[ 22.05] -- pull the door crate
+[ 22.56] screenshot 04_pulling_door_crate
+[ 22.91] screenshot 04_pulling_door_crate
+[ 23.24] PASS  one tug runs the crate off the doorway
+[ 23.24] -- into the corridor
+[ 24.36] -- repeat: pull it back and again
+[ 26.96] PASS  repeating the interaction: back over the door and off again, three arrivals, ends open
+[ 26.96] -- leave
+[ 27.83] -- return
+[ 28.96] -- still targetable
+[ 29.29] PASS  after walking away and back, the ring is targeted again
+[ 29.29] -- corridor 2
+[ 29.77] -- gallery
+[ 30.13] -- gallery north
+[ 32.36] -- laundry
+[ 32.99] PASS  the washing swings in the wind (-16 degrees) and flapped as she ran past (9)
+[ 32.99] screenshot 04b_laundry
+[ 32.99] -- gallery checkpoint
+[ 33.39] PASS  the gallery checkpoint is reached
+[ 33.39] -- chasm edge
+[ 34.57] -- the anchor is too far
+[ 35.11] PASS  from the edge, the far anchor shows as too far
+[ 35.11] PASS  firing at it is refused (too far), nothing flies
+[ 35.11] screenshot 05_anchor_too_far
+[ 35.11] PASS  walking up to the edge rings Ivo's chimes down the scale (1 rings, 9 notes)
+[ 35.11] -- aim at the cargo crate
+[ 35.54] PASS  the cargo crate's ring is targeted
+[ 35.54] -- pull the cargo crate
+[ 36.75] screenshot 06_pulling_cargo_crate
+[ 37.15] screenshot 06_pulling_cargo_crate
+[ 38.48] PASS  the cargo crate runs along its girder to the near edge
+[ 38.48] -- onto the crate
+[ 39.07] -- on the crate
+[ 39.60] PASS  she is standing on the crate, not in the sea
+[ 39.60] PASS  from the crate, the far anchor is in reach
+[ 39.60] -- tether across
+[ 40.09] screenshot 07_tether_across
+[ 40.09] a 0.3 s stall in mid-carry
+[ 40.85] PASS  the tether carries her across the gap, despite the stall
+[ 40.85] PASS  she lands on the far gallery
+[ 40.85] -- far checkpoint
+[ 41.18] PASS  the far gallery checkpoint is reached
+[ 41.18] -- fall off the far edge
+[ 43.07] -- recovered
+[ 43.90] PASS  falling into the sea counts one fall
+[ 43.90] PASS  she is back at the far gallery checkpoint
+[ 43.90] PASS  the crate stays where she pulled it (nothing solved is undone)
+[ 43.90] screenshot 08_after_fall_recovery
+[ 43.90] -- to the coupling
+[ 45.02] -- engage the coupling
+[ 45.44] PASS  the storm coupling's ring is targeted
+[ 45.44] -- the storm engine
+[ 47.06] screenshot 09_storm_engine_live
+[ 47.39] screenshot 09_storm_engine_live
+[ 49.10] PASS  engaging the coupling starts the storm engine
+[ 49.10] PASS  the sluice gate opens
+[ 49.10] PASS  the old catwalk is armed
+[ 49.10] -- engine reveal
+[ 49.14] skipping the engine reveal at 2.9 of 5.0 s
+[ 49.14] -- engine reveal ends
+[ 49.79] PASS  the engine reveal, skipped half-way: skipped, granted once (1), camera back on her, controls back
+[ 49.79] PASS  skipping it still sets the catwalk objective and the escape music
+[ 49.79] -- to the gate
+[ 50.41] -- climax checkpoint
+[ 50.44] PASS  the climax checkpoint is reached
+[ 50.44] -- hesitate on the catwalk
+[ 53.85] -- walkway reset
+[ 54.38] PASS  falling with the catwalk resets it: every segment back, not running
+[ 54.38] PASS  back at the climax checkpoint
+[ 54.38] -- run 1
+[ 55.13] -- run 2
+[ 55.64] screenshot 10_climax_run
+[ 56.00] screenshot 10_climax_run
+[ 56.83] -- tether A2
+[ 57.23] -- across G1
+[ 57.75] screenshot 11_climax_tether
+[ 58.11] screenshot 11_climax_tether
+[ 58.41] PASS  climax: carried over the first break
+[ 58.41] -- run 3
+[ 58.73] -- jump G2
+[ 59.88] jump at x 6225, speed 600, mode 1
+[ 60.09]   x 6350 z 151 vz 297 mode 3
+[ 60.30]   x 6476 z 192 vz 90 mode 3
+[ 60.50]   x 6599 z 189 vz -111 mode 3
+[ 60.71]   x 6722 z 145 vz -315 mode 3
+[ 60.93]   x 6800 z 68 vz 0 mode 1
+[ 60.93] PASS  climax: jumped the second break (landed at x 6800)
+[ 60.93] -- run 5
+[ 62.00] -- tether A3
+[ 62.19] -- onto the tower
+[ 63.02] a 0.5 s stall that ends the carry
+[ 63.42] PASS  climax: carried up onto the tower roof, despite the stall
+[ 63.42] climax run took 8.3 s
+[ 63.42] -- final checkpoint
+[ 64.44] PASS  the tower roof checkpoint is reached
+[ 64.44] -- rooftop shot
+[ 65.79] screenshot 12a_rooftop
+[ 68.83] skipping the rooftop shot at 5.4 of 6.0 s
+[ 68.83] -- rooftop shot ends
+[ 69.47] PASS  the rooftop shot, skipped near its end: skipped, granted once (1), camera back on her, controls back
+[ 69.47] PASS  the rooftop's music
+[ 69.47] -- the view
+[ 70.09] screenshot 12_roof_view
+[ 70.09] -- to the note
+[ 71.17] -- read the note
+[ 71.60] PASS  the note is in reach
+[ 71.60] -- note open
+[ 72.06] PASS  the note opens and the sequence is complete
+[ 72.06] screenshot 13_ivos_note
+[ 72.06] -- close the note
+[ 73.08] PASS  E closes the note
+[ 73.08] screenshot 14_complete
+[ 73.08] -- replay the opening, skip at once
+[ 73.92] PASS  the opening replayed and skipped at once: skipped, granted once (1), camera back on her, controls back
+[ 73.92] -- replay the reveal, restart
+[ 76.29] PASS  the reveal replayed and cut short by R: cancelled, granted once (1), camera back on her, controls back
+[ 76.29] PASS  the restart happened; music voices 2 (never more than two)
+[ 76.29] -- footsteps
+[ 76.32] PASS  a footstep for each foot plant: 48 steps, 43 plants, 5 landings
+[ 76.32] PASS  footsteps follow the surface: stone 29, wood 6, metal 13
+[ 76.32] PASS  landings make a sound (5)
+[ 76.32] -- audio loops
+[ 76.35] audio components in the world: 4, playing 2: S_TOS_Wind(loop) MUS_RisingMoon(loop)
+[ 76.35] PASS  looping sounds playing: 2 (the wind and the music; the alarm fades 14 s after the engine wakes; nothing piled up)
+[ 76.35] -- restart from checkpoint
+[ 76.35] PASS  R is bound to restart from the checkpoint
+[ 77.20] PASS  pressing restart puts her at the last checkpoint (respawns +1, 32 cm from its spawn point)
+[ 77.20] -- not stuck
+[ 78.24] PASS  at the end she can still walk about (not stuck)
+[ 78.24] frames: 2544, mean 30.8 ms (33 fps), worst 400.0 ms, 232 over 33 ms
+[ 78.24] SELFTEST RESULT: 62 passed, 0 failed, 78.2 s

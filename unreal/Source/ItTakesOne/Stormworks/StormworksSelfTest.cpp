@@ -1,7 +1,11 @@
 #include "Stormworks/StormworksSelfTest.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
+#include "UObject/UObjectIterator.h"
 #include "EngineUtils.h"
+#include "Engine/GameViewportClient.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/TargetPoint.h"
@@ -25,6 +29,8 @@
 #include "Stormworks/WindChimes.h"
 #include "Stormworks/WorkshopToy.h"
 #include "Stormworks/StormCheckpoint.h"
+#include "Stormworks/StormCinema.h"
+#include "Stormworks/StormMusic.h"
 #include "Stormworks/StormDirector.h"
 #include "Stormworks/StormworksGameMode.h"
 #include "Stormworks/StoryNote.h"
@@ -46,6 +52,12 @@ void AStormworksSelfTest::BeginPlay()
 	Super::BeginPlay();
 	OutDir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("StormworksSelfTest"));
 	IFileManager::Get().MakeDirectory(*OutDir, true);
+	// The bot plays alone: a click or a key from whoever is at the machine must not skip a
+	// cinematic or fire the tether. (Injected Enhanced Input actions do not go through the viewport.)
+	if (UGameViewportClient* Viewport = GetWorld()->GetGameViewport())
+	{
+		Viewport->SetIgnoreInput(true);
+	}
 	bClip = FParse::Param(FCommandLine::Get(), TEXT("StormClip"));
 	if (bClip)
 	{
@@ -85,6 +97,17 @@ ACharacter* AStormworksSelfTest::Char() const
 APlayerController* AStormworksSelfTest::PC() const
 {
 	return GetWorld()->GetFirstPlayerController();
+}
+
+void AStormworksSelfTest::CheckShotEnd(EStormShot Shot, EShotEnd Reason, const TCHAR* What)
+{
+	const UStormCinema* Cin = GetWorld()->GetAuthGameMode<AStormworksGameMode>()->Cinema;
+	const bool bCamera = PC()->GetViewTarget() == Char();
+	const bool bControls = !PC()->IsMoveInputIgnored() && !PC()->IsLookInputIgnored() && Char()->InputEnabled();
+	const int32 Granted = Cin->Granted[static_cast<int32>(Shot)];
+	static const TCHAR* Ends[] = {TEXT("completed"), TEXT("skipped"), TEXT("cancelled")};
+	Check(!Cin->IsPlaying() && Cin->LastEnd == Reason && Granted == 1 && bCamera && bControls,
+		FString::Printf(TEXT("%s: %s, granted once (%d), camera %s, controls %s"), What, Ends[static_cast<int32>(Cin->LastEnd)], Granted, bCamera ? TEXT("back on her") : TEXT("NOT back"), bControls ? TEXT("back") : TEXT("NOT back")));
 }
 
 AActor* AStormworksSelfTest::Tagged(const FName& Tag) const
@@ -168,6 +191,27 @@ void AStormworksSelfTest::Build()
 	auto Wait = [](float Seconds) { return [Seconds](float T) { return T >= Seconds; }; };
 
 	// --- Beat 1: the start, the view.
+	// --- The opening: it plays to the end by itself (natural completion).
+	Steps.Add({TEXT("opening plays"), [this, GM]() { bFlag = false; GM()->Cinema->Play(EStormShot::Opening); }, [this, GM](float T) {
+		const UStormCinema* Cin = GM()->Cinema;
+		if (T < 0.3f) return false;
+		if (!bFlag)
+		{
+			bFlag = true;
+			Check(Cin->IsPlaying(EStormShot::Opening) && PC()->GetViewTarget() != Char() && PC()->IsMoveInputIgnored() && !Char()->InputEnabled(),
+				FString::Printf(TEXT("the opening plays (%.1f s): its own camera, her controls taken"), Cin->GetLength()));
+		}
+		if (FMath::IsNearlyEqual(T, 1.2f, 0.03f)) Shot(TEXT("00a_opening"));
+		if (FMath::IsNearlyEqual(T, 6.6f, 0.03f)) Shot(TEXT("00b_opening_mara"));
+		return !Cin->IsPlaying();
+	}, 15.f});
+	Steps.Add({TEXT("opening ends"), []() {}, [this, GM](float T) {
+		if (T < 1.0f) return false;
+		CheckShotEnd(EStormShot::Opening, EShotEnd::Completed, TEXT("the opening ends by itself"));
+		Check(GM()->Music->GetMood() == EStormMood::Workshop, FString::Printf(TEXT("the workshop's music comes in (%s)"), *GM()->Music->GetTrack().ToString()));
+		return true;
+	}});
+
 	// --- Mara: her meshes, her animation, a look at her from the front.
 	Steps.Add({TEXT("mara"), [this]() {}, [this](float T) {
 		if (T < 0.1f)
@@ -228,6 +272,11 @@ void AStormworksSelfTest::Build()
 			GM()->TryInteract(Char());
 			Check(Toy()->IsPlaying(), TEXT("E winds the toy"));
 			return false;
+		}
+		if (T > 1.0f)
+		{
+			// Over her shoulder, down at the bench, for the picture.
+			AimAt(Toy()->GetActorLocation() - FVector(0.f, 0.f, 140.f));
 		}
 		if (FMath::IsNearlyEqual(T, 1.4f, 0.03f)) Shot(TEXT("01b_toy"));
 		if (Toy()->IsPlaying()) return false;
@@ -294,7 +343,8 @@ void AStormworksSelfTest::Build()
 	// --- The washing along the gallery: swinging in the wind, flapping as she runs past.
 	auto Laundry = [this]() { TActorIterator<ALaundryLine> It(GetWorld()); return It ? *It : nullptr; };
 	Steps.Add({TEXT("laundry"), [this]() { Stop(); }, [this, Laundry](float T) {
-		AimAt(Laundry()->GetActorLocation() + FVector(700.f, 0.f, -60.f));
+		// Straight across at the washing on the wall, from over the sea (along the rope it is edge-on).
+		AimAt(FVector(800.f, 950.f, 190.f));
 		if (T < 0.6f) return false;
 		const float Swing = Laundry()->SwingNear(Char()->GetActorLocation());
 		Check(FMath::Abs(Swing) > 4.f && Laundry()->Brushes > 0, FString::Printf(TEXT("the washing swings in the wind (%.0f degrees) and flapped as she ran past (%d)"), Swing, Laundry()->Brushes));
@@ -398,6 +448,25 @@ void AStormworksSelfTest::Build()
 		Check(Director()->Walkway->bArmed, TEXT("the old catwalk is armed"));
 		return true;
 	}, 12.f});
+	// The engine reveal is past half-way once the gate has opened: skip it there.
+	Steps.Add({TEXT("engine reveal"), []() {}, [this, GM](float T) {
+		UStormCinema* Cin = GM()->Cinema;
+		if (!Cin->IsPlaying(EStormShot::EngineReveal))
+		{
+			Check(false, TEXT("pulling the coupling plays the engine reveal"));
+			return true;
+		}
+		if (Cin->GetTime() < 0.45f * Cin->GetLength()) return false;
+		Log(FString::Printf(TEXT("skipping the engine reveal at %.1f of %.1f s"), Cin->GetTime(), Cin->GetLength()));
+		Cin->Skip();
+		return true;
+	}, 8.f});
+	Steps.Add({TEXT("engine reveal ends"), []() {}, [this, GM, Director](float T) {
+		if (T < 0.6f) return false;
+		CheckShotEnd(EStormShot::EngineReveal, EShotEnd::Skipped, TEXT("the engine reveal, skipped half-way"));
+		Check(GM()->Objective == Director()->EngagedObjective && GM()->Music->GetMood() == EStormMood::Escape, TEXT("skipping it still sets the catwalk objective and the escape music"));
+		return true;
+	}});
 	Steps.Add({TEXT("to the gate"), []() {}, Walk(TEXT("WP_GateFront"), 50.f), 10.f});
 	Steps.Add({TEXT("climax checkpoint"), []() {}, [this, GM](float T) {
 		Check(GM()->Checkpoint && GM()->Checkpoint->Order >= 3, TEXT("the climax checkpoint is reached"));
@@ -509,6 +578,26 @@ void AStormworksSelfTest::Build()
 		Check(GM()->Checkpoint && GM()->Checkpoint->Order >= 4, TEXT("the tower roof checkpoint is reached"));
 		return true;
 	}});
+	// The rooftop shot: skip it near its end.
+	Steps.Add({TEXT("rooftop shot"), []() {}, [this, GM](float T) {
+		UStormCinema* Cin = GM()->Cinema;
+		if (!Cin->IsPlaying(EStormShot::Rooftop))
+		{
+			Check(Cin->Seen[static_cast<int32>(EStormShot::Rooftop)], TEXT("reaching the roof plays the rooftop shot"));
+			return true;
+		}
+		if (FMath::IsNearlyEqual(Cin->GetTime(), 0.4f * Cin->GetLength(), 0.03f)) Shot(TEXT("12a_rooftop"));
+		if (Cin->GetTime() < 0.9f * Cin->GetLength()) return false;
+		Log(FString::Printf(TEXT("skipping the rooftop shot at %.1f of %.1f s"), Cin->GetTime(), Cin->GetLength()));
+		Cin->Skip();
+		return true;
+	}, 12.f});
+	Steps.Add({TEXT("rooftop shot ends"), []() {}, [this, GM](float T) {
+		if (T < 0.6f) return false;
+		CheckShotEnd(EStormShot::Rooftop, EShotEnd::Skipped, TEXT("the rooftop shot, skipped near its end"));
+		Check(GM()->Music->GetMood() == EStormMood::Rooftop, TEXT("the rooftop's music"));
+		return true;
+	}});
 	Steps.Add({TEXT("the view"), []() {}, [this](float T) {
 		AimAt(WP(TEXT("WP_Lighthouse")) + FVector(0.f, -3000.f, -600.f));
 		if (T < 0.6f) return false;
@@ -544,6 +633,35 @@ void AStormworksSelfTest::Build()
 		return true;
 	}});
 
+	// --- Cinematics again: a replay skipped at once grants nothing twice; a restart cuts one short.
+	Steps.Add({TEXT("replay the opening, skip at once"), [this, GM]() { GM()->Cinema->Play(EStormShot::Opening, true); }, [this, GM](float T) {
+		if (T < 0.15f) return false;
+		if (GM()->Cinema->IsPlaying())
+		{
+			GM()->Cinema->Skip();
+		}
+		if (T < 0.8f) return false;
+		CheckShotEnd(EStormShot::Opening, EShotEnd::Skipped, TEXT("the opening replayed and skipped at once"));
+		return true;
+	}});
+	Steps.Add({TEXT("replay the reveal, restart"), [this, GM]() { bFlag = false; Count0 = GM()->Respawns; GM()->Cinema->Play(EStormShot::EngineReveal, true); }, [this, GM, Tether](float T) {
+		if (!bFlag)
+		{
+			if (T < 1.5f) return false;
+			bFlag = true;
+			Mark = T;
+			if (UEnhancedInputLocalPlayerSubsystem* Sub = PC()->GetLocalPlayer()->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+			{
+				Sub->InjectInputForAction(Tether()->GetRestartAction(), FInputActionValue(true), {}, {});
+			}
+			return false;
+		}
+		if (T - Mark < 0.8f) return false;
+		CheckShotEnd(EStormShot::EngineReveal, EShotEnd::Cancelled, TEXT("the reveal replayed and cut short by R"));
+		Check(GM()->Respawns == Count0 + 1 && GM()->Music->Voices() <= 2, FString::Printf(TEXT("the restart happened; music voices %d (never more than two)"), GM()->Music->Voices()));
+		return true;
+	}});
+
 	// --- Her feet: one sound per plant, by surface, and the landings.
 	Steps.Add({TEXT("footsteps"), []() {}, [this](float T) {
 		const UMaraFootsteps* F = Char()->FindComponentByClass<UMaraFootsteps>();
@@ -557,6 +675,34 @@ void AStormworksSelfTest::Build()
 		Check(F->Steps > 30 && F->Steps == Anim->FootDowns + F->Landings, FString::Printf(TEXT("a footstep for each foot plant: %d steps, %d plants, %d landings"), F->Steps, Anim->FootDowns, F->Landings));
 		Check(N(TEXT("stone")) > 0 && N(TEXT("metal")) > 0, FString::Printf(TEXT("footsteps follow the surface: stone %d, wood %d, metal %d"), N(TEXT("stone")), N(TEXT("wood")), N(TEXT("metal"))));
 		Check(F->Landings > 0, FString::Printf(TEXT("landings make a sound (%d)"), F->Landings));
+		return true;
+	}});
+
+	// --- After a dozen respawns, restarts and cinematics, no loops have piled up: the wind, the
+	// alarm and the music's voices, nothing else.
+	Steps.Add({TEXT("audio loops"), []() {}, [this](float T) {
+		int32 Loops = 0, Playing = 0, Total = 0;
+		FString Names;
+		for (TObjectIterator<UAudioComponent> It; It; ++It)
+		{
+			// 2D sounds (the wind, the alarm, the music) belong to no actor and may report no world:
+			// count every live audio component (there is only the one game world).
+			if (It->IsTemplate() || !IsValid(*It))
+			{
+				continue;
+			}
+			++Total;
+			if (!It->IsPlaying() || !It->Sound)
+			{
+				continue;
+			}
+			++Playing;
+			const bool bLoop = It->Sound->IsLooping();
+			Loops += bLoop ? 1 : 0;
+			Names += It->Sound->GetName() + (bLoop ? TEXT("(loop) ") : TEXT(" "));
+		}
+		Log(FString::Printf(TEXT("audio components in the world: %d, playing %d: %s"), Total, Playing, *Names.TrimEnd()));
+		Check(Loops >= 2 && Loops <= 4, FString::Printf(TEXT("looping sounds playing: %d (the wind and the music; the alarm fades 14 s after the engine wakes; nothing piled up)"), Loops));
 		return true;
 	}});
 
@@ -645,18 +791,24 @@ void AStormworksSelfTest::Tick(float DeltaSeconds)
 		Steps[0].Start();
 	}
 	FStep& S = Steps[Index];
-	static const TSet<FString> ClipSteps = {TEXT("run 1"), TEXT("run 2"), TEXT("tether A2"), TEXT("across G1"), TEXT("run 3"), TEXT("jump G2"), TEXT("run 5"), TEXT("tether A3"), TEXT("onto the tower"), TEXT("final checkpoint"), TEXT("the view")};
+	// -StormClip: frames of the opening and of the climax, by group (tools/unreal/make_clip.py).
+	static const TMap<FString, FString> ClipSteps = {
+		{TEXT("opening plays"), TEXT("opening")},
+		{TEXT("run 1"), TEXT("climax")}, {TEXT("run 2"), TEXT("climax")}, {TEXT("tether A2"), TEXT("climax")}, {TEXT("across G1"), TEXT("climax")},
+		{TEXT("run 3"), TEXT("climax")}, {TEXT("jump G2"), TEXT("climax")}, {TEXT("run 5"), TEXT("climax")}, {TEXT("tether A3"), TEXT("climax")},
+		{TEXT("onto the tower"), TEXT("climax")}, {TEXT("final checkpoint"), TEXT("climax")},
+	};
 	// Saving a PNG takes about 0.25 s: game time runs at a quarter speed while the clip is taken,
 	// so the game still steps at a normal rate between frames instead of playing at 4 fps.
-	const bool bClipping = bClip && Passed > 20 && ClipSteps.Contains(S.Name);
+	const FString* ClipGroup = bClip ? ClipSteps.Find(S.Name) : nullptr;
 	if (bClip)
 	{
-		UGameplayStatics::SetGlobalTimeDilation(this, bClipping ? 0.25f : 1.f);
+		UGameplayStatics::SetGlobalTimeDilation(this, ClipGroup ? 0.25f : 1.f);
 	}
-	if (bClipping && Total >= ClipNext)
+	if (ClipGroup && Total >= ClipNext)
 	{
 		ClipNext = Total + 0.1f;
-		FScreenshotRequest::RequestScreenshot(FPaths::Combine(OutDir, TEXT("clip"), FString::Printf(TEXT("frame_%04d.png"), ClipFrames++)), true, false);
+		FScreenshotRequest::RequestScreenshot(FPaths::Combine(OutDir, TEXT("clip"), FString::Printf(TEXT("%s_%04d.png"), **ClipGroup, ClipFrames++)), true, false);
 	}
 	const bool bFinished = S.Update(StepT);
 	StepT += DeltaSeconds;

@@ -49,8 +49,9 @@ beam, a pound plate and a pool.
 `unreal/Source`, build scripts in `tools/unreal`): a short sequence built around Ivo's
 maintenance tether. You pull machines along their tracks, or are carried across gaps to brass
 anchor rings. Six beats run from Ivo's workshop to a collapsing catwalk in a storm and the signal
-tower's roof. It is played with the Third Person template's character (Mara is imported but not
-yet wired in), and so far only by a scripted bot. See
+tower's roof. You play Mara, with her own animation, and the sequence also has Ivo's wind-up
+toy, washing and wind chimes, three skippable cinematics, recorded sound and music. So far only a
+scripted bot has played it, and nobody has listened to it. See
 [docs/UNREAL_STORMWORKS.md](docs/UNREAL_STORMWORKS.md).
 
 First-play length has not been measured with a player yet. The autopilot, which never hesitates,
