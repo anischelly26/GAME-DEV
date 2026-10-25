@@ -175,6 +175,48 @@ def import_music():
     log("music: %d tracks" % done)
 
 
+# Where sounds are heard. Without attenuation settings Unreal plays a sound unspatialised at full
+# volume wherever the listener is: the chimes on the gallery were as loud from the tower roof, the
+# catwalk falling behind her as loud as at her feet. Sounds made by her (steps, the tether, the toy)
+# fade within about 20 m; machines, the catwalk and the chimes carry about 66 m. 2D sounds (the
+# wind, the alarm, thunder, music, the interface) have none.
+NEAR = ["S_TOS_Fire", "S_TOS_Latch", "S_TOS_Land", "S_TOS_Reel", "S_TOS_Refuse", "SFX_Click", "SFX_Latch"]
+NEAR += ["SFX_%s_%d" % (k, i) for k in ("Step_Stone", "Step_Wood", "Step_Metal", "Land", "LandHeavy", "MetalLight", "Tin", "Glass") for i in range(5)]
+NEAR += ["SFX_Creak_%d" % i for i in range(3)] + ["SFX_Cloth_%d" % i for i in range(4)]
+FAR = ["S_TOS_Grind", "S_TOS_Clunk", "S_TOS_Creak", "S_TOS_Crash"] + ["S_TOS_Chime_%d" % i for i in range(5)]
+FAR += ["SFX_%s_%d" % (k, i) for k in ("MetalHeavy", "Bell") for i in range(5)]
+
+
+def make_attenuation(name, inner_m, falloff_m):
+    path = "%s/Audio/%s" % (ROOT, name)
+    fresh(path)
+    att = AT.create_asset(name, ROOT + "/Audio", unreal.SoundAttenuation, unreal.SoundAttenuationFactory())
+    st = att.get_editor_property("attenuation")
+    st.set_editor_property("attenuate", True)
+    st.set_editor_property("spatialize", True)
+    st.set_editor_property("attenuation_shape", unreal.AttenuationShape.SPHERE)
+    st.set_editor_property("attenuation_shape_extents", unreal.Vector(inner_m * 100.0, 0.0, 0.0))
+    st.set_editor_property("falloff_distance", falloff_m * 100.0)
+    st.set_editor_property("distance_algorithm", unreal.AttenuationDistanceModel.ATTENUATION_NATURAL_SOUND)
+    att.set_editor_property("attenuation", st)
+    EAL.save_loaded_asset(att, only_if_is_dirty=False)
+    return att
+
+
+def assign_attenuation():
+    near = make_attenuation("SA_TOS_Near", 2.0, 18.0)
+    far = make_attenuation("SA_TOS_Far", 6.0, 60.0)
+    done = 0
+    for names, att in ((NEAR, near), (FAR, far)):
+        for n in names:
+            snd = unreal.load_asset("%s/Audio/%s" % (ROOT, n))
+            if snd:
+                snd.set_editor_property("attenuation_settings", att)
+                EAL.save_loaded_asset(snd, only_if_is_dirty=False)
+                done += 1
+    log("attenuation: %d positional sounds (near %d, far %d)" % (done, len(NEAR), len(FAR)))
+
+
 SETS = {
     # name: (Poly Haven id, tile size in metres)
     "stone": ("castle_wall_slates", 2.5),
@@ -899,6 +941,7 @@ def main():
         import_sounds()
         import_recorded_sounds()
         import_music()
+        assign_attenuation()
         tex = import_textures()
         M = make_materials(tex)
         EAL.save_directory(ROOT, only_if_is_dirty=False, recursive=True)

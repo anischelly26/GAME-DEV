@@ -24,6 +24,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Stormworks/CollapsingWalkway.h"
 #include "Stormworks/MaraAnimInstance.h"
+#include "Stormworks/MaraFace.h"
 #include "Stormworks/LaundryLine.h"
 #include "Stormworks/MaraFootsteps.h"
 #include "Stormworks/WindChimes.h"
@@ -32,12 +33,15 @@
 #include "Stormworks/StormCinema.h"
 #include "Stormworks/StormMusic.h"
 #include "Stormworks/StormDirector.h"
+#include "Stormworks/StormworksAssets.h"
 #include "Stormworks/StormworksGameMode.h"
 #include "Stormworks/StoryNote.h"
 #include "Stormworks/TetherComponent.h"
 #include "Stormworks/TetherMovable.h"
 #include "Stormworks/TetherPickup.h"
 #include "Stormworks/TetherPoint.h"
+#include "RenderTimer.h"
+#include "RHI.h"
 #include "ShaderCompiler.h"
 #include "UnrealClient.h"
 
@@ -97,6 +101,13 @@ ACharacter* AStormworksSelfTest::Char() const
 APlayerController* AStormworksSelfTest::PC() const
 {
 	return GetWorld()->GetFirstPlayerController();
+}
+
+FString AStormworksSelfTest::BucketLine(const TCHAR* Name, const FFrameBucket& B) const
+{
+	const double N = FMath::Max(1, B.Frames);
+	return FString::Printf(TEXT("frame cost, %s: %d frames, mean %.1f ms (game thread %.1f, render thread %.1f, GPU %.1f), %d over 33 ms"),
+		Name, B.Frames, B.Frame / N, B.Game / N, B.Render / N, B.Gpu / N, B.Over33);
 }
 
 void AStormworksSelfTest::CheckShotEnd(EStormShot Shot, EShotEnd Reason, const TCHAR* What)
@@ -229,9 +240,28 @@ void AStormworksSelfTest::Build()
 		const UMaraAnimInstance* Anim = Cast<UMaraAnimInstance>(Char()->GetMesh()->GetAnimInstance());
 		Check(Anim != nullptr && Anim->Clips.Num() >= 20 && Meshes.Num() > 1, FString::Printf(TEXT("the hero is Mara: her animation (%d clips) on %d mesh parts"), Anim ? Anim->Clips.Num() : 0, Meshes.Num()));
 		Check(FMath::IsNearlyEqual(Char()->GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight(), 66.f, 1.f), TEXT("her capsule fits her 1.3 m"));
+		const UMaraFace* Face = Char()->FindComponentByClass<UMaraFace>();
+		Check(Face && Face->Eyes == 2 && Face->Tails == 2, FString::Printf(TEXT("her face: %d eyes that turn and blink, %d scarf tails"), Face ? Face->Eyes : 0, Face ? Face->Tails : 0));
 		Shot(TEXT("00_mara"));
 		return true;
 	}, 6.f});
+	// The lids, held shut for a picture: they must close over the eyes, not fold back.
+	Steps.Add({TEXT("lids"), [this]() { if (UMaraFace* F = Char()->FindComponentByClass<UMaraFace>()) F->ForceClosure = 1.f; }, [this](float T) {
+		UMaraFace* F = Char()->FindComponentByClass<UMaraFace>();
+		if (!F) return true;
+		if (T < 0.4f) return false;
+		if (!bFlag)
+		{
+			bFlag = true;
+			Check(F->GetLidClosure() > 0.9f, FString::Printf(TEXT("the lids shut (%.2f)"), F->GetLidClosure()));
+			Shot(TEXT("00c_lids_shut"));
+			return false;
+		}
+		if (T < 0.8f) return false;
+		F->ForceClosure = -1.f;
+		bFlag = false;
+		return true;
+	}});
 	Steps.Add({TEXT("start"), [this]() {}, [this, GM, Tether](float T) {
 		if (T < 2.5f)
 		{
@@ -399,6 +429,7 @@ void AStormworksSelfTest::Build()
 			bFlag = true;
 			Shot(TEXT("07_tether_across"));
 			FPlatformProcess::Sleep(0.3f);
+			bSkipFrameStat = true;
 			Log(TEXT("a 0.3 s stall in mid-carry"));
 		}
 		if (T < 1.0f || !Char()->GetCharacterMovement()->IsMovingOnGround()) return false;
@@ -566,6 +597,7 @@ void AStormworksSelfTest::Build()
 			// stop in mid-air over the gap. (It adds about 0.4 s to the climax time.)
 			bFlag = true;
 			FPlatformProcess::Sleep(0.5f);
+			bSkipFrameStat = true;
 			Log(TEXT("a 0.5 s stall that ends the carry"));
 		}
 		if (T < 0.8f || !Char()->GetCharacterMovement()->IsMovingOnGround()) return false;
@@ -659,6 +691,21 @@ void AStormworksSelfTest::Build()
 		if (T - Mark < 0.8f) return false;
 		CheckShotEnd(EStormShot::EngineReveal, EShotEnd::Cancelled, TEXT("the reveal replayed and cut short by R"));
 		Check(GM()->Respawns == Count0 + 1 && GM()->Music->Voices() <= 2, FString::Printf(TEXT("the restart happened; music voices %d (never more than two)"), GM()->Music->Voices()));
+		return true;
+	}});
+
+	// --- Her face over the run, and where the sounds are heard.
+	Steps.Add({TEXT("face and sound"), []() {}, [this](float T) {
+		const UMaraFace* F = Char()->FindComponentByClass<UMaraFace>();
+		auto Seen = [F](EMaraMood M) { return F && (F->MoodsSeen & (1 << static_cast<int32>(M))) != 0; };
+		Check(F && F->Blinks >= 8, FString::Printf(TEXT("she blinks every few seconds (%d blinks)"), F ? F->Blinks : 0));
+		Check(Seen(EMaraMood::Determined) && Seen(EMaraMood::Surprised) && Seen(EMaraMood::Happy), FString::Printf(TEXT("her face follows the game: determined %s, surprised %s, happy %s"),
+			Seen(EMaraMood::Determined) ? TEXT("yes") : TEXT("no"), Seen(EMaraMood::Surprised) ? TEXT("yes") : TEXT("no"), Seen(EMaraMood::Happy) ? TEXT("yes") : TEXT("no")));
+		const USoundBase* Step = Stormworks::SoundAsset(TEXT("SFX_Step_Stone_0"));
+		const USoundBase* Chime = Stormworks::SoundAsset(TEXT("S_TOS_Chime_0"));
+		const USoundBase* Wind = Stormworks::SoundAsset(TEXT("S_TOS_Wind"));
+		Check(Step && Step->AttenuationSettings && Chime && Chime->AttenuationSettings && Wind && !Wind->AttenuationSettings,
+			TEXT("sounds in the world fade with distance (steps, chimes); the wind and the music do not"));
 		return true;
 	}});
 
@@ -781,6 +828,21 @@ void AStormworksSelfTest::Tick(float DeltaSeconds)
 		FrameSum += DeltaSeconds;
 		FrameWorst = FMath::Max(FrameWorst, DeltaSeconds);
 		FramesOver33 += DeltaSeconds > 0.0334f ? 1 : 0;
+		if (bSkipFrameStat)
+		{
+			bSkipFrameStat = false;
+		}
+		else
+		{
+			const AStormworksGameMode* Mode = GetWorld()->GetAuthGameMode<AStormworksGameMode>();
+			FFrameBucket& B = Mode && Mode->Cinema && Mode->Cinema->IsPlaying() ? Cinematics : Gameplay;
+			++B.Frames;
+			B.Over33 += DeltaSeconds > 0.0334f ? 1 : 0;
+			B.Frame += DeltaSeconds * 1000.0;
+			B.Game += FPlatformTime::ToMilliseconds(GGameThreadTime);
+			B.Render += FPlatformTime::ToMilliseconds(GRenderThreadTime);
+			B.Gpu += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles(0));
+		}
 	}
 	if (Index < 0)
 	{
@@ -823,6 +885,8 @@ void AStormworksSelfTest::Tick(float DeltaSeconds)
 		if (Index >= Steps.Num())
 		{
 			bDone = true;
+			Log(BucketLine(TEXT("gameplay"), Gameplay));
+			Log(BucketLine(TEXT("cinematics"), Cinematics));
 			Log(FString::Printf(TEXT("frames: %d, mean %.1f ms (%.0f fps), worst %.1f ms, %d over 33 ms"), Frames, Frames ? 1000.f * FrameSum / Frames : 0.f, FrameSum > 0.f ? Frames / FrameSum : 0.f, FrameWorst * 1000.f, FramesOver33));
 			Log(FString::Printf(TEXT("SELFTEST RESULT: %d passed, %d failed, %.1f s"), Passed, Failed, Total));
 			QuitIn = 1.5f;

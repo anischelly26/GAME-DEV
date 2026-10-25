@@ -79,6 +79,21 @@ private:
 	float FrameSum = 0.f;
 	float FrameWorst = 0.f;
 	int32 FramesOver33 = 0;
+	/** Frame cost split by what is on screen (the engine's stat unit times, per frame). */
+	struct FFrameBucket
+	{
+		int32 Frames = 0;
+		int32 Over33 = 0;
+		double Frame = 0.0;
+		double Game = 0.0;
+		double Render = 0.0;
+		double Gpu = 0.0;
+	};
+	FFrameBucket Gameplay;
+	FFrameBucket Cinematics;
+	/** The frame after a deliberate stall is not counted in the buckets. */
+	bool bSkipFrameStat = false;
+	FString BucketLine(const TCHAR* Name, const FFrameBucket& B) const;
 	float ShaderWaitLog = 0.f;
 	// -StormClip: a burst of frames through the climax, for a short clip.
 	bool bClip = false;

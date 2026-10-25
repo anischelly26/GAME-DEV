@@ -8,8 +8,7 @@
 #include "ItTakesOne.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
-#include "Stormworks/MaraAnimInstance.h"
-#include "Stormworks/MaraFootsteps.h"
+#include "Stormworks/MaraCharacter.h"
 #include "Stormworks/StormCheckpoint.h"
 #include "Stormworks/StormCinema.h"
 #include "Stormworks/StormMusic.h"
@@ -20,7 +19,6 @@
 #include "Stormworks/StoryNote.h"
 #include "Stormworks/TetherComponent.h"
 #include "Stormworks/WorkshopToy.h"
-#include "UObject/ConstructorHelpers.h"
 
 AStormworksGameMode::AStormworksGameMode()
 {
@@ -29,17 +27,10 @@ AStormworksGameMode::AStormworksGameMode()
 	Cinema = CreateDefaultSubobject<UStormCinema>(TEXT("Cinema"));
 	Music = CreateDefaultSubobject<UStormMusic>(TEXT("Music"));
 
-	// The project's own character, controls and animation (the Third Person template's).
-	static ConstructorHelpers::FClassFinder<APawn> PawnBP(TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter"));
-	if (PawnBP.Succeeded())
-	{
-		DefaultPawnClass = PawnBP.Class;
-	}
-	static ConstructorHelpers::FClassFinder<APlayerController> ControllerBP(TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonPlayerController"));
-	if (ControllerBP.Succeeded())
-	{
-		PlayerControllerClass = ControllerBP.Class;
-	}
+	// Mara (her own character class: the template's movement, camera and controls, nothing from
+	// the template's content) and a plain player controller.
+	DefaultPawnClass = AMaraCharacter::StaticClass();
+	PlayerControllerClass = APlayerController::StaticClass();
 }
 
 void AStormworksGameMode::StartPlay()
@@ -85,12 +76,6 @@ void AStormworksGameMode::RestartPlayer(AController* NewPlayer)
 	Super::RestartPlayer(NewPlayer);
 	if (ACharacter* C = NewPlayer ? Cast<ACharacter>(NewPlayer->GetPawn()) : nullptr)
 	{
-		// Mara herself, if her import is in the project (else the template's mannequin stays).
-		if (!C->FindComponentByClass<UMaraFootsteps>() && UMaraAnimInstance::Dress(C))
-		{
-			UMaraFootsteps* F = NewObject<UMaraFootsteps>(C, TEXT("Footsteps"));
-			F->RegisterComponent();
-		}
 		if (!C->FindComponentByClass<UTetherComponent>())
 		{
 			UTetherComponent* T = NewObject<UTetherComponent>(C, TEXT("Tether"));

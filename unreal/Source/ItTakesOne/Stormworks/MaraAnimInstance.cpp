@@ -13,6 +13,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "ItTakesOne.h"
+#include "Stormworks/MaraFace.h"
 #include "Stormworks/TetherComponent.h"
 
 namespace
@@ -203,6 +204,7 @@ bool UMaraAnimInstance::Dress(ACharacter* C)
 	// pose, so relative to the bone they sit at the inverse of the bone's reference pose.
 	const FReferenceSkeleton& Ref = Parts[0]->GetRefSkeleton();
 	int32 Attached = 0;
+	TArray<UStaticMeshComponent*> RigidComponents;
 	for (UStaticMesh* R : Rigid)
 	{
 		FString Bone = R->GetName();
@@ -218,7 +220,11 @@ bool UMaraAnimInstance::Dress(ACharacter* C)
 		P->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		P->SetupAttachment(Body, FName(*Bone));
 		P->SetRelativeTransform(FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, BoneIndex).Inverse());
+		// Small parts inside her silhouette: no shadows (as in the web game), and 22 fewer shadow
+		// draws for every shadow-casting light.
+		P->SetCastShadow(false);
 		P->RegisterComponent();
+		RigidComponents.Add(P);
 		++Attached;
 	}
 	if (UMaraAnimInstance* Anim = Cast<UMaraAnimInstance>(Body->GetAnimInstance()))
@@ -226,6 +232,10 @@ bool UMaraAnimInstance::Dress(ACharacter* C)
 		Anim->Clips = MoveTemp(Clips);
 	}
 	UE_LOG(LogStormworks, Log, TEXT("Mara: %d rigid parts on their bones"), Attached);
+	// Her living face and her scarf's tails.
+	UMaraFace* Face = NewObject<UMaraFace>(C, TEXT("MaraFace"));
+	Face->RegisterComponent();
+	Face->Setup(Body, RigidComponents);
 	UE_LOG(LogStormworks, Log, TEXT("Mara: %d mesh parts (leader %s, %d bones), %d clips"), Parts.Num(), *Parts[0]->GetName(), Parts[0]->GetRefSkeleton().GetNum(), Cast<UMaraAnimInstance>(Body->GetAnimInstance()) ? Cast<UMaraAnimInstance>(Body->GetAnimInstance())->Clips.Num() : 0);
 	return true;
 }
