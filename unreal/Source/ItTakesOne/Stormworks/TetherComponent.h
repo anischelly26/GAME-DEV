@@ -108,6 +108,7 @@ private:
 	void OnFirePressed();
 	void OnReleasePressed();
 	void OnRestartPressed();
+	void OnSkipPressed();
 
 	void UpdateTargeting();
 	void SetState(ETetherState NewState);
@@ -134,6 +135,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInputAction> RestartAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> SkipAction;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInputMappingContext> Mapping;

@@ -4,12 +4,13 @@
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "GameFramework/Character.h"
+#include "Stormworks/StormCinema.h"
 #include "Stormworks/StormworksAssets.h"
 #include "Stormworks/StormworksGameMode.h"
 #include "Stormworks/StoryNote.h"
 #include "Stormworks/TetherComponent.h"
-#include "Stormworks/WorkshopToy.h"
 #include "Stormworks/TetherPoint.h"
+#include "Stormworks/WorkshopToy.h"
 
 namespace
 {
@@ -95,6 +96,16 @@ void AStormworksHUD::DrawHUD()
 	const float SY = Canvas->ClipY;
 	const float UI = FMath::Clamp(SY / 1080.f, 0.6f, 2.f);
 	const double Now = GetWorld()->GetTimeSeconds();
+
+	// A cinematic: letterbox bars and the way out of it, nothing else.
+	if (GM->Cinema && GM->Cinema->IsPlaying())
+	{
+		const float Bar = SY * 0.09f;
+		DrawRect(FLinearColor::Black, 0.f, 0.f, SX, Bar);
+		DrawRect(FLinearColor::Black, 0.f, SY - Bar, SX, Bar);
+		DrawLabel(TEXT("[Space]  Skip"), SX - 150.f * UI, SY - Bar * 0.5f - 12.f * UI, FLinearColor(0.8f, 0.82f, 0.85f, 0.7f), 0.8f * UI, false, false);
+		return;
+	}
 
 	// Objective.
 	if (!GM->Objective.IsEmpty())

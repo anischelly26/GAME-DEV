@@ -16,6 +16,7 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "ItTakesOne.h"
+#include "Stormworks/StormCinema.h"
 #include "Stormworks/StormworksAssets.h"
 #include "Stormworks/StormworksGameMode.h"
 #include "Stormworks/TetherMovable.h"
@@ -109,6 +110,7 @@ void UTetherComponent::SetupInput()
 	FireAction = NewObject<UInputAction>(this, TEXT("IA_Tether"));
 	ReleaseAction = NewObject<UInputAction>(this, TEXT("IA_TetherRelease"));
 	RestartAction = NewObject<UInputAction>(this, TEXT("IA_RestartCheckpoint"));
+	SkipAction = NewObject<UInputAction>(this, TEXT("IA_SkipCinematic"));
 	Mapping = NewObject<UInputMappingContext>(this, TEXT("IMC_Tether"));
 	Mapping->MapKey(FireAction, EKeys::E);
 	Mapping->MapKey(FireAction, EKeys::LeftMouseButton);
@@ -117,6 +119,11 @@ void UTetherComponent::SetupInput()
 	Mapping->MapKey(ReleaseAction, EKeys::Gamepad_FaceButton_Bottom);
 	Mapping->MapKey(RestartAction, EKeys::R);
 	Mapping->MapKey(RestartAction, EKeys::Gamepad_Special_Left);
+	// Skipping a cinematic (E skips too, through OnFirePressed).
+	Mapping->MapKey(SkipAction, EKeys::SpaceBar);
+	Mapping->MapKey(SkipAction, EKeys::Enter);
+	Mapping->MapKey(SkipAction, EKeys::Gamepad_FaceButton_Bottom);
+	Mapping->MapKey(SkipAction, EKeys::Gamepad_FaceButton_Right);
 
 	if (ULocalPlayer* LP = PC->GetLocalPlayer())
 	{
@@ -130,6 +137,7 @@ void UTetherComponent::SetupInput()
 		EIC->BindAction(FireAction, ETriggerEvent::Started, this, &UTetherComponent::OnFirePressed);
 		EIC->BindAction(ReleaseAction, ETriggerEvent::Started, this, &UTetherComponent::OnReleasePressed);
 		EIC->BindAction(RestartAction, ETriggerEvent::Started, this, &UTetherComponent::OnRestartPressed);
+		EIC->BindAction(SkipAction, ETriggerEvent::Started, this, &UTetherComponent::OnSkipPressed);
 		bInputBound = true;
 	}
 	else
@@ -138,11 +146,24 @@ void UTetherComponent::SetupInput()
 	}
 }
 
-void UTetherComponent::OnFirePressed()
+void UTetherComponent::OnSkipPressed()
 {
-	// Reading notes shares the button: a note in front of her wins.
 	if (AStormworksGameMode* GM = GetWorld()->GetAuthGameMode<AStormworksGameMode>())
 	{
+		GM->Cinema->Skip();
+	}
+}
+
+void UTetherComponent::OnFirePressed()
+{
+	// Reading notes shares the button: a note in front of her wins. During a cinematic it skips.
+	if (AStormworksGameMode* GM = GetWorld()->GetAuthGameMode<AStormworksGameMode>())
+	{
+		if (GM->Cinema->IsPlaying())
+		{
+			GM->Cinema->Skip();
+			return;
+		}
 		if (GM->TryInteract(GetCharacter()))
 		{
 			return;

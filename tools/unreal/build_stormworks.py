@@ -154,6 +154,27 @@ def import_recorded_sounds():
     log("recorded sounds: %d imported, %d missing%s" % (done, len(missing), (" (" + ", ".join(missing[:6]) + ")") if missing else ""))
 
 
+# Music: the web game's CC0 tracks (docs/ASSETS.md), one per mood (StormMusic.cpp). Chosen by
+# their descriptions; nobody has listened to them in this scene yet.
+MUSIC_DIR = os.path.join(REPO, "public", "assets", "audio", "music")
+MUSIC = [
+    ("MUS_QuietPiano", "cell.ogg"),          # workshop: warm curiosity
+    ("MUS_SailorsChant", "title.ogg"),       # gallery: light forward motion
+    ("MUS_TreasureHunter", "hall.mp3"),      # the escape
+    ("MUS_RisingMoon", "ending.mp3"),        # the roof: relief
+]
+
+
+def import_music():
+    done = 0
+    for name, fname in MUSIC:
+        s = import_file(os.path.join(MUSIC_DIR, fname), ROOT + "/Audio", name)
+        if s:
+            s.set_editor_property("looping", True)
+            done += 1
+    log("music: %d tracks" % done)
+
+
 SETS = {
     # name: (Poly Haven id, tile size in metres)
     "stone": ("castle_wall_slates", 2.5),
@@ -638,6 +659,7 @@ def build_level(M):
     b.lamp("Gallery_Lamp_Far", 27.5, 10.3, 3.6, 4000, 8)
     # The washing, pegged along the wall side of the gallery, and the hooks that hold its rope.
     line = b.spawn(unreal.LaundryLine, V(-1.5, 10.55, 2.5), label="Gallery_Laundry", folder=F)
+    b.lamp("Gallery_Lamp_Laundry", 4.5, 10.3, 3.1, 3000, 7)
     line.set_editor_property("length", 1250.0)
     for x in (-1.5, 11.0):
         b.box("Gallery_LaundryHook_%d" % int(x), x - 0.04, x + 0.04, 10.0, 10.6, 2.46, 2.54, "MI_TOS_Iron", F, collide=False)
@@ -718,7 +740,14 @@ def build_level(M):
         b.mesh(b.sphere, V(x, y, -10.5), unreal.Vector(0.6, 0.6, 0.6), "MI_TOS_WindowGlow", "Harbour_Light_%d" % i, "World", collide=False)
     b.light("Harbour_Glow", 187, 70, -8, (1, 0.6, 0.3), 60000, 60)
 
-    b.spawn(unreal.StormRain, V(0, 0, 0), label="Rain", folder="World")
+    rain = b.spawn(unreal.StormRain, V(0, 0, 0), label="Rain", folder="World")
+    # Indoors stays dry: the workshop, the corridor, Ivo's hut.
+    dry = []
+    for lo, hi in (((-8.4, -4.4, -1.0), (0.4, 4.4, 4.4)), ((-4.9, 4.0, -1.0), (0.1, 9.4, 3.3)), ((84.8, 13.0, 4.0), (89.2, 15.9, 7.1))):
+        box = unreal.Box(V(*lo), V(*hi))
+        box.set_editor_property("is_valid", True)
+        dry.append(box)
+    rain.set_editor_property("dry_boxes", dry)
 
     # ---------------------------------------------------------------- checkpoints, the director, the start
     b.checkpoint(0, "Workshop", -6.5, 0.0, 0.0, 0, "Find a way out of the workshop", (1.0, 1.0, 1.0))
@@ -749,8 +778,86 @@ def build_level(M):
     ):
         b.waypoint(tag, x, y, z)
 
+    make_cinematics(b, lighthouse_top)
     les.save_current_level()
     log("level: %d actors spawned, saved %s" % (b.count, MAP))
+
+
+# The three cinematics: (seconds, [(time, camera position, look-at)...]) in metres. They start only
+# where she stands still; the game blends back to the gameplay camera at the end (StormCinema).
+def shots(lighthouse):
+    return {
+        # The light first, close, its beam turning; then the camera pulls back across the sea (above
+        # the signal tower's roof) to the lit workshop window, turns, and comes in between the bars
+        # to Mara, who is looking out at it.
+        "Opening": (8.0, [
+            (0.0, (118.0, 24.0, 17.0), lighthouse),
+            (1.8, (112.0, 22.0, 16.5), lighthouse),
+            (4.0, (9.0, -0.8, 3.0), lighthouse),
+            (5.3, (1.8, -0.2, 2.3), (-4.0, 0.0, 1.4)),
+            (6.6, (-1.4, 0.7, 1.9), (-6.5, 0.0, 0.95)),
+            (8.0, (-3.7, 0.6, 1.55), (-6.5, 0.0, 0.95)),
+        ]),
+        # From behind her at the coupling: the gate grinding open, then up and along the catwalk to
+        # the tower.
+        "EngineReveal": (5.0, [
+            (0.0, (25.5, 13.0, 3.0), (33.5, 11.5, 2.2)),
+            (2.4, (28.0, 13.2, 3.6), (35.0, 11.0, 2.0)),
+            (5.0, (32.5, 13.2, 7.0), (84.0, 11.5, 3.5)),
+        ]),
+        # Past her to the east, up to the lighthouse, round to Ivo's hut.
+        "Rooftop": (6.0, [
+            (0.0, (83.4, 13.3, 5.6), (100.0, 12.0, 6.0)),
+            (3.0, (84.0, 10.0, 6.8), lighthouse),
+            (6.0, (84.5, 12.2, 5.6), (87.2, 14.6, 5.1)),
+        ]),
+    }
+
+
+def make_cinematics(b, lighthouse_top):
+    lighthouse = (lighthouse_top.x / 100.0, lighthouse_top.y / 100.0, lighthouse_top.z / 100.0)
+    rate = 30
+    for name, (length, keys) in shots(lighthouse).items():
+        path = "%s/Cinematics/LS_SW_%s" % (ROOT, name)
+        fresh(path)
+        cam = b.eas.spawn_actor_from_class(unreal.CineCameraActor, V(*keys[0][1]), R())
+        cam.set_actor_label("Cine_%s" % name)
+        cam.set_folder_path("Cinematics")
+        cc = cam.get_cine_camera_component()
+        cc.set_editor_property("current_focal_length", 24.0)
+        focus = cc.get_editor_property("focus_settings")
+        focus.set_editor_property("focus_method", unreal.CameraFocusMethod.DISABLE)
+        cc.set_editor_property("focus_settings", focus)
+
+        seq = AT.create_asset("LS_SW_%s" % name, ROOT + "/Cinematics", unreal.LevelSequence, unreal.LevelSequenceFactoryNew())
+        seq.set_display_rate(unreal.FrameRate(rate, 1))
+        frames = int(round(length * rate))
+        seq.set_playback_start(0)
+        seq.set_playback_end(frames)
+        binding = seq.add_possessable(cam)
+        section = binding.add_track(unreal.MovieScene3DTransformTrack).add_section()
+        section.set_range(0, frames)
+        channels = section.get_all_channels()
+        last_yaw = None
+        for t, pos, target in keys:
+            d = (target[0] - pos[0], target[1] - pos[1], target[2] - pos[2])
+            yaw = math.degrees(math.atan2(d[1], d[0]))
+            if last_yaw is not None:
+                # The short way round between keys.
+                while yaw - last_yaw > 180.0:
+                    yaw -= 360.0
+                while yaw - last_yaw < -180.0:
+                    yaw += 360.0
+            last_yaw = yaw
+            pitch = math.degrees(math.atan2(d[2], math.hypot(d[0], d[1])))
+            frame = unreal.FrameNumber(int(round(t * rate)))
+            for i, v in enumerate((pos[0] * 100.0, pos[1] * 100.0, pos[2] * 100.0, 0.0, pitch, yaw)):
+                channels[i].add_key(frame, v)
+        cut = seq.add_track(unreal.MovieSceneCameraCutTrack).add_section()
+        cut.set_range(0, frames)
+        cut.set_camera_binding_id(seq.get_binding_id(binding))
+        EAL.save_loaded_asset(seq, only_if_is_dirty=False)
+        log("cinematic LS_SW_%s: %.1f s, %d keys" % (name, length, len(keys)))
 
 
 def place_lighthouse(b):
@@ -791,6 +898,7 @@ def main():
     try:
         import_sounds()
         import_recorded_sounds()
+        import_music()
         tex = import_textures()
         M = make_materials(tex)
         EAL.save_directory(ROOT, only_if_is_dirty=False, recursive=True)

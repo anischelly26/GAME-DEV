@@ -69,7 +69,13 @@ void AStormRain::Tick(float DeltaSeconds)
 				O[Axis] -= 2.f * E;
 			}
 		}
-		Transforms[i] = FTransform(Along, Cam + O, Scale);
+		const FVector At = Cam + O;
+		bool bDry = false;
+		for (const FBox& B : DryBoxes)
+		{
+			bDry |= B.IsInside(At);
+		}
+		Transforms[i] = FTransform(Along, At, bDry ? FVector::ZeroVector : Scale);
 	}
 	Streaks->BatchUpdateInstancesTransforms(0, Transforms, true, true, true);
 }

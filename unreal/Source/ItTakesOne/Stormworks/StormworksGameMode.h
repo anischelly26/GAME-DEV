@@ -8,7 +8,10 @@ class ACharacter;
 class AStormCheckpoint;
 class AStormDirector;
 class AStoryNote;
+class UStormCinema;
+class UStormMusic;
 class UTetherComponent;
+enum class EStormShot : uint8;
 
 /**
  * The Stormworks Escape's rules: who plays (the project's Third Person character, given Ivo's
@@ -52,6 +55,14 @@ public:
 	float StartTime = 0.f;
 	float CompleteTime = 0.f;
 
+	/** The three cinematics and their one finishing rule. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stormworks")
+	TObjectPtr<UStormCinema> Cinema;
+
+	/** The music, following the sequence's moods. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stormworks")
+	TObjectPtr<UStormMusic> Music;
+
 	void SetObjective(const FString& Text);
 	void ShowMessage(const FString& Text, float Seconds = 2.6f);
 
@@ -80,4 +91,7 @@ public:
 private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UObject>> Preloaded;
+
+	bool bOpeningPending = false;
+	void OnShotProgress(EStormShot Shot);
 };

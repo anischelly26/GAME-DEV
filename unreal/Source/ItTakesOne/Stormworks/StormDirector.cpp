@@ -11,6 +11,8 @@
 #include "Sound/SoundBase.h"
 #include "Stormworks/CollapsingWalkway.h"
 #include "Stormworks/StormCheckpoint.h"
+#include "Stormworks/StormCinema.h"
+#include "Stormworks/StormMusic.h"
 #include "Stormworks/StormworksAssets.h"
 #include "Stormworks/StormworksGameMode.h"
 #include "Stormworks/TetherComponent.h"
@@ -80,7 +82,10 @@ void AStormDirector::Engage()
 	if (AStormworksGameMode* GM = GetWorld()->GetAuthGameMode<AStormworksGameMode>())
 	{
 		GM->ShowMessage(TEXT("The storm engine is live. The gate is opening!"), 3.f);
-		GM->SetObjective(EngagedObjective);
+		// The reveal shows the gate opening and the catwalk; its end sets the objective (and the
+		// music), once, whether it is watched or skipped.
+		GM->Music->SetMood(EStormMood::Anticipation);
+		GM->Cinema->Play(EStormShot::EngineReveal);
 	}
 	if (APawn* P = UGameplayStatics::GetPlayerPawn(this, 0))
 	{
