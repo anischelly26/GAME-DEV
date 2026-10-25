@@ -7,6 +7,8 @@
 class ACharacter;
 class APlayerController;
 class ATetherPoint;
+enum class EShotEnd : uint8;
+enum class EStormShot : uint8;
 
 /**
  * A scripted player for The Stormworks Escape, started with `-StormSelfTest`. It plays the
@@ -42,6 +44,8 @@ private:
 
 	void Build();
 	void Check(bool bOk, const FString& What);
+	/** After a cinematic: ended for this reason, granted exactly once, camera and controls back. */
+	void CheckShotEnd(EStormShot Shot, EShotEnd Reason, const TCHAR* What);
 	void Log(const FString& Line);
 	void Shot(const FString& Name);
 

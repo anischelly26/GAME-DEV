@@ -332,17 +332,24 @@ The Unreal sequence (see [UNREAL_STORMWORKS.md](UNREAL_STORMWORKS.md)) has its o
 self-test, run in the rendered standalone game:
 
 ```
-powershell -File tools/unreal/run_selftest.ps1                          # 40 checks, ~90 s
+powershell -File tools/unreal/run_selftest.ps1                          # 62 checks, ~2 min
 powershell -File tools/unreal/run_selftest.ps1 -ExecCmds "r.VolumetricFog 0"   # A/B a console variable
-powershell -File tools/unreal/run_selftest.ps1 -Clip; python tools/unreal/make_clip.py   # climax GIF
+powershell -File tools/unreal/run_selftest.ps1 -Clip; python tools/unreal/make_clip.py --group opening   # or --group climax
 ```
 
 Results: `<Project>/Saved/StormworksSelfTest/results.txt` (also printed), screenshots 01–14 beside
-it. The bot drives the template character with movement input and control rotation, fires the
-tether with `TryFire()`, and presses restart through the Enhanced Input action. It covers a normal
-start, the full route, a missed jump and recovery, repeated interactions, leaving and returning to
-an interaction, a fall during the climax, restarting from a checkpoint, and reaching the end
-without getting stuck. It is not a playtest: nobody has played the sequence by hand yet.
+it. The bot drives Mara with movement input and control rotation, fires the tether with
+`TryFire()`, interacts with `TryInteract()`, skips cinematics with `Skip()`, and presses restart
+through the Enhanced Input action; hardware input is ignored during the run. It covers:
+- a normal start, the full route, a missed jump and recovery, a fall during the climax;
+- repeated interactions, and leaving and returning to an interaction;
+- the toy, the washing, the chimes;
+- every way a cinematic can end: by itself, skipped at the start, middle and end, and cancelled by
+  a restart;
+- footsteps by surface, and the live audio loops;
+- restarting from a checkpoint, and reaching the end without getting stuck.
+
+It is not a playtest: nobody has played the sequence by hand or listened to it yet.
 
 **Manual check (about 3 minutes), for the first person to play it:**
 
@@ -356,11 +363,21 @@ without getting stuck. It is not a playtest: nobody has played the sequence by h
 5. Pull the coupling. On the catwalk, keep moving: tether, jump, tether. Fall once on purpose:
    the catwalk should be whole again.
 6. On the roof, read the note (E), close it, press R.
-7. Report anything confusing or stuck, with the checkpoint name shown on screen.
+7. Listen: footsteps on stone, wood (the crate) and metal (the catwalk); the tether's click, catch
+   and tension; the chimes; the music changing at the gallery, after the engine reveal and on the
+   roof. Skip one cinematic early and let one finish.
+8. Report anything confusing or stuck, with the checkpoint name shown on screen.
 
 ## Latest results
 
-**The Stormworks Escape (Unreal, 2026-10-24):** with the committed game code, six runs: 40/40 in
+**The Stormworks Escape, second pass (Unreal, 2026-10-25):** 62/62 self-test checks with the final
+code. In earlier runs of this pass, two failures were real bugs, found and fixed: a carry ended by a
+long frame left her in mid-air, and Mara's materials drew as the default checker. Two failures were
+outside the game: a stray click skipped the opening (hardware input is now ignored), and the
+audio-loop check had a wrong filter. No GPU crash. The web game's tests were not rerun: no web code
+changed.
+
+**The Stormworks Escape, first pass (Unreal, 2026-10-24):** with the committed game code, six runs: 40/40 in
 four; in the other two, one self-test timing check failed each time (a screenshot hitch next to the
 check; both checks fixed, then 40/40). With Virtual Shadow Maps on, 2 of 9 launches ended in a GPU
 crash before the route started; with regular shadow maps (now the project setting), 0 of 13 (see

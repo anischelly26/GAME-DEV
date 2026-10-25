@@ -2,9 +2,9 @@
 
 | | |
 | --- | --- |
-| **Branch** | `claude/unreal-stormworks` (draft PR, The Stormworks Escape in Unreal Engine), stacked on `claude/unreal-export` (PR #11) → `claude/game-feel` (draft PR #8) → `claude/low-tide` (PR #7) → `claude/toy-hero` (PR #6) → `claude/chapter-one-v2` (PR #5) → `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
+| **Branch** | `claude/stormworks-mara-sound` (draft PR #13: Mara, sound, cinematics, music in The Stormworks Escape), stacked on `claude/unreal-stormworks` (PR #12) → `claude/unreal-export` (PR #11) → `claude/game-feel` (draft PR #8) → `claude/low-tide` (PR #7) → `claude/toy-hero` (PR #6) → `claude/chapter-one-v2` (PR #5) → `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
 | **Build** | Chapter One, *The Quiet Cell*: the workshop opening → pressure-hatch puzzle → maintenance shaft (the steam kicker) → lookout → the feed-pipe grind or the scaffold → parkour practice route → *The Breathing Engine* (now with the Watch) and the split feed → chapter ending; five hidden chalk marks. Chapter Two, *The Warders' Green*: the cove → Cottage Lane (stealth) → the green → the slide → the swing leap → the yard. Chapter Three, *The Low Tide*: the slipway → the swim → the skiff → the bar and the surge → the patrol boat → the lighthouse. The movement lab (`?lab=1`). The cinematic overhaul's audit and plans (Phase A) and game feel (Phase B). In Unreal Engine 5.8 (a separate project): the chapters imported as art (PR #11), and *The Stormworks Escape*, a six-beat sequence built around Ivo's maintenance tether |
-| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PRs #3 to #11 and the Stormworks PR) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
+| **Reviews** | Codex reviewed `4979589` ([review](reviews/REVIEW-2026-10-15-4979589.md)) and `492bce4` ([review](reviews/REVIEW-2026-10-15-492bce4.md)). The work after `492bce4` (PRs #3 to #12 and this one) **has not been reviewed yet**. Codex's findings are preserved unchanged in those files. |
 
 ## Launch
 
@@ -24,7 +24,42 @@ the browser to the dedicated GPU. On the test laptop (Intel UHD plus NVIDIA RTX 
 runs on the RTX this way. The Intel measurements below use Playwright's bundled Chromium, which
 that setting does not cover.
 
-## The Stormworks Escape, in Unreal Engine 5.8 (`claude/unreal-stormworks`)
+## The Stormworks Escape, second pass: Mara, sound, cinematics, music (`claude/stormworks-mara-sound`, draft PR #13)
+
+Stacked on `claude/unreal-stormworks` (PR #12). The owner's "researched resources" brief of
+2026-10-24/25: use free, licensed resources selectively, each for a specific scene or an observed
+problem. Full write-up: [UNREAL_STORMWORKS.md](UNREAL_STORMWORKS.md).
+
+- **Mara is the playable hero:**
+  - her CC0 Quaternius clips, blended in C++ (an anim-instance proxy, no Anim Blueprint);
+  - her 1.3 m capsule;
+  - her rigid parts on their bones;
+  - `tools/unreal/prepare_mara.py` fixes two import problems (the checker-material fallback,
+    unplaced rigid parts).
+- **Sound:**
+  - Kenney recordings (CC0, already in the web game) for footsteps by surface (from her foot
+    plants), landings, the tether's release and latch, machine stops and the toy;
+  - owned loops that stop on arrival or reset, and rate-limited refusals;
+  - music by mood (the web game's CC0 tracks), cross-faded on gameplay events;
+  - **nobody has listened to any of it in the scene.**
+- **The playful pieces:** Ivo's wind-up toy, the gallery's washing, wind chimes at the break (eased
+  anticipation, action, settle; no plugin).
+- **Cinematics:** `LS_SW_Opening`, `LS_SW_EngineReveal` and `LS_SW_Rooftop` (built headless). One
+  `FinishSequenceOnce` restores camera, input, HUD and audio, grants progression once, and grants
+  nothing on a cancellation.
+- **Bugs found and fixed:**
+  - a carry left her in mid-air when a long frame ended it;
+  - the rain fell indoors once its material was fixed (and before that, it drew with the default
+    material);
+  - the used coupling still offered "Pull".
+- **Verification:** the bot's 62 checks, including every cinematic ending path, two deliberate
+  stalls, footsteps by surface and a count of live audio loops; screenshots and GIFs in
+  [evidence/stormworks/](evidence/stormworks/). **No person has played or listened.**
+- **Not adopted:** the Game Animation Sample, Motion Warping, Fresh Cooked Tweens, DlgSystem, Quartz,
+  Komiku's album, the Sonniss bundle, the Kenney Pirate Kit and Input Prompts. The reasons are in
+  the write-up.
+
+## The Stormworks Escape, in Unreal Engine 5.8 (`claude/unreal-stormworks`, draft PR #12)
 
 Stacked on `claude/unreal-export` (PR #11). The owner's brief of 2026-10-24: one signature
 mechanic, built properly in Unreal, inside a short sequence. The mechanic is **Ivo's maintenance

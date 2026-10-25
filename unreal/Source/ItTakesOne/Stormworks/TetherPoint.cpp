@@ -63,6 +63,19 @@ void ATetherPoint::BeginPlay()
 	{
 		// Ride along with the machine.
 		AttachToComponent(Movable->Body, FAttachmentTransformRules::KeepWorldTransform);
+		// A one-way machine at the end of its track has nothing left to give: the ring goes dark
+		// rather than offering "Pull" for nothing.
+		if (Movable->bOneWay)
+		{
+			Movable->OnArrived.AddWeakLambda(this, [this](ATetherMovable* M)
+			{
+				if (M->IsAtEnd())
+				{
+					bEnabled = false;
+					SetHighlight(0);
+				}
+			});
+		}
 	}
 	SetHighlight(0);
 }

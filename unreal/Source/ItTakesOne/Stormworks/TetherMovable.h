@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "TetherMovable.generated.h"
 
+class UAudioComponent;
 class UStaticMeshComponent;
 
 /**
@@ -85,6 +86,11 @@ public:
 
 private:
 	void Apply();
+
+	/** The run's grind, riding with the body; it fades out on arrival. */
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> MoveAudio;
+	int32 LastClunk = -1;
 
 	float From = 0.f;
 	float To = 0.f;

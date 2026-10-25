@@ -7,6 +7,7 @@
 class ACharacter;
 class APlayerController;
 class ATetherPoint;
+class UAudioComponent;
 class UCableComponent;
 class UCameraComponent;
 class UInputAction;
@@ -107,6 +108,7 @@ private:
 	void OnFirePressed();
 	void OnReleasePressed();
 	void OnRestartPressed();
+	void OnSkipPressed();
 
 	void UpdateTargeting();
 	void SetState(ETetherState NewState);
@@ -121,6 +123,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UCableComponent> Cable;
 
+	/** The carry's travel sound: follows her, stops when the carry ends. */
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> ReelAudio;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UInputAction> FireAction;
 
@@ -129,6 +135,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInputAction> RestartAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> SkipAction;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInputMappingContext> Mapping;
@@ -150,6 +159,11 @@ private:
 	FVector ReelFrom = FVector::ZeroVector;
 	FVector ReelControl = FVector::ZeroVector;
 	FVector ReelTo = FVector::ZeroVector;
+	/** The last refusal cue (they are rate-limited: spamming the button is not a drum). */
+	double LastRefuseTime = -10.0;
+	int32 LastLatchVariant = -1;
+	void Refuse(const FVector& At, float Volume);
+	void StopReelAudio(float FadeSeconds);
 	/** Where the last frame sent her: how far she is from it is how far she has been held back. */
 	FVector ReelLast = FVector::ZeroVector;
 	float ReelDuration = 1.f;

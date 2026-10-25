@@ -142,16 +142,20 @@ each chapter loads only the sets it uses (`surfaces` in `src/levels/chapters.ts`
 ## Unreal Engine: The Stormworks Escape
 
 What the Unreal sequence ([UNREAL_STORMWORKS.md](UNREAL_STORMWORKS.md)) uses. Nothing new was
-downloaded for it, and nothing is paid.
+downloaded for it (everything below was already in the project or the web game), and nothing is
+paid. Resources considered and not adopted, with the reasons, are listed in that document.
 
 | Content | Source | Licence |
 | --- | --- | --- |
 | Surface textures: Castle Wall Slates, Old Stone Wall, Cobblestone Floor 04, Metal Plate, Old Planks 02, Dark Rock, Metal Grate Rusty | The Poly Haven sets above, imported from `public/assets/textures` by `tools/unreal/build_stormworks.py` | CC0 |
 | The lighthouse on Knoll Rock | The Seven Foot Knoll Lighthouse scan above (Katie Wolfe), as imported with Chapter Three (`tools/unreal/import_it_takes_one.py`); placed about 80 m from the playable area | **CC BY 4.0**: the credit above applies to any build, video or screenshot of the sequence. In this sequence the sign on its railing is not covered (the web game's board is not part of the scan), but it is about 80 m away in the storm and not legible in the screenshots |
-| All 19 sounds (`S_TOS_*`: the tether's fire, latch, reel and refusal, grinding, clunks, landing, the catwalk's creak and crash, rumble, alarm, the storm engine, thunder, wind, pickup, checkpoint, completion, paper, splash) | Synthesised from noise, sines and envelopes by `tools/unreal/make_stormworks_sounds.py`; no recordings | Original (this repository) |
+| 24 synthesised sounds (`S_TOS_*`: the tether's fire, latch, reel and refusal, grinding, clunks, landing, the catwalk's creak and crash, rumble, alarm, the storm engine, thunder, wind, pickup, checkpoint, completion, paper, splash, and five chime tones) | Synthesised from noise, sines and envelopes by `tools/unreal/make_stormworks_sounds.py`; no recordings | Original (this repository) |
+| 64 recordings (`SFX_*`: footsteps on concrete, wood and metal plate; soft and heavy impacts; light and heavy metal; the latch, the click, creaks, cloth; tin, bells, glass, page turns, a book opening and closing) | Kenney Impact Sounds and RPG Audio, the same packs as the web game (above): the web game's selection in `public/assets/audio/sfx`, the rest from the packs in the git-ignored `import-cache/audio/kenney` | CC0 |
+| Four music tracks (`MUS_*`): "Sci Fi / Adventure / Eastern / Quiet Piano / Loop" (KiluaBoy), "A sailor's chant" (Thimras), "Treasure Hunter" (TAD), "Fantasy: Rising Moon", first 95 s (RandomMind) | The web game's music (above), `public/assets/audio/music` | CC0 |
 | Materials, the level's geometry, the tether's rings, crates, the coupling, the gate, the catwalk, the hut, the rain, the lighthouse beam, the HUD | Engine basic shapes (`/Engine/BasicShapes`) placed by `build_stormworks.py`, and the C++ in `unreal/Source/ItTakesOne` | Original (this repository); engine content under the Unreal Engine EULA |
 | The player character, its animations and its controller | The Unreal Engine **Third Person template** (`/Game/ThirdPerson`, `/Game/Characters`) in the owner's project; not in this repository | Unreal Engine EULA (Epic's template content, usable in Unreal Engine projects) |
-| Mara | `/Game/ItTakesOne/Mara`, imported from `mara.glb` (the CC0 Quaternius sources above); not used by the sequence yet | CC0 |
+| Mara, the playable hero: her meshes and 29 animation clips | `/Game/ItTakesOne/Mara`, imported from `Mara.glb` (the CC0 Quaternius sources above). `tools/unreal/prepare_mara.py` adds `M_MaraGLTF`, a copy of Interchange's glTF master material (engine plugin content) flagged for skeletal meshes | CC0 (the master material: Unreal Engine EULA) |
+| Ivo's toy, the washing, the chimes, the three cinematics' cameras | Engine basic shapes and C++ in `unreal/Source/ItTakesOne`; Level Sequences made by `build_stormworks.py` | Original (this repository) |
 | Fonts | The engine's default font (Canvas HUD) | Unreal Engine EULA |
 
 ## Libraries

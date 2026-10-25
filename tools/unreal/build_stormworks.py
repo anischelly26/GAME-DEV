@@ -112,6 +112,69 @@ def import_sounds():
     log("sounds: %d" % len(names))
 
 
+# Recorded sounds: Kenney's CC0 packs (see docs/ASSETS.md). The web game's selection in
+# public/assets/audio/sfx is in the repository; the rest comes from the packs as downloaded into
+# the git-ignored import-cache/audio/kenney (node scripts/build-audio.mjs fetches them).
+SFX_DIR = os.path.join(REPO, "public", "assets", "audio", "sfx")
+KENNEY_DIR = os.path.join(REPO, "import-cache", "audio", "kenney")
+RECORDED = []
+for _i in range(5):
+    RECORDED += [
+        ("SFX_Step_Stone_%d" % _i, SFX_DIR, "impact-sounds-footstep_concrete_%03d.ogg" % _i),
+        ("SFX_Step_Wood_%d" % _i, SFX_DIR, "impact-sounds-footstep_wood_%03d.ogg" % _i),
+        ("SFX_Step_Metal_%d" % _i, SFX_DIR, "impact-sounds-impactPlate_light_%03d.ogg" % _i),
+        ("SFX_Land_%d" % _i, SFX_DIR, "impact-sounds-impactSoft_medium_%03d.ogg" % _i),
+        ("SFX_LandHeavy_%d" % _i, SFX_DIR, "impact-sounds-impactSoft_heavy_%03d.ogg" % _i),
+        ("SFX_MetalLight_%d" % _i, SFX_DIR, "impact-sounds-impactMetal_light_%03d.ogg" % _i),
+        ("SFX_MetalHeavy_%d" % _i, SFX_DIR, "impact-sounds-impactMetal_heavy_%03d.ogg" % _i),
+        ("SFX_Bell_%d" % _i, os.path.join(KENNEY_DIR, "impact-sounds", "Audio"), "impactBell_heavy_%03d.ogg" % _i),
+        ("SFX_Tin_%d" % _i, os.path.join(KENNEY_DIR, "impact-sounds", "Audio"), "impactTin_medium_%03d.ogg" % _i),
+        ("SFX_Glass_%d" % _i, os.path.join(KENNEY_DIR, "impact-sounds", "Audio"), "impactGlass_light_%03d.ogg" % _i),
+    ]
+RECORDED += [
+    ("SFX_Click", SFX_DIR, "rpg-audio-metalClick.ogg"),
+    ("SFX_Latch", SFX_DIR, "rpg-audio-metalLatch.ogg"),
+] + [("SFX_Creak_%d" % i, SFX_DIR, "rpg-audio-creak%d.ogg" % (i + 1)) for i in range(3)] + [
+    ("SFX_Cloth_%d" % i, SFX_DIR, "rpg-audio-cloth%d.ogg" % (i + 1)) for i in range(4)] + [
+    ("SFX_PageFlip_%d" % i, os.path.join(KENNEY_DIR, "rpg-audio", "Audio"), "bookFlip%d.ogg" % (i + 1)) for i in range(3)] + [
+    ("SFX_BookOpen", os.path.join(KENNEY_DIR, "rpg-audio", "Audio"), "bookOpen.ogg"),
+    ("SFX_BookClose", os.path.join(KENNEY_DIR, "rpg-audio", "Audio"), "bookClose.ogg"),
+]
+
+
+def import_recorded_sounds():
+    done, missing = 0, []
+    for name, folder, fname in RECORDED:
+        src = os.path.join(folder, fname)
+        if not os.path.exists(src):
+            missing.append(fname)
+            continue
+        if import_file(src, ROOT + "/Audio", name):
+            done += 1
+    log("recorded sounds: %d imported, %d missing%s" % (done, len(missing), (" (" + ", ".join(missing[:6]) + ")") if missing else ""))
+
+
+# Music: the web game's CC0 tracks (docs/ASSETS.md), one per mood (StormMusic.cpp). Chosen by
+# their descriptions; nobody has listened to them in this scene yet.
+MUSIC_DIR = os.path.join(REPO, "public", "assets", "audio", "music")
+MUSIC = [
+    ("MUS_QuietPiano", "cell.ogg"),          # workshop: warm curiosity
+    ("MUS_SailorsChant", "title.ogg"),       # gallery: light forward motion
+    ("MUS_TreasureHunter", "hall.mp3"),      # the escape
+    ("MUS_RisingMoon", "ending.mp3"),        # the roof: relief
+]
+
+
+def import_music():
+    done = 0
+    for name, fname in MUSIC:
+        s = import_file(os.path.join(MUSIC_DIR, fname), ROOT + "/Audio", name)
+        if s:
+            s.set_editor_property("looping", True)
+            done += 1
+    log("music: %d tracks" % done)
+
+
 SETS = {
     # name: (Poly Haven id, tile size in metres)
     "stone": ("castle_wall_slates", 2.5),
@@ -268,6 +331,8 @@ def make_translucent_master():
     m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     prop(vparam(m, "Color", (0.7, 0.75, 0.8, 1), -500, 0), "", MP.MP_EMISSIVE_COLOR)
     prop(sparam(m, "Opacity", 0.25, -500, 200), "", MP.MP_OPACITY)
+    # The rain is an instanced mesh: without this flag the game falls back to the default material.
+    m.set_editor_property("used_with_instanced_static_meshes", True)
     MEL.recompile_material(m)
     return m
 
@@ -318,9 +383,14 @@ def make_materials(tex):
     surf_mi("MI_TOS_LampGlow", (1, 0.8, 0.5, 1), 0.5, 0.0, (1, 0.72, 0.42, 1), 40.0)
     surf_mi("MI_TOS_WindowGlow", (1, 0.7, 0.4, 1), 0.5, 0.0, (1, 0.62, 0.3, 1), 6.0)
     surf_mi("MI_TOS_WarningRed", (0.5, 0.05, 0.03, 1), 0.4, 0.0, (1, 0.08, 0.04, 1), 3.0)
-    surf_mi("MI_TOS_Hazard", (0.78, 0.55, 0.08, 1), 0.55, 0.2)
+    # Old painted iron, weathered: it should read as "machinery, careful" without shouting.
+    surf_mi("MI_TOS_Hazard", (0.42, 0.27, 0.06, 1), 0.62, 0.3)
     surf_mi("MI_TOS_Sea", (0.01, 0.025, 0.035, 1), 0.06, 0.0)
     surf_mi("MI_TOS_Cloth", (0.32, 0.2, 0.16, 1), 0.95, 0.0)
+    # The prisoners' washing: faded linen, coral, sea blue and ochre (none of them the tether's teal).
+    for i, c in enumerate(((0.72, 0.69, 0.62, 1), (0.56, 0.24, 0.19, 1), (0.24, 0.33, 0.46, 1), (0.58, 0.44, 0.2, 1))):
+        surf_mi("MI_TOS_Laundry_%d" % i, c, 0.95, 0.0)
+    surf_mi("MI_TOS_ToyRed", (0.55, 0.08, 0.05, 1), 0.45, 0.2)
     M["MI_TOS_Rain"] = mi("MI_TOS_Rain", trans, {"Color": (0.55, 0.62, 0.7, 1)}, {"Opacity": 0.22})
     log("materials: %d instances" % len(M))
     return M
@@ -542,6 +612,8 @@ def build_level(M):
     b.text("Workshop_IvoMark", "IV", -7.98, -2.5, 2.6, 0, 40)
     b.lamp("Workshop_Lamp_Bench", -5.5, -3.3, 2.4, 6000, 7, shadows=True)
     b.lamp("Workshop_Lamp_Door", -3.5, 3.4, 3.2, 3500, 6)
+    # Ivo's wind-up tin boat at the end of his bench (E winds it).
+    b.spawn(unreal.WorkshopToy, V(-6.6, -3.15, 0.92), label="Ivo_Toy", folder="Story")
     pick = b.spawn(unreal.TetherPickup, V(-5.4, -3.4, 1.1), label="TetherPickup", folder="Tether")
     pick.set_editor_property("objective", "Pull the crate off the door")
 
@@ -585,6 +657,15 @@ def build_level(M):
     b.text("Gallery_ChalkArrow", "IV ->", 12.6, 10.03, 1.4, 90, 34)
     b.lamp("Gallery_Lamp_Door", -3.5, 10.3, 3.2, 4000, 8)
     b.lamp("Gallery_Lamp_Far", 27.5, 10.3, 3.6, 4000, 8)
+    # The washing, pegged along the wall side of the gallery, and the hooks that hold its rope.
+    line = b.spawn(unreal.LaundryLine, V(-1.5, 10.55, 2.5), label="Gallery_Laundry", folder=F)
+    b.lamp("Gallery_Lamp_Laundry", 4.5, 10.3, 3.1, 3000, 7)
+    line.set_editor_property("length", 1250.0)
+    for x in (-1.5, 11.0):
+        b.box("Gallery_LaundryHook_%d" % int(x), x - 0.04, x + 0.04, 10.0, 10.6, 2.46, 2.54, "MI_TOS_Iron", F, collide=False)
+    # Ivo's chimes by his chalk arrow, just before the break: they ring as she walks up.
+    b.spawn(unreal.WindChimes, V(12.3, 10.35, 2.7), label="Gallery_Chimes", folder=F)
+    b.box("Gallery_ChimesArm", 12.0, 12.6, 10.0, 10.4, 2.7, 2.76, "MI_TOS_Iron", F, collide=False)
 
     # ---------------------------------------------------------------- Beat 4: the storm coupling and the gate
     F = "Coupling"
@@ -659,7 +740,14 @@ def build_level(M):
         b.mesh(b.sphere, V(x, y, -10.5), unreal.Vector(0.6, 0.6, 0.6), "MI_TOS_WindowGlow", "Harbour_Light_%d" % i, "World", collide=False)
     b.light("Harbour_Glow", 187, 70, -8, (1, 0.6, 0.3), 60000, 60)
 
-    b.spawn(unreal.StormRain, V(0, 0, 0), label="Rain", folder="World")
+    rain = b.spawn(unreal.StormRain, V(0, 0, 0), label="Rain", folder="World")
+    # Indoors stays dry: the workshop, the corridor, Ivo's hut.
+    dry = []
+    for lo, hi in (((-8.4, -4.4, -1.0), (0.4, 4.4, 4.4)), ((-4.9, 4.0, -1.0), (0.1, 9.4, 3.3)), ((84.8, 13.0, 4.0), (89.2, 15.9, 7.1))):
+        box = unreal.Box(V(*lo), V(*hi))
+        box.set_editor_property("is_valid", True)
+        dry.append(box)
+    rain.set_editor_property("dry_boxes", dry)
 
     # ---------------------------------------------------------------- checkpoints, the director, the start
     b.checkpoint(0, "Workshop", -6.5, 0.0, 0.0, 0, "Find a way out of the workshop", (1.0, 1.0, 1.0))
@@ -680,7 +768,7 @@ def build_level(M):
 
     # ---------------------------------------------------------------- the self-test's route
     for tag, x, y, z in (
-        ("WP_Pickup", -5.4, -2.6, 0), ("WP_DoorView", -3.5, 2.2, 0), ("WP_RoomCenter", -5.0, 0.0, 0),
+        ("WP_Toy", -6.3, -2.2, 0), ("WP_Pickup", -5.4, -2.6, 0), ("WP_DoorView", -3.5, 2.2, 0), ("WP_RoomCenter", -5.0, 0.0, 0),
         ("WP_Corridor1", -3.5, 7.6, 0), ("WP_Corridor2", -3.5, 9.6, 0), ("WP_Gallery", -3.5, 11.5, 0),
         ("WP_GalleryN", 8.0, 11.5, 0), ("WP_ChasmEdge", 13.65, 11.5, 0), ("WP_CrateFront", 15.8, 11.5, 0),
         ("WP_FarLanding", 26.8, 11.5, 0), ("WP_FallOff", 23.6, 11.5, 0), ("WP_Coupling", 30.5, 12.15, 0),
@@ -690,8 +778,86 @@ def build_level(M):
     ):
         b.waypoint(tag, x, y, z)
 
+    make_cinematics(b, lighthouse_top)
     les.save_current_level()
     log("level: %d actors spawned, saved %s" % (b.count, MAP))
+
+
+# The three cinematics: (seconds, [(time, camera position, look-at)...]) in metres. They start only
+# where she stands still; the game blends back to the gameplay camera at the end (StormCinema).
+def shots(lighthouse):
+    return {
+        # The light first, close, its beam turning; then the camera pulls back across the sea (above
+        # the signal tower's roof) to the lit workshop window, turns, and comes in between the bars
+        # to Mara, who is looking out at it.
+        "Opening": (8.0, [
+            (0.0, (118.0, 24.0, 17.0), lighthouse),
+            (1.8, (112.0, 22.0, 16.5), lighthouse),
+            (4.0, (9.0, -0.8, 3.0), lighthouse),
+            (5.3, (1.8, -0.2, 2.3), (-4.0, 0.0, 1.4)),
+            (6.6, (-1.4, 0.7, 1.9), (-6.5, 0.0, 0.95)),
+            (8.0, (-3.7, 0.6, 1.55), (-6.5, 0.0, 0.95)),
+        ]),
+        # From behind her at the coupling: the gate grinding open, then up and along the catwalk to
+        # the tower.
+        "EngineReveal": (5.0, [
+            (0.0, (25.5, 13.0, 3.0), (33.5, 11.5, 2.2)),
+            (2.4, (28.0, 13.2, 3.6), (35.0, 11.0, 2.0)),
+            (5.0, (32.5, 13.2, 7.0), (84.0, 11.5, 3.5)),
+        ]),
+        # Past her to the east, up to the lighthouse, round to Ivo's hut.
+        "Rooftop": (6.0, [
+            (0.0, (83.4, 13.3, 5.6), (100.0, 12.0, 6.0)),
+            (3.0, (84.0, 10.0, 6.8), lighthouse),
+            (6.0, (84.5, 12.2, 5.6), (87.2, 14.6, 5.1)),
+        ]),
+    }
+
+
+def make_cinematics(b, lighthouse_top):
+    lighthouse = (lighthouse_top.x / 100.0, lighthouse_top.y / 100.0, lighthouse_top.z / 100.0)
+    rate = 30
+    for name, (length, keys) in shots(lighthouse).items():
+        path = "%s/Cinematics/LS_SW_%s" % (ROOT, name)
+        fresh(path)
+        cam = b.eas.spawn_actor_from_class(unreal.CineCameraActor, V(*keys[0][1]), R())
+        cam.set_actor_label("Cine_%s" % name)
+        cam.set_folder_path("Cinematics")
+        cc = cam.get_cine_camera_component()
+        cc.set_editor_property("current_focal_length", 24.0)
+        focus = cc.get_editor_property("focus_settings")
+        focus.set_editor_property("focus_method", unreal.CameraFocusMethod.DISABLE)
+        cc.set_editor_property("focus_settings", focus)
+
+        seq = AT.create_asset("LS_SW_%s" % name, ROOT + "/Cinematics", unreal.LevelSequence, unreal.LevelSequenceFactoryNew())
+        seq.set_display_rate(unreal.FrameRate(rate, 1))
+        frames = int(round(length * rate))
+        seq.set_playback_start(0)
+        seq.set_playback_end(frames)
+        binding = seq.add_possessable(cam)
+        section = binding.add_track(unreal.MovieScene3DTransformTrack).add_section()
+        section.set_range(0, frames)
+        channels = section.get_all_channels()
+        last_yaw = None
+        for t, pos, target in keys:
+            d = (target[0] - pos[0], target[1] - pos[1], target[2] - pos[2])
+            yaw = math.degrees(math.atan2(d[1], d[0]))
+            if last_yaw is not None:
+                # The short way round between keys.
+                while yaw - last_yaw > 180.0:
+                    yaw -= 360.0
+                while yaw - last_yaw < -180.0:
+                    yaw += 360.0
+            last_yaw = yaw
+            pitch = math.degrees(math.atan2(d[2], math.hypot(d[0], d[1])))
+            frame = unreal.FrameNumber(int(round(t * rate)))
+            for i, v in enumerate((pos[0] * 100.0, pos[1] * 100.0, pos[2] * 100.0, 0.0, pitch, yaw)):
+                channels[i].add_key(frame, v)
+        cut = seq.add_track(unreal.MovieSceneCameraCutTrack).add_section()
+        cut.set_range(0, frames)
+        cut.set_camera_binding_id(seq.get_binding_id(binding))
+        EAL.save_loaded_asset(seq, only_if_is_dirty=False)
+        log("cinematic LS_SW_%s: %.1f s, %d keys" % (name, length, len(keys)))
 
 
 def place_lighthouse(b):
@@ -731,6 +897,8 @@ def main():
     log("project %s; textures from %s; audio from %s" % (PROJECT_DIR, TEXTURES_SRC, AUDIO_SRC))
     try:
         import_sounds()
+        import_recorded_sounds()
+        import_music()
         tex = import_textures()
         M = make_materials(tex)
         EAL.save_directory(ROOT, only_if_is_dirty=False, recursive=True)

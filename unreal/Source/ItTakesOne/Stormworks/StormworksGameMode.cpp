@@ -8,19 +8,26 @@
 #include "ItTakesOne.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
+#include "Stormworks/MaraAnimInstance.h"
+#include "Stormworks/MaraFootsteps.h"
 #include "Stormworks/StormCheckpoint.h"
+#include "Stormworks/StormCinema.h"
+#include "Stormworks/StormMusic.h"
 #include "Stormworks/StormDirector.h"
 #include "Stormworks/StormworksAssets.h"
 #include "Stormworks/StormworksHUD.h"
 #include "Stormworks/StormworksSelfTest.h"
 #include "Stormworks/StoryNote.h"
 #include "Stormworks/TetherComponent.h"
+#include "Stormworks/WorkshopToy.h"
 #include "UObject/ConstructorHelpers.h"
 
 AStormworksGameMode::AStormworksGameMode()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	HUDClass = AStormworksHUD::StaticClass();
+	Cinema = CreateDefaultSubobject<UStormCinema>(TEXT("Cinema"));
+	Music = CreateDefaultSubobject<UStormMusic>(TEXT("Music"));
 
 	// The project's own character, controls and animation (the Third Person template's).
 	static ConstructorHelpers::FClassFinder<APawn> PawnBP(TEXT("/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter"));
@@ -52,6 +59,9 @@ void AStormworksGameMode::StartPlay()
 	{
 		SetObjective(Checkpoint->Objective);
 	}
+	Cinema->OnProgress.AddUObject(this, &AStormworksGameMode::OnShotProgress);
+	// The opening plays as soon as she is there (the self-test plays it itself, when it is ready).
+	bOpeningPending = !FParse::Param(FCommandLine::Get(), TEXT("StormSelfTest"));
 
 	// Load every sound now, so the first tug or swing does not stall on a disk read.
 	for (const TCHAR* Name : {TEXT("S_TOS_Fire"), TEXT("S_TOS_Latch"), TEXT("S_TOS_Reel"), TEXT("S_TOS_Refuse"), TEXT("S_TOS_Grind"), TEXT("S_TOS_Clunk"),
@@ -75,6 +85,12 @@ void AStormworksGameMode::RestartPlayer(AController* NewPlayer)
 	Super::RestartPlayer(NewPlayer);
 	if (ACharacter* C = NewPlayer ? Cast<ACharacter>(NewPlayer->GetPawn()) : nullptr)
 	{
+		// Mara herself, if her import is in the project (else the template's mannequin stays).
+		if (!C->FindComponentByClass<UMaraFootsteps>() && UMaraAnimInstance::Dress(C))
+		{
+			UMaraFootsteps* F = NewObject<UMaraFootsteps>(C, TEXT("Footsteps"));
+			F->RegisterComponent();
+		}
 		if (!C->FindComponentByClass<UTetherComponent>())
 		{
 			UTetherComponent* T = NewObject<UTetherComponent>(C, TEXT("Tether"));
@@ -141,6 +157,15 @@ void AStormworksGameMode::ReachCheckpoint(AStormCheckpoint* Point)
 		ShowMessage(Point->Label.IsEmpty() ? TEXT("Checkpoint") : FString::Printf(TEXT("Checkpoint: %s"), *Point->Label), 2.f);
 		Stormworks::Sound2D(this, TEXT("S_TOS_Checkpoint"), 0.6f);
 	}
+	if (Point->Order == 1)
+	{
+		Music->SetMood(EStormMood::Gallery);
+	}
+	else if (Point->Order == 4)
+	{
+		// The roof: she has landed and stands still; the view is hers for a moment.
+		Cinema->Play(EStormShot::Rooftop);
+	}
 	UE_LOG(LogStormworks, Log, TEXT("Checkpoint %d (%s)"), Point->Order, *Point->Label);
 }
 
@@ -151,6 +176,9 @@ void AStormworksGameMode::Respawn(bool bFell)
 	{
 		return;
 	}
+	// A cinematic cut short by a restart grants nothing; the music dips and carries on.
+	Cinema->Cancel();
+	Music->Duck();
 	if (UTetherComponent* T = GetTether())
 	{
 		T->ResetTether();
@@ -205,6 +233,48 @@ AStoryNote* AStormworksGameMode::NoteInReach(const ACharacter* Who) const
 	return Best;
 }
 
+void AStormworksGameMode::OnShotProgress(EStormShot Shot)
+{
+	switch (Shot)
+	{
+	case EStormShot::Opening:
+		Music->SetMood(EStormMood::Workshop);
+		ShowMessage(TEXT("Ivo's workshop. The lamp on Knoll Rock is burning."), 3.5f);
+		break;
+	case EStormShot::EngineReveal:
+		if (AStormDirector* D = GetDirector())
+		{
+			SetObjective(D->EngagedObjective);
+		}
+		Music->SetMood(EStormMood::Escape);
+		break;
+	case EStormShot::Rooftop:
+		Music->SetMood(EStormMood::Rooftop);
+		break;
+	default:
+		break;
+	}
+}
+
+AWorkshopToy* AStormworksGameMode::ToyInReach(const ACharacter* Who) const
+{
+	if (!Who)
+	{
+		return nullptr;
+	}
+	const APlayerController* PC = Cast<APlayerController>(Who->GetController());
+	const FVector View = PC && PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraRotation().Vector() : Who->GetActorForwardVector();
+	for (TActorIterator<AWorkshopToy> It(GetWorld()); It; ++It)
+	{
+		const FVector To = It->GetActorLocation() - Who->GetActorLocation();
+		if (To.Size2D() < 170.f && FVector::DotProduct(View.GetSafeNormal2D(), To.GetSafeNormal2D()) > 0.35f)
+		{
+			return *It;
+		}
+	}
+	return nullptr;
+}
+
 bool AStormworksGameMode::TryInteract(ACharacter* Who)
 {
 	if (OpenNote)
@@ -222,6 +292,12 @@ bool AStormworksGameMode::TryInteract(ACharacter* Who)
 		{
 			Complete();
 		}
+		return true;
+	}
+	if (AWorkshopToy* Toy = ToyInReach(Who))
+	{
+		// Pressing it again while it runs does nothing (and does not fire the tether either).
+		Toy->Play();
 		return true;
 	}
 	return false;
@@ -255,6 +331,11 @@ void AStormworksGameMode::Tick(float DeltaSeconds)
 	if (!C)
 	{
 		return;
+	}
+	if (bOpeningPending)
+	{
+		bOpeningPending = false;
+		Cinema->Play(EStormShot::Opening);
 	}
 	if (C->GetActorLocation().Z < FallZ)
 	{

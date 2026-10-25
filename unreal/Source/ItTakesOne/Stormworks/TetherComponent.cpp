@@ -3,6 +3,7 @@
 #include "Camera/CameraComponent.h"
 #include "Camera/PlayerCameraManager.h"
 #include "CableComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EngineUtils.h"
@@ -15,6 +16,7 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "ItTakesOne.h"
+#include "Stormworks/StormCinema.h"
 #include "Stormworks/StormworksAssets.h"
 #include "Stormworks/StormworksGameMode.h"
 #include "Stormworks/TetherMovable.h"
@@ -39,7 +41,9 @@ APlayerController* UTetherComponent::GetPC() const
 
 FVector UTetherComponent::ChestLocation() const
 {
-	return GetOwner()->GetActorLocation() + FVector(0.f, 0.f, 40.f);
+	// About chest height for any capsule: 0.44 of the half-height above its centre.
+	const ACharacter* C = GetCharacter();
+	return GetOwner()->GetActorLocation() + FVector(0.f, 0.f, C ? C->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() * 0.44f : 40.f);
 }
 
 FVector UTetherComponent::HandLocation() const
@@ -106,6 +110,7 @@ void UTetherComponent::SetupInput()
 	FireAction = NewObject<UInputAction>(this, TEXT("IA_Tether"));
 	ReleaseAction = NewObject<UInputAction>(this, TEXT("IA_TetherRelease"));
 	RestartAction = NewObject<UInputAction>(this, TEXT("IA_RestartCheckpoint"));
+	SkipAction = NewObject<UInputAction>(this, TEXT("IA_SkipCinematic"));
 	Mapping = NewObject<UInputMappingContext>(this, TEXT("IMC_Tether"));
 	Mapping->MapKey(FireAction, EKeys::E);
 	Mapping->MapKey(FireAction, EKeys::LeftMouseButton);
@@ -114,6 +119,11 @@ void UTetherComponent::SetupInput()
 	Mapping->MapKey(ReleaseAction, EKeys::Gamepad_FaceButton_Bottom);
 	Mapping->MapKey(RestartAction, EKeys::R);
 	Mapping->MapKey(RestartAction, EKeys::Gamepad_Special_Left);
+	// Skipping a cinematic (E skips too, through OnFirePressed).
+	Mapping->MapKey(SkipAction, EKeys::SpaceBar);
+	Mapping->MapKey(SkipAction, EKeys::Enter);
+	Mapping->MapKey(SkipAction, EKeys::Gamepad_FaceButton_Bottom);
+	Mapping->MapKey(SkipAction, EKeys::Gamepad_FaceButton_Right);
 
 	if (ULocalPlayer* LP = PC->GetLocalPlayer())
 	{
@@ -127,6 +137,7 @@ void UTetherComponent::SetupInput()
 		EIC->BindAction(FireAction, ETriggerEvent::Started, this, &UTetherComponent::OnFirePressed);
 		EIC->BindAction(ReleaseAction, ETriggerEvent::Started, this, &UTetherComponent::OnReleasePressed);
 		EIC->BindAction(RestartAction, ETriggerEvent::Started, this, &UTetherComponent::OnRestartPressed);
+		EIC->BindAction(SkipAction, ETriggerEvent::Started, this, &UTetherComponent::OnSkipPressed);
 		bInputBound = true;
 	}
 	else
@@ -135,11 +146,24 @@ void UTetherComponent::SetupInput()
 	}
 }
 
-void UTetherComponent::OnFirePressed()
+void UTetherComponent::OnSkipPressed()
 {
-	// Reading notes shares the button: a note in front of her wins.
 	if (AStormworksGameMode* GM = GetWorld()->GetAuthGameMode<AStormworksGameMode>())
 	{
+		GM->Cinema->Skip();
+	}
+}
+
+void UTetherComponent::OnFirePressed()
+{
+	// Reading notes shares the button: a note in front of her wins. During a cinematic it skips.
+	if (AStormworksGameMode* GM = GetWorld()->GetAuthGameMode<AStormworksGameMode>())
+	{
+		if (GM->Cinema->IsPlaying())
+		{
+			GM->Cinema->Skip();
+			return;
+		}
 		if (GM->TryInteract(GetCharacter()))
 		{
 			return;
@@ -189,7 +213,7 @@ bool UTetherComponent::TryFire()
 		{
 			++TooFar;
 			Far->Pulse(0.4f);
-			Stormworks::Sound2D(this, TEXT("S_TOS_Refuse"), 0.6f);
+			Refuse(FVector::ZeroVector, 0.6f);
 			if (AStormworksGameMode* GM = GetWorld()->GetAuthGameMode<AStormworksGameMode>())
 			{
 				GM->ShowMessage(TEXT("Too far: get closer to the ring"), 1.6f);
@@ -202,7 +226,9 @@ bool UTetherComponent::TryFire()
 	++Fires;
 	SetState(ETetherState::Shooting);
 	Point->SetHighlight(3);
-	Stormworks::Sound(this, TEXT("S_TOS_Fire"), HandLocation(), 0.9f, FMath::FRandRange(0.95f, 1.08f));
+	// Accepted: the mechanical release (a recorded click under the synthesised whip of the hook).
+	Stormworks::Sound(this, TEXT("SFX_Click"), HandLocation(), 0.7f, FMath::FRandRange(0.95f, 1.08f));
+	Stormworks::Sound(this, TEXT("S_TOS_Fire"), HandLocation(), 0.7f, FMath::FRandRange(0.95f, 1.08f));
 	return true;
 }
 
@@ -217,7 +243,11 @@ void UTetherComponent::Latch()
 	}
 	Point->Pulse(1.f);
 	AddShake(0.25f);
-	Stormworks::Sound(this, TEXT("S_TOS_Latch"), Point->GetAttachLocation(), 1.f, FMath::FRandRange(0.95f, 1.05f));
+	// Attached: a firm catch, only now that it has really caught.
+	LastLatchVariant = Stormworks::Variant(5, LastLatchVariant);
+	Stormworks::Sound(this, TEXT("SFX_Latch"), Point->GetAttachLocation(), 0.9f, FMath::FRandRange(0.95f, 1.05f));
+	Stormworks::Sound(this, *FString::Printf(TEXT("SFX_MetalLight_%d"), LastLatchVariant), Point->GetAttachLocation(), 0.6f, FMath::FRandRange(0.95f, 1.05f));
+	Stormworks::Sound(this, TEXT("S_TOS_Latch"), Point->GetAttachLocation(), 0.5f, FMath::FRandRange(0.95f, 1.05f));
 
 	if (Point->Kind == ETetherPointKind::Pull)
 	{
@@ -239,7 +269,7 @@ void UTetherComponent::Latch()
 		{
 			// Already engaged, or still moving: a twang, and the hook comes back.
 			++Refusals;
-			Stormworks::Sound(this, TEXT("S_TOS_Refuse"), Point->GetAttachLocation(), 0.8f);
+			Refuse(Point->GetAttachLocation(), 0.8f);
 			RetractFrom = Point->GetAttachLocation();
 			SetState(ETetherState::Retracting);
 		}
@@ -279,7 +309,9 @@ void UTetherComponent::BeginReel(ATetherPoint* Point)
 	++Reels;
 	SetState(ETetherState::Reeling);
 	AddShake(0.35f);
-	Stormworks::Sound(this, TEXT("S_TOS_Reel"), ReelFrom, 0.9f);
+	// The travel: the cable's tension, riding along with her (one per carry).
+	StopReelAudio(0.f);
+	ReelAudio = Stormworks::SoundAttached(C->GetRootComponent(), TEXT("S_TOS_Reel"), 0.9f);
 	UE_LOG(LogStormworks, Log, TEXT("Tether: carried to %s, %.0f cm over %.2f s"), *Point->GetName(), Dist, ReelDuration);
 }
 
@@ -294,6 +326,8 @@ void UTetherComponent::TickReel(float DeltaTime)
 	if (StateT > 0.08f && MC->MovementMode != MOVE_Falling)
 	{
 		// She touched down before the end (a ledge on the way): that counts if she is close.
+		const AActor* On = MC->CurrentFloor.HitResult.GetActor();
+		UE_LOG(LogStormworks, Log, TEXT("Tether: touched down early at %s on %s"), *C->GetActorLocation().ToCompactString(), On ? *On->GetActorNameOrLabel() : TEXT("nothing"));
 		EndReel(FVector::Dist2D(C->GetActorLocation(), ReelTo) < 250.f, false);
 		return;
 	}
@@ -321,7 +355,11 @@ void UTetherComponent::TickReel(float DeltaTime)
 	}
 	if (U >= 1.f)
 	{
-		EndReel(true, false);
+		// The end of the arc. Move her the rest of the way now: the set-down velocity EndReel gives
+		// her replaces this frame's, and after a long frame the rest of the way can be metres.
+		FHitResult Hit;
+		MC->SafeMoveUpdatedComponent(Want - Now, C->GetActorQuat(), true, Hit);
+		EndReel(FVector::Dist(C->GetActorLocation(), ReelTo) < 80.f, false);
 	}
 }
 
@@ -333,6 +371,7 @@ void UTetherComponent::EndReel(bool bArrived, bool bKeepMomentum)
 	{
 		UE_LOG(LogStormworks, Log, TEXT("Tether: carry ends after %.2f of %.2f s, %.0f cm from the landing (%s)"), StateT, ReelDuration, FVector::Dist(C->GetActorLocation(), ReelTo), bArrived ? TEXT("arrived") : (bKeepMomentum ? TEXT("let go") : TEXT("stopped")));
 	}
+	StopReelAudio(0.12f);
 	RestoreMovement();
 	if (MC)
 	{
@@ -394,8 +433,43 @@ void UTetherComponent::Release(bool bKeepMomentum)
 	}
 }
 
+void UTetherComponent::Refuse(const FVector& At, float Volume)
+{
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastRefuseTime < 0.35)
+	{
+		return;
+	}
+	LastRefuseTime = Now;
+	if (At.IsZero())
+	{
+		Stormworks::Sound2D(this, TEXT("S_TOS_Refuse"), Volume);
+	}
+	else
+	{
+		Stormworks::Sound(this, TEXT("S_TOS_Refuse"), At, Volume);
+	}
+}
+
+void UTetherComponent::StopReelAudio(float FadeSeconds)
+{
+	if (ReelAudio)
+	{
+		if (FadeSeconds > 0.f)
+		{
+			ReelAudio->FadeOut(FadeSeconds, 0.f);
+		}
+		else
+		{
+			ReelAudio->Stop();
+		}
+		ReelAudio = nullptr;
+	}
+}
+
 void UTetherComponent::ResetTether()
 {
+	StopReelAudio(0.f);
 	RestoreMovement();
 	if (ATetherPoint* P = Attached.Get())
 	{

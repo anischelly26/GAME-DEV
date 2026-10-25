@@ -34,6 +34,10 @@ public:
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
+	/** Indoors (world space): no streak is drawn inside these (the workshop, the corridor, the hut). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rain")
+	TArray<FBox> DryBoxes;
+
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
