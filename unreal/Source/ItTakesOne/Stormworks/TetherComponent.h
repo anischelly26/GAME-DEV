@@ -163,7 +163,7 @@ private:
 	double LastRefuseTime = -10.0;
 	int32 LastLatchVariant = -1;
 	void Refuse(const FVector& At, float Volume);
-	void StopReelAudio(float FadeSeconds);
+	void StopReelAudio(float FadeTime);
 	/** Where the last frame sent her: how far she is from it is how far she has been held back. */
 	FVector ReelLast = FVector::ZeroVector;
 	float ReelDuration = 1.f;

@@ -197,7 +197,7 @@ def make_attenuation(name, inner_m, falloff_m):
     st.set_editor_property("attenuation_shape", unreal.AttenuationShape.SPHERE)
     st.set_editor_property("attenuation_shape_extents", unreal.Vector(inner_m * 100.0, 0.0, 0.0))
     st.set_editor_property("falloff_distance", falloff_m * 100.0)
-    st.set_editor_property("distance_algorithm", unreal.AttenuationDistanceModel.ATTENUATION_NATURAL_SOUND)
+    st.set_editor_property("distance_algorithm", unreal.AttenuationDistanceModel.NATURAL_SOUND)
     att.set_editor_property("attenuation", st)
     EAL.save_loaded_asset(att, only_if_is_dirty=False)
     return att

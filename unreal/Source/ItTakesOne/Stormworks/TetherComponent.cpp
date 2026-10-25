@@ -451,13 +451,13 @@ void UTetherComponent::Refuse(const FVector& At, float Volume)
 	}
 }
 
-void UTetherComponent::StopReelAudio(float FadeSeconds)
+void UTetherComponent::StopReelAudio(float FadeTime)
 {
 	if (ReelAudio)
 	{
-		if (FadeSeconds > 0.f)
+		if (FadeTime > 0.f)
 		{
-			ReelAudio->FadeOut(FadeSeconds, 0.f);
+			ReelAudio->FadeOut(FadeTime, 0.f);
 		}
 		else
 		{

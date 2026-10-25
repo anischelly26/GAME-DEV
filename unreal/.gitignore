@@ -1,0 +1,10 @@
+# Unreal: generated on each machine
+Intermediate/
+Saved/
+DerivedDataCache/
+.vs/
+*.sln
+# Keep the editor module (so the project opens without Visual Studio), not its debug symbols
+Binaries/**/*.pdb
+Binaries/**/*.exp
+Binaries/**/*.lib

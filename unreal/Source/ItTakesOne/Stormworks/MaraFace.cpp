@@ -26,7 +26,7 @@ namespace
 	/** How far the lids travel to close from their open pose (radians, the web game's). */
 	constexpr float LidShut = 2.22f;
 
-	float Damp(float From, float To, float Rate, float Dt)
+	float FaceDamp(float From, float To, float Rate, float Dt)
 	{
 		return FMath::Lerp(To, From, FMath::Exp(-Rate * Dt));
 	}
@@ -279,8 +279,8 @@ void UMaraFace::TickComponent(float DeltaTime, ELevelTick TickType, FActorCompon
 	}
 	Want.X = FMath::Clamp(Want.X, -0.5f, 0.5f);
 	Want.Y = FMath::Clamp(Want.Y, -0.3f, 0.3f);
-	Look.X = Damp(Look.X, Want.X, 18.f, Dt);
-	Look.Y = Damp(Look.Y, Want.Y, 18.f, Dt);
+	Look.X = FaceDamp(Look.X, Want.X, 18.f, Dt);
+	Look.Y = FaceDamp(Look.Y, Want.Y, 18.f, Dt);
 	const FVector Dir(FMath::Sin(Look.X) * FMath::Cos(Look.Y), FMath::Cos(Look.X) * FMath::Cos(Look.Y), FMath::Sin(Look.Y));
 	const FQuat EyeTurn = FQuat::FindBetweenNormals(FVector::YAxisVector, Dir.GetSafeNormal());
 
@@ -299,7 +299,7 @@ void UMaraFace::TickComponent(float DeltaTime, ELevelTick TickType, FActorCompon
 	const float BlinkClose = Blink > 0.f ? FMath::Sin(Blink * PI) : 0.f;
 	const float Open = Mood == EMaraMood::Surprised ? -0.28f : Mood == EMaraMood::Happy ? 0.30f : Mood == EMaraMood::Determined ? 0.37f : 0.f;
 	const float LidWant = FMath::Lerp(Open, LidShut, ForceClosure >= 0.f ? ForceClosure : BlinkClose);
-	Lid = Damp(Lid, LidWant, BlinkClose > 0.f || ForceClosure >= 0.f ? 40.f : 14.f, Dt);
+	Lid = FaceDamp(Lid, LidWant, BlinkClose > 0.f || ForceClosure >= 0.f ? 40.f : 14.f, Dt);
 	Closure = FMath::Clamp(Lid / LidShut, 0.f, 1.f);
 	const FQuat LidTurn(FVector::XAxisVector, LidSign * (Lid - Look.Y * 0.3f));
 	for (FEye& E : EyesList)
@@ -316,8 +316,8 @@ void UMaraFace::TickComponent(float DeltaTime, ELevelTick TickType, FActorCompon
 	// --- brows: up when surprised or happy, down and in when determined
 	const float Lift = Mood == EMaraMood::Surprised ? 2.2f : Mood == EMaraMood::Happy ? 0.8f : Mood == EMaraMood::Determined ? -0.8f : 0.f;
 	const float Tilt = Mood == EMaraMood::Determined ? 0.32f : 0.f;
-	BrowLift = Damp(BrowLift, Lift, 12.f, Dt);
-	BrowTilt = Damp(BrowTilt, Tilt, 12.f, Dt);
+	BrowLift = FaceDamp(BrowLift, Lift, 12.f, Dt);
+	BrowTilt = FaceDamp(BrowTilt, Tilt, 12.f, Dt);
 	for (const FBrow& B : Brows)
 	{
 		B.Pivot->SetRelativeLocation(FVector(0.f, 0.f, BrowLift));
