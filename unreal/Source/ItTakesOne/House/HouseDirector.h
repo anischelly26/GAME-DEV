@@ -159,5 +159,10 @@ private:
 	float ShyLeft = 0.f;
 	TArray<FVector> ArmOffsets;
 	bool bOffered = false;
+	bool bSplashed = false;
+	float StrokeIn = 0.f;
+	/** The theft's small acts: pats of the gauge so far, how long it has held it up. */
+	int32 Pats = 0;
+	float PrizeT = -1.f;
 	bool bWalking = false;
 };

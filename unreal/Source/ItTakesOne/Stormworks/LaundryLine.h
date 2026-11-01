@@ -46,6 +46,8 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
+	void BuildWashing();
+
 	struct FPiece
 	{
 		USceneComponent* Hinge = nullptr;
@@ -55,6 +57,9 @@ private:
 		float Rate = 1.f;
 		float Width = 80.f;
 		float NearT = -10.f;
+		float Height = 100.f;
+		float Fold = 0.f;
+		USceneComponent* Cloth = nullptr;
 	};
 	TArray<FPiece> Pieces;
 	float Time = 0.f;

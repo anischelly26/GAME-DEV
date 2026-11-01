@@ -104,7 +104,13 @@ void AHouseDirector::BeginPlay()
 		for (ANacreTentacle* A : Arms)
 		{
 			ArmOffsets.Add(A ? A->InitialTip - NacreBody->GetActorLocation() : FVector::ZeroVector);
+			if (A)
+			{
+				// Asleep until the reveal: nobody can see them from the house.
+				A->SetActorTickEnabled(false);
+			}
 		}
+		NacreBody->SetActorTickEnabled(false);
 	}
 	for (AActor* R : Rattles)
 	{
@@ -202,6 +208,7 @@ void AHouseDirector::Interact()
 	{
 		// She takes it back. Nacre flushes coral and looks away; three taps on the glass.
 		Offer->Release();
+		Gauge->SetGlint(false);
 		Gauge->AttachToComponent(M->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("hand_r"));
 		Offer->SetTint(ENacreTint::Coral);
 		Offer->SetCurl(0.f);
@@ -263,6 +270,10 @@ void AHouseDirector::StartDescent()
 		Gauge->SetActorHiddenInGame(true);
 	}
 	TickShake(false);
+	if (AHouseGameMode* GM = Mode())
+	{
+		GM->SetObjective(TEXT("Steer around the floating wreckage"));
+	}
 	SetBeat(EHouseBeat::Descent);
 	if (Ride)
 	{
@@ -287,6 +298,7 @@ void AHouseDirector::StartReveal()
 	M->SetActorLocation(RevealEntry, false, nullptr, ETeleportType::TeleportPhysics);
 	M->GetCharacterMovement()->Velocity = FVector::ZeroVector;
 	M->GetCharacterMovement()->SetMovementMode(MOVE_Swimming);
+	M->SetTowed(false);
 	if (APlayerController* PC = Cast<APlayerController>(M->GetController()))
 	{
 		// The first view: into the room, a little short of the largest lantern (the pull finishes it).
@@ -302,6 +314,14 @@ void AHouseDirector::StartReveal()
 	if (NacreBody)
 	{
 		NacreBody->SetActorLocation(NacreFrom);
+		NacreBody->SetActorTickEnabled(true);
+		for (ANacreTentacle* A : Arms)
+		{
+			if (A)
+			{
+				A->SetActorTickEnabled(true);
+			}
+		}
 	}
 	if (Gauge)
 	{
@@ -309,7 +329,7 @@ void AHouseDirector::StartReveal()
 	}
 	if (AHouseGameMode* GM = Mode())
 	{
-		GM->SetObjective(TEXT("Swim to the light"));
+		GM->SetObjective(TEXT("Find the gauge"));
 	}
 	// The home motif, on glass bells, as the conservatory opens up.
 	Stormworks::Sound2D(this, TEXT("H_Motif"), 0.7f);
@@ -353,6 +373,10 @@ void AHouseDirector::TickSoundscape(float Dt)
 	Inside = FMath::FInterpConstantTo(Inside, bIn ? 1.f : 0.f, Dt, 5.f);
 	const bool bWet = (Ride && Ride->IsFlooded()) || Beat >= EHouseBeat::Reveal;
 	Under = FMath::FInterpConstantTo(Under, bWet ? 1.f : 0.f, Dt, 1.6f);
+	if (AMaraCharacter* Lit = Mara())
+	{
+		Lit->SetWaterLight(Under);
+	}
 	HushT = FMath::Max(0.f, HushT - Dt);
 	const float Hush = HushT > 0.f ? 0.2f : 1.f;
 
@@ -530,18 +554,48 @@ void AHouseDirector::TickTentacle(float Dt)
 			Tentacle->MoveBase(SinkDrain, FRotator::ZeroRotator);
 			Tentacle->SnapTip(SinkDrain);
 			Tentacle->SetOut(true, 0.8f);
-			Tentacle->SetTipTarget(Gauge->GetActorLocation() + FVector(0.f, 0.f, 8.f));
+			Tentacle->SetTipTarget(Gauge->GetActorLocation() + FVector(0.f, 0.f, 34.f));
 			Stormworks::Sound(this, TEXT("H_Suction"), SinkDrain, 0.7f);
+			Pats = 0;
 			SetBeat(EHouseBeat::Stolen);
 		}
 		break;
 	case EHouseBeat::Stolen:
-		if (!Tentacle->GetHeld() && Tentacle->IsOut() && Tentacle->IsAtTarget(14.f))
+		if (!Tentacle->GetHeld() && Tentacle->IsOut() && Tentacle->IsAtTarget(10.f))
 		{
-			Tentacle->Hold(Gauge);
-			Stormworks::Sound(this, TEXT("H_Exhale"), Gauge->GetActorLocation(), 0.6f);
-			Tentacle->SetTipTarget(TeacupSpot);
-			GM->SetObjective(TEXT("Get the gauge back"));
+			// Curious first: it hovers over the gauge, pats it twice, then takes it.
+			++Pats;
+			if (Pats < 4)
+			{
+				const bool bDown = Pats % 2 == 1;
+				Tentacle->SetTipTarget(Gauge->GetActorLocation() + FVector(0.f, 0.f, bDown ? 8.f : 30.f));
+				if (bDown)
+				{
+					Stormworks::Sound(this, TEXT("SFX_Click"), Gauge->GetActorLocation(), 0.25f, 0.7f);
+				}
+			}
+			else
+			{
+				Tentacle->Hold(Gauge);
+				Tentacle->SetCurl(0.6f);
+				Stormworks::Sound(this, TEXT("H_Exhale"), Gauge->GetActorLocation(), 0.6f);
+				// Pleased with itself: it holds its prize up.
+				Tentacle->SetTipTarget(Gauge->GetActorLocation() + FVector(0.f, -14.f, 85.f));
+				PrizeT = 0.f;
+				GM->SetObjective(TEXT("Get the gauge back"));
+			}
+		}
+		else if (Tentacle->GetHeld() && PrizeT >= 0.f)
+		{
+			if (Tentacle->IsAtTarget(14.f))
+			{
+				PrizeT += Dt;
+			}
+			if (PrizeT > 1.1f)
+			{
+				PrizeT = -1.f;
+				Tentacle->SetTipTarget(TeacupSpot);
+			}
 		}
 		else if (Tentacle->GetHeld() && Tentacle->IsAtTarget(14.f))
 		{
@@ -551,6 +605,8 @@ void AHouseDirector::TickTentacle(float Dt)
 		}
 		break;
 	case EHouseBeat::Teacup:
+		// A tip pokes out, checks, and goes back.
+		Tentacle->SetTipTarget(TeacupSpot + FVector(0.f, 0.f, FMath::Fmod(BeatTime, 3.5f) > 2.7f ? 16.f : 0.f));
 		if (FVector::Dist2D(Here, TeacupSpot) < 220.f || BeatTime > 20.f)
 		{
 			Tentacle->SetCurl(0.f);
@@ -681,8 +737,12 @@ void AHouseDirector::Tick(float DeltaSeconds)
 		}
 		if (Tentacle)
 		{
+			// "Hide." Flat and deep blue, and for the first time it reaches for her, not the gauge:
+			// it holds her back from the window.
 			Tentacle->SetTint(ENacreTint::Deep);
-			Tentacle->SetFrozen(true);
+			Tentacle->SetCurl(0.f);
+			Tentacle->TipSpeed = 520.f;
+			Tentacle->SetTipTarget(M->GetActorLocation() + FVector(25.f, -48.f, 28.f));
 		}
 		TickShake(BeatTime > 1.1f);
 		if (BeatTime > 1.1f && BeatTime - Dt <= 1.1f)
@@ -700,9 +760,10 @@ void AHouseDirector::Tick(float DeltaSeconds)
 			M->GetCharacterMovement()->StopMovementImmediately();
 			M->SetActorLocationAndRotation(GrabSpot, GrabFacing, false, nullptr, ETeleportType::TeleportPhysics);
 			M->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+			M->SetTowed(true);
+			GM->SetObjective(TEXT(""));
 			if (Tentacle)
 			{
-				Tentacle->SetFrozen(false);
 				Tentacle->SetTint(ENacreTint::Pearl);
 			}
 			SetBeat(EHouseBeat::Grab);
@@ -769,6 +830,13 @@ void AHouseDirector::Tick(float DeltaSeconds)
 		{
 			GM->Prompt = TEXT("Steer:  WASD  /  left stick");
 		}
+		if (Ride && Ride->IsFlooded() && !bSplashed)
+		{
+			// Through the surface: the splash, then everything closes over her.
+			bSplashed = true;
+			Stormworks::Sound2D(this, TEXT("S_TOS_Splash"), 0.9f, 0.9f);
+			Stormworks::Sound2D(this, TEXT("H_Slurp"), 0.5f, 0.7f);
+		}
 		break;
 	case EHouseBeat::Reveal:
 	{
@@ -796,6 +864,7 @@ void AHouseDirector::Tick(float DeltaSeconds)
 			// Out of the dark, the gauge held up and the tip curled: "come".
 			bOffered = true;
 			Gauge->SetActorHiddenInGame(false);
+			Gauge->SetGlint(true);
 			Offer->SetOut(true, 1.2f);
 			Offer->SnapTip(Offer->GetActorLocation());
 			Offer->SetTipTarget(OfferSpot);
@@ -803,10 +872,18 @@ void AHouseDirector::Tick(float DeltaSeconds)
 			Offer->SetTint(ENacreTint::Pearl);
 			Offer->Hold(Gauge);
 			Stormworks::Sound(this, TEXT("H_Exhale"), OfferSpot, 0.6f, 0.8f);
+			GM->SetObjective(TEXT("Swim to the gauge"));
 		}
 		if (BeatTime < 7.f)
 		{
 			GM->Prompt = TEXT("Swim:  WASD + mouse    Space up    C down");
+		}
+		// Her strokes, in time with the swim clip's pace.
+		StrokeIn -= Dt;
+		if (StrokeIn <= 0.f && M->GetVelocity().Size() > 120.f)
+		{
+			StrokeIn = 0.85f;
+			Stormworks::Sound2D(this, TEXT("H_Stroke"), 0.5f, FMath::FRandRange(0.9f, 1.1f));
 		}
 		if (IsOfferInReach())
 		{

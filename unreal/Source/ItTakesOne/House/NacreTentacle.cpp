@@ -2,6 +2,7 @@
 
 #include "Components/AudioComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "ProceduralMeshComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Stormworks/StormworksAssets.h"
@@ -22,22 +23,32 @@ namespace
 ANacreTentacle::ANacreTentacle()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	Body = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Body"));
+	Body = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("Body"));
 	SetRootComponent(Body);
 	Body->SetMobility(EComponentMobility::Movable);
 	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Body->SetCastShadow(false);
-	Body->SetUsingAbsoluteRotation(true);
 	Body->SetUsingAbsoluteScale(true);
+	Suckers = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Suckers"));
+	Suckers->SetupAttachment(Body);
+	Suckers->SetMobility(EComponentMobility::Movable);
+	Suckers->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Suckers->SetCastShadow(false);
+	Suckers->SetUsingAbsoluteLocation(true);
+	Suckers->SetUsingAbsoluteRotation(true);
+	Suckers->SetUsingAbsoluteScale(true);
 }
 
 void ANacreTentacle::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	Body->SetStaticMesh(Stormworks::Mesh(TEXT("Sphere")));
 	if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ItTakesOne/House/Materials/MI_House_Nacre.MI_House_Nacre"), nullptr, LOAD_NoWarn | LOAD_Quiet))
 	{
 		Body->SetMaterial(0, M);
+	}
+	Suckers->SetStaticMesh(Stormworks::Mesh(TEXT("Sphere")));
+	if (UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ItTakesOne/House/Materials/MI_House_Sucker.MI_House_Sucker"), nullptr, LOAD_NoWarn | LOAD_Quiet))
+	{
+		Suckers->SetMaterial(0, M);
 	}
 }
 
@@ -51,10 +62,13 @@ void ANacreTentacle::BeginPlay()
 		Extend = ExtendWant = 1.f;
 	}
 	Skin = Body->CreateDynamicMaterialInstance(0);
-	Body->ClearInstances();
-	TArray<FTransform> Initial;
-	Initial.Init(FTransform(FQuat::Identity, GetActorLocation(), FVector::ZeroVector), Segments);
-	Body->AddInstances(Initial, false, true);
+	Suckers->ClearInstances();
+	if (!bSilhouette)
+	{
+		TArray<FTransform> Initial;
+		Initial.Init(FTransform(FQuat::Identity, GetActorLocation(), FVector::ZeroVector), Segments / 2 - 3);
+		Suckers->AddInstances(Initial, false, true);
+	}
 	// A quiet wet slither that follows how fast the tip moves.
 	Slither = Stormworks::SoundAttached(Body, TEXT("H_Slither"), 0.f);
 	Draw();
@@ -113,27 +127,102 @@ FVector ANacreTentacle::CurvePoint(float U) const
 
 void ANacreTentacle::Draw()
 {
-	// Each sphere is stretched along the curve, long enough to overlap its neighbours: one smooth
-	// arm, not a string of beads.
-	TArray<FVector, TInlineAllocator<64>> Points;
-	Points.SetNum(Segments);
-	for (int32 i = 0; i < Segments; ++i)
-	{
-		Points[i] = CurvePoint(Segments > 1 ? static_cast<float>(i) / (Segments - 1) : 0.f);
-	}
-	// Hidden inside the base while it is drawn in: only the part that is out shows.
 	const bool bShown = Extend > 0.02f;
-	for (int32 i = 0; i < Segments; ++i)
+	if (Body->IsVisible() != bShown)
 	{
-		const float U = Segments > 1 ? static_cast<float>(i) / (Segments - 1) : 0.f;
-		const FVector Span = Points[FMath::Min(i + 1, Segments - 1)] - Points[FMath::Max(i - 1, 0)];
-		const float Spacing = Span.Size() * (i == 0 || i == Segments - 1 ? 1.f : 0.5f);
+		// Hidden inside its base while it is drawn in.
+		Body->SetVisibility(bShown, true);
+	}
+	if (!bShown)
+	{
+		return;
+	}
+	const int32 Rings = FMath::Max(Segments, 2);
+	const int32 Across = Sides + 1;
+	const FTransform& World = Body->GetComponentTransform();
+	TArray<FVector, TInlineAllocator<64>> Points;
+	Points.SetNum(Rings);
+	for (int32 i = 0; i < Rings; ++i)
+	{
+		Points[i] = CurvePoint(static_cast<float>(i) / (Rings - 1));
+	}
+	Vertices.SetNum(Rings * Across);
+	Normals.SetNum(Rings * Across);
+	UVs.SetNum(Rings * Across);
+	Colors.SetNum(Rings * Across);
+	Tangents.SetNum(Rings * Across);
+
+	// The frame is carried along the curve, so the tube does not twist. Its underside starts facing
+	// down from the base and stays on the same side of the arm.
+	FVector Under = FVector::ZeroVector;
+	int32 Sucker = 0;
+	const int32 NumSuckers = Suckers->GetInstanceCount();
+	for (int32 i = 0; i < Rings; ++i)
+	{
+		const float U = static_cast<float>(i) / (Rings - 1);
+		const FVector Span = Points[FMath::Min(i + 1, Rings - 1)] - Points[FMath::Max(i - 1, 0)];
 		const FVector Dir = Span.IsNearlyZero() ? GetActorUpVector() : Span.GetSafeNormal();
-		const float R = FMath::Lerp(BaseRadius, TipRadius, FMath::Pow(U, 0.8f));
+		if (Under.IsNearlyZero())
+		{
+			Under = FMath::Abs(Dir.Z) > 0.9f ? FVector::ForwardVector : -FVector::UpVector;
+		}
+		Under = (Under - Dir * FVector::DotProduct(Under, Dir)).GetSafeNormal();
+		const FVector Side = FVector::CrossProduct(Dir, Under);
+		// Thick at the base, a slow muscular swell along it, closing to a point at the tip.
+		const float R = FMath::Lerp(BaseRadius, TipRadius, FMath::Pow(U, 0.8f))
+			* (1.f + 0.05f * FMath::Sin(U * 16.f + SwayTime * 1.4f + Seed))
+			* FMath::Clamp((1.f - U) / 0.06f, 0.08f, 1.f);
 		// Flat when hiding: wide and low.
-		const FVector Scale = bShown ? FVector(FMath::Max(2.f * R, Spacing * 1.7f), 2.f * R * (1.f + 0.35f * Flat), 2.f * R * (1.f - 0.45f * Flat)) / 100.f : FVector::ZeroVector;
-		const FQuat Facing = FRotationMatrix::MakeFromXZ(Dir, FVector::UpVector).ToQuat();
-		Body->UpdateInstanceTransform(i, FTransform(Facing, Points[i], Scale), true, i == Segments - 1, true);
+		const float RUnder = R * (1.f - 0.45f * Flat);
+		const float RSide = R * (1.f + 0.35f * Flat);
+		for (int32 j = 0; j < Across; ++j)
+		{
+			const float A = 2.f * PI * j / Sides;
+			const float C = FMath::Cos(A);
+			const float S = FMath::Sin(A);
+			const FVector Round = Under * C + Side * S;
+			const int32 V = i * Across + j;
+			Vertices[V] = World.InverseTransformPosition(Points[i] + Under * (C * RUnder) + Side * (S * RSide));
+			Normals[V] = World.InverseTransformVectorNoScale(Round);
+			UVs[V] = FVector2D(U * 6.f, static_cast<float>(j) / Sides);
+			// R: how much of the paler underside.
+			Colors[V] = FLinearColor(FMath::Clamp(C * 1.6f, 0.f, 1.f), 0.f, 0.f, 1.f);
+			Tangents[V] = FProcMeshTangent(World.InverseTransformVectorNoScale(Dir), false);
+		}
+		// A sucker on every second ring, along the underside, from the middle of the arm out.
+		if (Sucker < NumSuckers && i % 2 == 0 && U > 0.1f)
+		{
+			const float D = R * 0.42f;
+			const FQuat Face = FRotationMatrix::MakeFromXZ(Dir, -Under).ToQuat();
+			Suckers->UpdateInstanceTransform(Sucker, FTransform(Face, Points[i] + Under * (RUnder * 0.86f), FVector(D, D, D * 0.35f) * (2.f / 100.f)), true, false, true);
+			++Sucker;
+		}
+	}
+	if (NumSuckers > 0)
+	{
+		Suckers->MarkRenderStateDirty();
+	}
+	if (!bTubeMade)
+	{
+		TArray<int32> Triangles;
+		Triangles.Reserve((Rings - 1) * Sides * 6);
+		for (int32 i = 0; i < Rings - 1; ++i)
+		{
+			for (int32 j = 0; j < Sides; ++j)
+			{
+				const int32 A = i * Across + j;
+				const int32 B = A + 1;
+				const int32 C = A + Across;
+				const int32 D = C + 1;
+				Triangles.Append({A, C, B, B, C, D});
+			}
+		}
+		Body->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UVs, Colors, Tangents, false);
+		bTubeMade = true;
+	}
+	else
+	{
+		Body->UpdateMeshSection_LinearColor(0, Vertices, Normals, UVs, Colors, Tangents);
 	}
 }
 
@@ -167,13 +256,16 @@ void ANacreTentacle::Tick(float DeltaSeconds)
 
 	if (Skin)
 	{
-		Skin->SetVectorParameterValue(TEXT("BaseColor"), Colour);
+		Skin->SetVectorParameterValue(TEXT("BaseColor"), Colour * 0.8f);
+		Skin->SetVectorParameterValue(TEXT("BellyColor"), Colour * 1.1f + FLinearColor(0.05f, 0.04f, 0.04f));
 		Skin->SetVectorParameterValue(TEXT("EmissiveColor"), Colour);
-		Skin->SetScalarParameterValue(TEXT("EmissiveStrength"), bSilhouette ? 0.f : Tint == ENacreTint::Deep ? 0.15f : 0.35f);
+		// Lit by the room, not glowing: only the coral and the deep blue carry a little light of their own.
+		Skin->SetScalarParameterValue(TEXT("EmissiveStrength"), bSilhouette ? 0.f : Tint == ENacreTint::Pearl ? 0.03f : 0.2f);
 	}
 	if (AActor* H = Held.Get())
 	{
-		H->SetActorLocation(FMath::Lerp(GetActorLocation(), Tip, Extend) + FVector(0.f, 0.f, -2.f));
+		// Held in the curl, a little short of the tip, not stuck on the end of it.
+		H->SetActorLocation(CurvePoint(0.93f) + FVector(0.f, 0.f, -4.f));
 	}
 	if (Slither)
 	{

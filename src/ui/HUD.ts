@@ -152,7 +152,7 @@ export class HUD {
 
   showLoading(text: string): void {
     this.screen.classList.remove('hidden');
-    this.card.innerHTML = `<div class="eyebrow">It Takes One</div><p class="loading">${text}</p>`;
+    this.card.innerHTML = `<div class="eyebrow">It Only Needs Mara</div><p class="loading">${text}</p>`;
   }
 
   showTitle(
@@ -164,8 +164,7 @@ export class HUD {
     this.screen.classList.remove('hidden');
     const others = chapters.filter((c) => !c.current);
     this.card.innerHTML = `
-      <div class="eyebrow">Working title</div>
-      <h1>It Takes One</h1>
+      <h1>It Only Needs Mara</h1>
       <p>${chapter.blurb}<br/>${chapter.label}, <i>${chapter.title}</i>.</p>
       ${CONTROLS_HTML}
       <div class="buttons"><button class="primary" data-a="start">Begin</button>${others

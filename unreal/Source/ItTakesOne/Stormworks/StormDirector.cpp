@@ -158,7 +158,8 @@ void AStormDirector::Tick(float DeltaSeconds)
 		{
 			if (L && L->GetLightComponent())
 			{
-				L->GetLightComponent()->SetIntensity(800.f + 12000.f * Pulse);
+				// A warning at the edge of the eye: bright enough to feel, not enough to hide the path.
+				L->GetLightComponent()->SetIntensity(300.f + 4500.f * Pulse);
 			}
 		}
 		if (Alarm && EngagedT > 14.f)

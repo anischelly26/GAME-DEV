@@ -31,9 +31,11 @@ void ADescentRide::Begin(AMaraCharacter* Who)
 	bFinished = false;
 	Distance = 0.f;
 	Offset = FVector2D::ZeroVector;
+	SteerRight = FVector::ZeroVector;
 	Hit.Reset();
 	// Carried: no gravity, no walking; the ride places her every frame.
 	Who->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+	Who->SetTowed(true);
 	if (Tow)
 	{
 		Tow->SetOut(true, 0.3f);
@@ -72,7 +74,14 @@ void ADescentRide::Tick(float DeltaSeconds)
 
 	const FVector Centre = Path->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
 	const FVector Ahead = Path->GetDirectionAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
-	const FVector Right = FVector::CrossProduct(FVector::UpVector, Ahead).GetSafeNormal();
+	// Her left and right are carried along the path (the last Right, squared up to the new direction):
+	// taken from the world's up each frame, they would flip or collapse on the steep stretches.
+	if (SteerRight.IsNearlyZero())
+	{
+		SteerRight = FVector::CrossProduct(FVector::UpVector, Ahead);
+	}
+	SteerRight = (SteerRight - Ahead * FVector::DotProduct(SteerRight, Ahead)).GetSafeNormal();
+	const FVector Right = SteerRight;
 	const FVector Up = FVector::CrossProduct(Ahead, Right).GetSafeNormal();
 	FVector At = Centre + Right * Offset.X + Up * Offset.Y;
 

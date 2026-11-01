@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "HouseDetail.generated.h"
 
+class UPointLightComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
 
@@ -59,6 +60,9 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "House")
 	TObjectPtr<UTextRenderComponent> Label;
 
+	UPROPERTY(VisibleAnywhere, Category = "House")
+	TObjectPtr<UPointLightComponent> Glint;
+
 	/** The steam puffs, or the drops from the glass. */
 	UPROPERTY(VisibleAnywhere, Category = "House")
 	TArray<TObjectPtr<UStaticMeshComponent>> Puffs;
@@ -66,6 +70,8 @@ public:
 	bool HasPlayed() const { return bPlayed; }
 	/** Plays it now (the house director calls this when she has looked at it). */
 	void Play();
+	/** The gauge: a warm glint on the brass, so it can be found across dark water. */
+	void SetGlint(bool bOn);
 	/** The gauge: the needle swings to point at the floor. */
 	void TwitchNeedle() { NeedleWant = 1.f; }
 

@@ -122,6 +122,19 @@ def make_materials():
     trans.set_editor_property("used_with_instanced_static_meshes", True)
     MEL.recompile_material(trans)
 
+    # Nacre's skin: paler on the underside (vertex colour R, set by the tube), a wet rim of light.
+    skin = house_material("M_House_Skin")
+    tint = sw.node(skin, unreal.MaterialExpressionLinearInterpolate, -300, -150)
+    sw.link(sw.vparam(skin, "BaseColor", (0.6, 0.58, 0.62, 1), -650, -250), "", tint, "A")
+    sw.link(sw.vparam(skin, "BellyColor", (0.9, 0.86, 0.84, 1), -650, -60), "", tint, "B")
+    sw.link(sw.node(skin, unreal.MaterialExpressionVertexColor, -650, 120), "R", tint, "Alpha")
+    sw.prop(tint, "", MP.MP_BASE_COLOR)
+    sw.prop(sw.sparam(skin, "Roughness", 0.32, -300, 40), "", MP.MP_ROUGHNESS)
+    glow = sw.binop(skin, unreal.MaterialExpressionMultiply, sw.vparam(skin, "EmissiveColor", (0, 0, 0, 1), -800, 280), "", sw.sparam(skin, "EmissiveStrength", 0.0, -800, 460), "", -520, 330)
+    rim = sw.binop(skin, unreal.MaterialExpressionMultiply, sw.node(skin, unreal.MaterialExpressionFresnel, -800, 600),  "", sw.vparam(skin, "RimColor", (0.2, 0.3, 0.34, 1), -800, 740), "", -520, 600)
+    sw.prop(sw.binop(skin, unreal.MaterialExpressionAdd, glow, "", rim, "", -250, 420), "", MP.MP_EMISSIVE_COLOR)
+    MEL.recompile_material(skin)
+
     M = {}
     for path in EAL.list_assets(sw.ROOT + "/Materials", recursive=False, include_folder=False):
         a = unreal.load_asset(path)
@@ -135,9 +148,11 @@ def make_materials():
         M[name] = house_mi(name, trans, {"Color": color}, {"Opacity": opacity, "Rim": rim})
 
     pearl = (0.82, 0.8, 0.84, 1)
-    s("MI_House_Nacre", pearl, 0.35, 0.0, pearl, 0.35)
-    # Nacre's body is only ever a shape against the light, or dark in the dark: no glow of its own.
-    s("MI_House_NacreBody", (0.02, 0.02, 0.03, 1), 0.5)
+    M["MI_House_Nacre"] = house_mi("MI_House_Nacre", skin, {"BaseColor": pearl, "EmissiveColor": pearl}, {"EmissiveStrength": 0.03})
+    # Nacre's body is only ever a shape against the light, or dark in the dark: no glow of its own,
+    # just the wet edge.
+    M["MI_House_NacreBody"] = house_mi("MI_House_NacreBody", skin, {"BaseColor": (0.012, 0.012, 0.018, 1), "BellyColor": (0.012, 0.012, 0.018, 1), "RimColor": (0.03, 0.05, 0.06, 1)}, {"Roughness": 0.9})
+    s("MI_House_Sucker", (0.93, 0.86, 0.82, 1), 0.4)
     s("MI_House_NacreEye", (0.9, 0.68, 0.25, 1), 0.2, 0.0, (1.0, 0.72, 0.28, 1), 3.0)
     s("MI_House_Pupil", (0.01, 0.01, 0.012, 1), 0.1)
     # Behind her reflection: black, matte, so the window reads as night glass.
@@ -149,16 +164,16 @@ def make_materials():
     s("MI_House_Frame", (0.45, 0.32, 0.12, 1), 0.4, 0.6)
     s("MI_House_Picture", (0.3, 0.42, 0.5, 1), 0.9, 0.0, (0.3, 0.4, 0.45, 1), 0.15)
     # The conservatory's windows, each on a different sky: dawn, night, noon.
-    s("MI_House_SkyDawnTop", (0.9, 0.45, 0.35, 1), 1.0, 0.0, (0.95, 0.42, 0.32, 1), 4.0)
-    s("MI_House_SkyDawnLow", (1.0, 0.78, 0.45, 1), 1.0, 0.0, (1.0, 0.75, 0.42, 1), 5.0)
-    s("MI_House_SkySun", (1.0, 0.92, 0.7, 1), 1.0, 0.0, (1.0, 0.9, 0.62, 1), 14.0)
-    s("MI_House_SkyNightTop", (0.02, 0.03, 0.1, 1), 1.0, 0.0, (0.02, 0.03, 0.12, 1), 3.0)
-    s("MI_House_SkyNightLow", (0.06, 0.1, 0.28, 1), 1.0, 0.0, (0.06, 0.1, 0.3, 1), 3.0)
-    s("MI_House_SkyStar", (1, 1, 1, 1), 1.0, 0.0, (0.9, 0.95, 1.0, 1), 20.0)
-    s("MI_House_SkyNoonTop", (0.22, 0.5, 0.95, 1), 1.0, 0.0, (0.22, 0.5, 0.95, 1), 4.0)
-    s("MI_House_SkyNoonLow", (0.7, 0.85, 1.0, 1), 1.0, 0.0, (0.7, 0.85, 1.0, 1), 4.5)
-    s("MI_House_SkyCloud", (1, 1, 1, 1), 1.0, 0.0, (1, 1, 1, 1), 6.0)
-    s("MI_House_SeedGlow", (0.7, 0.9, 0.5, 1), 0.6, 0.0, (0.75, 1.0, 0.5, 1), 8.0)
+    s("MI_House_SkyDawnTop", (0.9, 0.45, 0.35, 1), 1.0, 0.0, (0.95, 0.42, 0.32, 1), 1.5)
+    s("MI_House_SkyDawnLow", (1.0, 0.78, 0.45, 1), 1.0, 0.0, (1.0, 0.75, 0.42, 1), 1.8)
+    s("MI_House_SkySun", (1.0, 0.92, 0.7, 1), 1.0, 0.0, (1.0, 0.9, 0.62, 1), 5.0)
+    s("MI_House_SkyNightTop", (0.02, 0.03, 0.1, 1), 1.0, 0.0, (0.02, 0.03, 0.12, 1), 1.4)
+    s("MI_House_SkyNightLow", (0.06, 0.1, 0.28, 1), 1.0, 0.0, (0.06, 0.1, 0.3, 1), 1.4)
+    s("MI_House_SkyStar", (1, 1, 1, 1), 1.0, 0.0, (0.9, 0.95, 1.0, 1), 8.0)
+    s("MI_House_SkyNoonTop", (0.22, 0.5, 0.95, 1), 1.0, 0.0, (0.22, 0.5, 0.95, 1), 1.5)
+    s("MI_House_SkyNoonLow", (0.7, 0.85, 1.0, 1), 1.0, 0.0, (0.7, 0.85, 1.0, 1), 1.6)
+    s("MI_House_SkyCloud", (1, 1, 1, 1), 1.0, 0.0, (1, 1, 1, 1), 2.4)
+    s("MI_House_SeedGlow", (0.7, 0.9, 0.5, 1), 0.6, 0.0, (0.75, 1.0, 0.5, 1), 2.5)
     t("MI_House_Bubble", (0.3, 0.45, 0.55, 1), 0.04, 0.35)
     t("MI_House_Glass", (0.75, 0.85, 0.9, 1), 0.1, 0.3)
     # The cottage windows at night: dark glass, so her reflection shows in it.
@@ -167,7 +182,8 @@ def make_materials():
     t("MI_House_Steam", (0.85, 0.88, 0.9, 1), 0.3)
     t("MI_House_WaterSurface", (0.12, 0.35, 0.4, 1), 0.5, 0.35)
     # The glowing seeds that drift in the flooded passages (an instanced mesh: AStormRain).
-    t("MI_House_Seed", (1.6, 2.2, 1.0, 1), 0.9)
+    t("MI_House_Seed", (0.7, 1.0, 0.45, 1), 0.75)
+    s("MI_House_LanternGlow", (1, 0.7, 0.4, 1), 0.5, 0.0, (1, 0.62, 0.3, 1), 2.4)
     for name in [k for k in M if k.startswith("MI_House")]:
         EAL.save_loaded_asset(M[name], only_if_is_dirty=False)
     log("materials: %d house instances" % len([k for k in M if k.startswith("MI_House")]))
@@ -300,7 +316,10 @@ def picture(b, label, loc, rot, w, h, folder):
 
 def point_light(b, label, x, y, z, color, intensity, radius, shadows=False, folder="Lights"):
     a = b.light(label, x, y, z, color, intensity, radius, folder, shadows)
-    a.get_component_by_class(unreal.PointLightComponent).set_mobility(unreal.ComponentMobility.MOVABLE)
+    c = a.get_component_by_class(unreal.PointLightComponent)
+    c.set_mobility(unreal.ComponentMobility.MOVABLE)
+    # Volumetric fog pays for every local light it scatters: on a laptop GPU, only the searchlight does.
+    c.set_editor_property("volumetric_scattering_intensity", 0.0)
     return a
 
 
@@ -309,6 +328,19 @@ def tentacle(b, label, base, rot, folder="Nacre", **props):
     for k, v in props.items():
         sw.setp(a, v, k, "b_" + k)
     return a
+
+
+def crag(b, label, cx, cy, z0, z1, radius, n, folder="World"):
+    """A rock with no box corners: rough tilted slabs overlapping, narrowing as they rise."""
+    for i in range(n):
+        k = i / max(n - 1, 1)
+        r = radius * (1 - 0.74 * k) * rng.uniform(0.8, 1.1)
+        a = rng.uniform(0, 2 * math.pi)
+        d = radius * (1 - k) * rng.uniform(0.1, 0.62)
+        z = z0 + (z1 - z0) * k
+        size = unreal.Vector(r * rng.uniform(1.2, 1.7), r * rng.uniform(1.1, 1.6), (z1 - z0) * rng.uniform(0.2, 0.34))
+        b.mesh(b.cube, V(cx + math.cos(a) * d, cy + math.sin(a) * d, z), size, "MI_TOS_Rock", "%s_%d" % (label, i), folder,
+               rot=(rng.uniform(-15, 15), rng.uniform(0, 360), rng.uniform(-15, 15)), collide=False)
 
 
 def rot_from_z(d):
@@ -376,7 +408,7 @@ def build_exterior(b):
         b.box("Sea_%d" % i, x0, x1, y0, y1, SEA - 0.1, SEA, "MI_TOS_Sea", F, collide=False)
     b.box("Causeway_Rock", 6, 32, -4, 9, -4, 0.0, "MI_TOS_Rock", F, collide=False)
     for i, (x, y, s) in enumerate(((-9, -7, 2.2), (-12, 5, 1.6), (-20, -4, 2.8), (2, -11, 3.0), (12, 12, 2.4), (-6, 10, 1.8), (40, -6, 3.4))):
-        b.box("SeaRock_%d" % i, x - s / 2, x + s / 2, y - s / 2, y + s / 2, SEA - 1.5, SEA + s * 0.35, "MI_TOS_Rock", F, collide=False)
+        crag(b, "SeaRock_%d" % i, x, y, SEA - 1.0, SEA + s * 0.4, s, 4)
 
     # The island the cottage stands on, its low walls, and the jetty.
     b.box("Island_Rock", -5, 8, -6, 6, -4, -0.05, "MI_TOS_Rock", F)
@@ -397,11 +429,24 @@ def build_exterior(b):
     hidden_wall(b, "Jetty_Bound_End", -16.8, -16.5, -1.2, 1.2, 0.0, 4.0)
     b.lamp("Jetty_Lamp", -5.6, -1.1, 2.0, 2500.0, 8.0)
     b.column("Jetty_LampPost", -5.6, -1.1, 0.0, 1.9, 0.05, "MI_TOS_Iron", F)
+    # Ivo's things by the door: a barrel, a crate, a coil of rope, a net float.
+    b.column("Prop_Barrel", -4.2, -2.4, 0.0, 0.95, 0.33, "MI_TOS_Wood", F)
+    b.column("Prop_BarrelHoop", -4.2, -2.4, 0.62, 0.68, 0.345, "MI_TOS_Iron", F)
+    b.mesh(b.cube, V(-4.1, 2.3, 0.3), unreal.Vector(0.8, 0.7, 0.6), "MI_TOS_Crate", "Prop_Crate", F, rot=(0, 18, 0))
+    for i in range(3):
+        b.mesh(b.cylinder, V(-4.05, 1.25, 0.05 + i * 0.07), unreal.Vector(0.62 - i * 0.06, 0.62 - i * 0.06, 0.07), "MI_TOS_Cloth", "Prop_Rope_%d" % i, F, collide=False)
+    # Hung flat against the wall, clear of the camera's way through the door.
+    b.mesh(b.sphere, V(-3.38, -2.5, 2.05), unreal.Vector(0.26, 0.26, 0.26), "MI_TOS_ToyRed", "Prop_Float", F, collide=False)
+    b.text("Prop_Mailbox", "I. VENN", -3.27, -1.6, 1.3, 180, 11, (150, 130, 95))
 
     # Knoll Rock behind the house, with its light.
-    for i, (x0, x1, y0, y1, z0, z1) in enumerate(((14, 34, 8, 28, -4, 4), (17, 30, 11, 24, 4, 8.5), (19, 24, 14, 20, 8.5, 10), (10, 15, 10, 18, -4, 2.5), (28, 38, 2, 12, -4, 3))):
-        b.box("KnollRock_%d" % i, x0, x1, y0, y1, z0, z1, "MI_TOS_Rock", F, collide=False)
-    top = place_lighthouse(b, V(21.5, 17, 10))
+    crag(b, "KnollRock", 33, 27, -3.0, 9.0, 20.0, 30)
+    crag(b, "KnollRock_Spur", 16, 16, -3.0, 2.5, 8.0, 10)
+    # The scan's feet end in the fragments of the plaza it was scanned on: they sit in the rock's top.
+    b.mesh(b.cube, V(33, 27, 8.6), unreal.Vector(17, 17, 2.0), "MI_TOS_Rock", "KnollRock_Top", F, rot=(2, 25, -3), collide=False)
+    top = place_lighthouse(b, V(33, 27, 8.2))
+    # A little cold light on the rock's near face, so it has a shape in the storm.
+    point_light(b, "KnollRock_Fill", 20, 14, 10, (0.55, 0.68, 0.85), 26000.0, 34.0, folder=F)
     b.spawn(unreal.LighthouseBeam, top, label="LighthouseBeam", folder=F)
 
     # Breakwater, far to the south: someone is always awake there.
@@ -455,7 +500,7 @@ def build_cottage(b):
             b.box("Cottage_Gable%s_%d" % (n, k), gx0, gx1, -half, half, 3.15 + 0.5 * k, 3.65 + 0.5 * k, "MI_TOS_Stone", F, collide=False)
     # Warm light in the south window, seen from the jetty: a one-sided plane facing out, so from
     # inside the window still shows the storm.
-    b.mesh(b.plane, V(-3.12, 2.2, 1.5), unreal.Vector(1.0, 1.2, 1.0), "MI_TOS_WindowGlow", "Cottage_WindowGlowS", F, rot=(90, 0, 0), collide=False)
+    b.mesh(b.plane, V(-3.12, 2.2, 1.5), unreal.Vector(1.0, 1.2, 1.0), "MI_House_LanternGlow", "Cottage_WindowGlowS", F, rot=(90, 0, 0), collide=False)
 
 
 def build_furniture(b):
@@ -523,10 +568,11 @@ def build_furniture(b):
     # The hanging lamp over the room (the one that casts shadows) and the bench lamp.
     b.column("CeilingLamp_Cord", 1.5, 0.0, 2.65, 3.0, 0.01, "MI_TOS_Iron", F)
     shade = movable(b.mesh(b.cylinder, V(1.5, 0.0, 2.62), unreal.Vector(0.36, 0.36, 0.14), "MI_TOS_Brass", "CeilingLamp_Shade", F, collide=False))
-    # Its shadow would put a black disc on the ceiling.
     shade.static_mesh_component.set_cast_shadow(False)
     rattles.append(shade)
-    b.mesh(b.sphere, V(1.5, 0.0, 2.52), unreal.Vector(0.12, 0.12, 0.12), "MI_TOS_LampGlow", "CeilingLamp_Bulb", F, collide=False)
+    # Neither the bulb nor the shade may shadow the lamp's own light: that was a black disc on the ceiling.
+    bulb = b.mesh(b.sphere, V(1.5, 0.0, 2.52), unreal.Vector(0.12, 0.12, 0.12), "MI_TOS_LampGlow", "CeilingLamp_Bulb", F, collide=False)
+    bulb.static_mesh_component.set_cast_shadow(False)
     lamps.append(point_light(b, "CeilingLamp", 1.5, 0.0, 2.4, (1.0, 0.72, 0.45), 4200.0, 9.0, shadows=True))
     lamps.append(point_light(b, "BenchLamp", 1.0, 3.6, 1.3, (1.0, 0.7, 0.42), 1600.0, 4.0))
     return rattles, lamps
@@ -597,7 +643,7 @@ def build_descent(b):
     for i in range(3, len(PATH) - 1):
         tube(b, "Passage_%d" % i, PATH[i], PATH[i + 1], 6.0, 6.0, "MI_TOS_Rock", folder=F)
         mid = along(PATH[i], PATH[i + 1], 0.5, 0, 2.4)
-        point_light(b, "Passage_Light_%d" % i, mid[0], mid[1], mid[2], (0.25, 0.75, 0.7), 2600.0, 9.0, folder=F)
+        point_light(b, "Passage_Light_%d" % i, mid[0], mid[1], mid[2], (0.3, 0.8, 0.75), 9000.0, 13.0, folder=F)
     # The water's surface across the shaft, where the hall meets the sea.
     b.box("Shaft_WaterSurface", 19.0, 27.0, -1.0, 6.0, SEA - 0.02, SEA, "MI_House_WaterSurface", F, collide=False)
 
@@ -716,22 +762,23 @@ def build_conservatory(b):
         for k, (dx, dy) in enumerate(((s + 0.02, 0), (-s - 0.02, 0), (0, s + 0.02), (0, -s - 0.02))):
             wx, wy = x + dx, y + dy
             if dx:
-                b.box("%s_Window_%d" % (n, k), wx - 0.02, wx + 0.02, wy - s * 0.35, wy + s * 0.35, z - s * 0.3, z + s * 0.25, "MI_TOS_WindowGlow", F, collide=False)
+                b.box("%s_Window_%d" % (n, k), wx - 0.02, wx + 0.02, wy - s * 0.35, wy + s * 0.35, z - s * 0.3, z + s * 0.25, "MI_House_LanternGlow", F, collide=False)
             else:
-                b.box("%s_Window_%d" % (n, k), wx - s * 0.35, wx + s * 0.35, wy - 0.02, wy + 0.02, z - s * 0.3, z + s * 0.25, "MI_TOS_WindowGlow", F, collide=False)
+                b.box("%s_Window_%d" % (n, k), wx - s * 0.35, wx + s * 0.35, wy - 0.02, wy + 0.02, z - s * 0.3, z + s * 0.25, "MI_House_LanternGlow", F, collide=False)
         b.column(n + "_Chain", x, y, z + s * 1.5, Z1, 0.04, "MI_TOS_Iron", F)
         point_light(b, n + "_Light", x, y, z - s - 0.6, (1.0, 0.66, 0.38), 3500.0 * s, 9.0 * s, folder=F)
     point_light(b, "Cons_Fill", 80, 46, -12, (0.2, 0.6, 0.65), 6000.0, 40.0, folder=F)
 
     # Nacre: a great pale body low in the water, gold eyes with dark bars, arms about it.
-    body = movable(b.mesh(b.sphere, V(*NACRE), unreal.Vector(NACRE_RADIUS * 2, NACRE_RADIUS * 2.1, NACRE_RADIUS * 1.8), "MI_House_NacreBody", "Nacre_Body", "Nacre", collide=False))
+    body = b.spawn(unreal.NacreMantle, V(*NACRE), label="Nacre_Body", folder="Nacre")
+    body.set_editor_property("radius", NACRE_RADIUS * 100.0)
     to_her = [REVEAL_ENTRY[i] - NACRE[i] for i in range(3)]
     n = math.sqrt(sum(v * v for v in to_her))
     to_her = [v / n for v in to_her]
     side = (-to_her[1], to_her[0], 0.0)
     for k, sgn in ((0, -1), (1, 1)):
-        e = [NACRE[i] + to_her[i] * NACRE_RADIUS * 0.82 + side[i] * sgn * 1.0 + (0.55 if i == 2 else 0) for i in range(3)]
-        eye = movable(b.mesh(b.sphere, V(*e), unreal.Vector(0.75, 0.75, 0.75), "MI_House_NacreEye", "Nacre_Eye_%d" % k, "Nacre", collide=False))
+        e = [NACRE[i] + to_her[i] * NACRE_RADIUS * 0.68 + side[i] * sgn * 1.15 + (-0.1 if i == 2 else 0) for i in range(3)]
+        eye = movable(b.mesh(b.sphere, V(*e), unreal.Vector(0.62, 0.62, 0.62), "MI_House_NacreEye", "Nacre_Eye_%d" % k, "Nacre", collide=False))
         pe = [e[i] + to_her[i] * 0.33 for i in range(3)]
         yaw = math.degrees(math.atan2(to_her[1], to_her[0]))
         pupil = movable(b.mesh(b.cube, V(*pe), unreal.Vector(0.1, 0.5, 0.14), "MI_House_Pupil", "Nacre_Pupil_%d" % k, "Nacre", rot=(0, yaw, 0), collide=False))
@@ -779,7 +826,7 @@ def build_weather(b):
     seeds.set_editor_property("count", 260)
     seeds.set_editor_property("extent", unreal.Vector(900, 900, 500))
     seeds.set_editor_property("velocity", unreal.Vector(18, 26, 34))
-    seeds.set_editor_property("streak_scale", unreal.Vector(0.05, 0.05, 0.05))
+    seeds.set_editor_property("streak_scale", unreal.Vector(0.035, 0.035, 0.035))
     seeds.set_editor_property("material_path", HROOT + "/Materials/MI_House_Seed.MI_House_Seed")
     return rain, seeds
 
@@ -793,7 +840,7 @@ def build_underwater_post(b):
     for k, v in (("override_scene_color_tint", True), ("scene_color_tint", unreal.LinearColor(0.55, 0.88, 0.95, 1)),
                  ("override_vignette_intensity", True), ("vignette_intensity", 0.75),
                  ("override_bloom_intensity", True), ("bloom_intensity", 1.6),
-                 ("override_auto_exposure_bias", True), ("auto_exposure_bias", 0.8)):
+                 ("override_auto_exposure_bias", True), ("auto_exposure_bias", 0.1)):
         try:
             s.set_editor_property(k, v)
         except Exception as e:

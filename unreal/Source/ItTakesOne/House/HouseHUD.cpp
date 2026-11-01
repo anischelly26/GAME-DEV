@@ -4,6 +4,8 @@
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 #include "House/HouseGameMode.h"
+#include "Misc/ScopeExit.h"
+#include "Stormworks/ReadyGate.h"
 #include "Stormworks/StormCinema.h"
 
 void AHouseHUD::Label(const FString& Text, float X, float Y, const FLinearColor& Color, float Scale, bool bCentred, bool bBackdrop)
@@ -29,7 +31,15 @@ void AHouseHUD::DrawHUD()
 	}
 	const float SX = Canvas->ClipX;
 	const float SY = Canvas->ClipY;
-	const float UI = FMath::Clamp(SY / 1080.f, 0.6f, 2.f);
+	// Readable at 720p as well as 1080p.
+	const float UI = FMath::Clamp(SY / 1080.f, 0.8f, 2.f) * 1.3f;
+	ON_SCOPE_EXIT
+	{
+		if (GM->Gate)
+		{
+			GM->Gate->DrawOn(const_cast<AHouseHUD*>(this), SX, SY);
+		}
+	};
 	const FLinearColor Ink(0.95f, 0.93f, 0.88f, 1.f);
 
 	if (GM->Cinema && GM->Cinema->IsPlaying())

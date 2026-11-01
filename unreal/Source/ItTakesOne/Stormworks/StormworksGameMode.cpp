@@ -8,7 +8,9 @@
 #include "ItTakesOne.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
+#include "Misc/PackageName.h"
 #include "Stormworks/MaraCharacter.h"
+#include "Stormworks/ReadyGate.h"
 #include "Stormworks/StormCheckpoint.h"
 #include "Stormworks/StormCinema.h"
 #include "Stormworks/StormMusic.h"
@@ -19,6 +21,12 @@
 #include "Stormworks/StoryNote.h"
 #include "Stormworks/TetherComponent.h"
 #include "Stormworks/WorkshopToy.h"
+
+namespace
+{
+	// The next part of the story (tools/unreal/build_house.py builds it).
+	const TCHAR* HouseMap = TEXT("/Game/ItTakesOne/Maps/House");
+}
 
 AStormworksGameMode::AStormworksGameMode()
 {
@@ -50,9 +58,16 @@ void AStormworksGameMode::StartPlay()
 	{
 		SetObjective(Checkpoint->Objective);
 	}
+	Gate = AReadyGate::Hold(GetWorld(), TEXT("It Only Needs Mara"));
 	Cinema->OnProgress.AddUObject(this, &AStormworksGameMode::OnShotProgress);
 	// The opening plays as soon as she is there (the self-test plays it itself, when it is ready).
 	bOpeningPending = !FParse::Param(FCommandLine::Get(), TEXT("StormSelfTest"));
+	// For a bot: straight on to the house, by the same road as the game (with -HouseSelfTest).
+	if (FParse::Param(FCommandLine::Get(), TEXT("StormChainTest")))
+	{
+		bOpeningPending = false;
+		ContinueIn = 0.1f;
+	}
 
 	// Load every sound now, so the first tug or swing does not stall on a disk read.
 	for (const TCHAR* Name : {TEXT("S_TOS_Fire"), TEXT("S_TOS_Latch"), TEXT("S_TOS_Reel"), TEXT("S_TOS_Refuse"), TEXT("S_TOS_Grind"), TEXT("S_TOS_Clunk"),
@@ -267,6 +282,11 @@ bool AStormworksGameMode::TryInteract(ACharacter* Who)
 		CloseNote();
 		return true;
 	}
+	if (ContinueIn > 0.f)
+	{
+		Continue();
+		return true;
+	}
 	if (AStoryNote* Note = NoteInReach(Who))
 	{
 		OpenNote = Note;
@@ -291,6 +311,20 @@ bool AStormworksGameMode::TryInteract(ACharacter* Who)
 void AStormworksGameMode::CloseNote()
 {
 	OpenNote = nullptr;
+	// Ivo's last note read: the end card, then on to the house (not during the self-test, which
+	// ends here).
+	if (bComplete && ContinueIn < 0.f && !FParse::Param(FCommandLine::Get(), TEXT("StormSelfTest"))
+		&& FPackageName::DoesPackageExist(HouseMap))
+	{
+		ContinueIn = 8.f;
+	}
+}
+
+void AStormworksGameMode::Continue()
+{
+	ContinueIn = -1.f;
+	LeaveIn = 0.7f;
+	UE_LOG(LogStormworks, Log, TEXT("On to the house under Knoll Rock"));
 }
 
 void AStormworksGameMode::Complete()
@@ -311,6 +345,25 @@ void AStormworksGameMode::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	MessageLeft = FMath::Max(0.f, MessageLeft - DeltaSeconds);
 	Fade = FMath::Max(0.f, Fade - DeltaSeconds * 1.6f);
+	if (ContinueIn > 0.f)
+	{
+		ContinueIn -= DeltaSeconds;
+		if (ContinueIn <= 0.f)
+		{
+			Continue();
+		}
+	}
+	if (LeaveIn > 0.f)
+	{
+		// Down to black, then the house loads behind its own title card.
+		LeaveIn -= DeltaSeconds;
+		Fade = 1.f - FMath::Clamp(LeaveIn / 0.7f, 0.f, 1.f);
+		if (LeaveIn <= 0.f)
+		{
+			UGameplayStatics::OpenLevel(this, FName(HouseMap));
+		}
+		return;
+	}
 
 	ACharacter* C = GetPlayerCharacter();
 	if (!C)

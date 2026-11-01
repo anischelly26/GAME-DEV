@@ -26,6 +26,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "House")
 	TObjectPtr<UStormCinema> Cinema;
 
+	/** Holds the level behind a title card until it is ready to be seen. */
+	UPROPERTY(Transient)
+	TObjectPtr<class AReadyGate> Gate;
+
 	// What the HUD shows.
 	FString Objective;
 	FString Message;

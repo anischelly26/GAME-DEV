@@ -109,6 +109,9 @@ def build(out_dir):
     # --- The grab and the deep.
     n = secs(3.0)
     S["H_Grab"] = add(mul(lowpass(noise(n), ramp(n, 6000, 200)), env(n, 0.05, 2.8)), gain(mul(tone(n, ramp(n, 90, 40)), env(n, 0.01, 1.5)), 0.8))
+    # One swimming stroke: a soft push of water.
+    n = secs(0.5)
+    S["H_Stroke"] = add(mul(bandpass(noise(n), 180, 900), env(n, 0.09, 0.38, 0.7)), gain(mul(tone(n, ramp(n, 160, 90)), env(n, 0.06, 0.3)), 0.25))
     # The bubble closing over her head: a rubbery wobble.
     n = secs(0.9)
     wob = [170.0 * (1 + 0.3 * math.sin(2 * math.pi * 7 * i / RATE) * math.exp(-i / secs(0.35))) for i in range(n)]

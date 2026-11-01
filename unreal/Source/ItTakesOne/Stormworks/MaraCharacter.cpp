@@ -11,7 +11,10 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
+#include "AnimationRuntime.h"
+#include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/SkinnedAsset.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInterface.h"
 #include "Stormworks/MaraAnimInstance.h"
@@ -63,8 +66,29 @@ AMaraCharacter::AMaraCharacter()
 	Bubble->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Bubble->SetCastShadow(false);
 	Bubble->SetVisibility(false);
-	// Round her big head: its centre in her bind pose (the mesh's own frame).
-	Bubble->SetRelativeLocation(FVector(0.f, 3.5f, 102.f));
+
+	WaterLight = CreateDefaultSubobject<UPointLightComponent>(TEXT("WaterLight"));
+	WaterLight->SetupAttachment(RootComponent);
+	WaterLight->SetRelativeLocation(FVector(0.f, 0.f, 90.f));
+	WaterLight->SetIntensityUnits(ELightUnits::Unitless);
+	WaterLight->SetIntensity(0.f);
+	WaterLight->SetAttenuationRadius(520.f);
+	WaterLight->SetLightColor(FLinearColor(0.75f, 0.95f, 1.f));
+	WaterLight->SetCastShadows(false);
+	// Light on her, not in the fog: volumetric fog pays for every local light it scatters.
+	WaterLight->SetVolumetricScatteringIntensity(0.f);
+	WaterLight->SetVisibility(false);
+}
+
+void AMaraCharacter::SetWaterLight(float Amount)
+{
+	WaterLight->SetVisibility(Amount > 0.01f);
+	WaterLight->SetIntensity(1500.f * Amount);
+}
+
+bool AMaraCharacter::IsInWater() const
+{
+	return bTowed || GetCharacterMovement()->IsSwimming();
 }
 
 FVector2D AMaraCharacter::GetSteerInput() const
@@ -76,11 +100,10 @@ void AMaraCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	UCharacterMovementComponent* MC = GetCharacterMovement();
-	const bool bInWater = MC->IsSwimming() || MC->IsFlying();
 	if (MC->IsSwimming())
 	{
 		// Rise and dive (Space or the right shoulder; C, Ctrl or the left shoulder).
-		if (bPressedJump)
+		if (bRising)
 		{
 			AddMovementInput(FVector::UpVector, 1.f);
 		}
@@ -89,14 +112,34 @@ void AMaraCharacter::Tick(float DeltaSeconds)
 			AddMovementInput(FVector::UpVector, -1.f);
 		}
 	}
-	// Lying into the stroke as she swims (about her middle, so her head goes forward, not her feet).
+	// The one place that turns her body. The swim clip already lies her flat, head forward, so nothing
+	// here lays her down: moving in the water, it only points that flat body up or down the way she
+	// is going (about her middle). Upright clips (standing, idling in the water) stay upright.
 	if (bDressed)
 	{
-		const float Want = bInWater ? 70.f * FMath::Clamp(GetVelocity().Size() / 250.f, 0.f, 1.f) : 0.f;
-		SwimTilt = FMath::FInterpTo(SwimTilt, Want, DeltaSeconds, 4.f);
-		const FQuat Tilt(FVector::YAxisVector, FMath::DegreesToRadians(SwimTilt));
+		const FVector V = GetVelocity();
+		const float Moving = IsInWater() ? FMath::SmoothStep(25.f, 140.f, static_cast<float>(V.Size())) : 0.f;
+		const float Travel = V.IsNearlyZero() ? 0.f : FMath::RadiansToDegrees(static_cast<float>(FMath::Atan2(V.Z, V.Size2D())));
+		BodyPitch = FMath::FInterpTo(BodyPitch, FMath::Clamp(Travel, -75.f, 75.f) * Moving, DeltaSeconds, 5.f);
+		const FQuat Tilt(FVector::YAxisVector, FMath::DegreesToRadians(-BodyPitch));
 		const float Half = GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight();
 		GetMesh()->SetRelativeLocationAndRotation(Tilt.RotateVector(FVector(0.f, 0.f, -Half)), Tilt * FRotator(0.f, -90.f, 0.f).Quaternion());
+	}
+	// Walls behind her push the camera in. Rather than end up in the back of her big head, it rises
+	// over her as the boom shortens; at the very last she is hidden from the lens.
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (bDressed && PC && PC->GetViewTarget() == this)
+	{
+		const float Arm = FVector::Dist(FollowCamera->GetComponentLocation(), CameraBoom->GetComponentLocation());
+		const float Squeeze = 1.f - FMath::Clamp((Arm - 90.f) / 190.f, 0.f, 1.f);
+		CameraLift = FMath::FInterpTo(CameraLift, 75.f * Squeeze, DeltaSeconds, 6.f);
+		CameraBoom->TargetOffset = FVector(0.f, 0.f, CameraLift);
+		const bool bTooClose = FVector::Dist(FollowCamera->GetComponentLocation(), GetMesh()->GetSocketLocation(TEXT("Head"))) < 55.f;
+		if (bTooClose != bHiddenFromLens)
+		{
+			bHiddenFromLens = bTooClose;
+			GetMesh()->SetHiddenInGame(bTooClose, true);
+		}
 	}
 	// The bubble grows over her head, or shrinks away.
 	BubbleScale = FMath::FInterpTo(BubbleScale, bBubbleWanted ? 1.f : 0.f, DeltaSeconds, 6.f);
@@ -108,6 +151,17 @@ void AMaraCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	bDressed = UMaraAnimInstance::Dress(this);
+	if (bDressed)
+	{
+		// The bubble rides on her Head bone: its centre round her head in the bind pose, seen from there.
+		const FReferenceSkeleton& Ref = GetMesh()->GetSkinnedAsset()->GetRefSkeleton();
+		const int32 HeadBone = Ref.FindBoneIndex(TEXT("Head"));
+		if (HeadBone != INDEX_NONE)
+		{
+			Bubble->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, TEXT("Head"));
+			Bubble->SetRelativeLocation(FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, HeadBone).InverseTransformPosition(FVector(0.f, 3.5f, 102.f)));
+		}
+	}
 	Bubble->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")));
 	if (UMaterialInterface* Glass = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/ItTakesOne/House/Materials/MI_House_Bubble.MI_House_Bubble"), nullptr, LOAD_NoWarn | LOAD_Quiet))
 	{
@@ -209,6 +263,8 @@ void AMaraCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 		EIC->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 		EIC->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AMaraCharacter::Move);
 		EIC->BindAction(LookAction, ETriggerEvent::Triggered, this, &AMaraCharacter::Look);
+		EIC->BindActionValueLambda(JumpAction, ETriggerEvent::Started, [this](const FInputActionValue&) { bRising = true; });
+		EIC->BindActionValueLambda(JumpAction, ETriggerEvent::Completed, [this](const FInputActionValue&) { bRising = false; });
 		EIC->BindActionValueLambda(DiveAction, ETriggerEvent::Started, [this](const FInputActionValue&) { bDiving = true; });
 		EIC->BindActionValueLambda(DiveAction, ETriggerEvent::Completed, [this](const FInputActionValue&) { bDiving = false; });
 	}

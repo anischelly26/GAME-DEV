@@ -1,6 +1,10 @@
 #include "House/HouseSelfTest.h"
 
+#include "AnimationRuntime.h"
+#include "AudioMixerBlueprintLibrary.h"
+#include "RHI.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Engine/SkinnedAsset.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/TargetPoint.h"
 #include "EngineUtils.h"
@@ -19,7 +23,9 @@
 #include "ItTakesOne.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#if WITH_EDITOR
 #include "ShaderCompiler.h"
+#endif
 #include "Stormworks/MaraCharacter.h"
 #include "Stormworks/StormCinema.h"
 #include "UnrealClient.h"
@@ -116,12 +122,55 @@ bool AHouseSelfTest::MoveTo(const FVector& Where, float Radius)
 	}
 	if (D.Size() <= Radius)
 	{
+		HoldW(false);
 		return true;
 	}
-	M->AddMovementInput(D.GetSafeNormal(), 1.f);
-	const FRotator Want(-12.f, D.Rotation().Yaw, 0.f);
-	PC()->SetControlRotation(FMath::RInterpTo(PC()->GetControlRotation(), Want, GetWorld()->GetDeltaSeconds(), 6.f));
+	// The W key, through the same mappings as a player's: forward is where the camera faces.
+	PC()->SetControlRotation(FRotator(M->GetCharacterMovement()->IsSwimming() ? D.Rotation().Pitch : -12.f, D.Rotation().Yaw, 0.f));
+	HoldW(true);
 	return false;
+}
+
+void AHouseSelfTest::Key(const FKey& Which, bool bDown)
+{
+	const UGameViewportClient* Viewport = GetWorld()->GetGameViewport();
+	PC()->InputKey(FInputKeyEventArgs(Viewport ? Viewport->Viewport : nullptr, IPlatformInputDeviceMapper::Get().GetDefaultInputDevice(), Which, bDown ? IE_Pressed : IE_Released, FPlatformTime::Cycles64()));
+}
+
+void AHouseSelfTest::HoldW(bool bDown)
+{
+	if (bDown != bHoldingW)
+	{
+		bHoldingW = bDown;
+		Key(EKeys::W, bDown);
+	}
+}
+
+void AHouseSelfTest::Tap(const FKey& Which)
+{
+	Key(Which, true);
+	Tapped = Which;
+	TapFrames = 3;
+}
+
+void AHouseSelfTest::SampleBody()
+{
+	const AMaraCharacter* M = Mara();
+	if (!M || !M->GetMesh())
+	{
+		return;
+	}
+	const FVector Head = M->GetMesh()->GetSocketLocation(TEXT("Head"));
+	const FVector Pelvis = M->GetMesh()->GetSocketLocation(TEXT("pelvis"));
+	const FVector V = M->GetVelocity();
+	if (V.Size() > 200.f)
+	{
+		WorstLead = FMath::Min(WorstLead, FVector::DotProduct((Head - Pelvis).GetSafeNormal(), V.GetSafeNormal()));
+	}
+	if (M->HasBubble())
+	{
+		WorstBubble = FMath::Max(WorstBubble, FVector::Dist(M->Bubble->GetComponentLocation(), Head));
+	}
 }
 
 void AHouseSelfTest::AimAway(const FVector& From)
@@ -166,15 +215,23 @@ void AHouseSelfTest::Build()
 		if (T < 1.5f) return false;
 		Check(Mara() && Mara()->IsDressed() && Dir(), TEXT("Mara is on the jetty; the house director is in the level"));
 		Check(Dir()->GetBeat() == EHouseBeat::Outside && Dir()->StormCutoff > 15000.f, TEXT("outside, the storm is heard in full"));
+		{
+			// Her hand against its place in the bind pose: a T-pose would put it there exactly.
+			const USkeletalMeshComponent* Body = Mara()->GetMesh();
+			const FReferenceSkeleton& Ref = Body->GetSkinnedAsset()->GetRefSkeleton();
+			const FVector Bind = FAnimationRuntime::GetComponentSpaceTransformRefPose(Ref, Ref.FindBoneIndex(TEXT("hand_r"))).GetLocation();
+			const float Moved = FVector::Dist(Bind, Body->GetSocketTransform(TEXT("hand_r"), RTS_Component).GetLocation());
+			Check(Moved > 10.f, FString::Printf(TEXT("the level opens with her posed, not in a T-pose (hand %.0f cm from the bind pose)"), Moved));
+		}
 		Shot(TEXT("01_jetty"));
 		return true;
 	}});
 	// Space through the real key path (Enhanced Input), not Jump() called directly.
-	Steps.Add({TEXT("space jumps"), [this]() { PC()->InputKey(FInputKeyEventArgs(GetWorld()->GetGameViewport() ? GetWorld()->GetGameViewport()->Viewport : nullptr, IPlatformInputDeviceMapper::Get().GetDefaultInputDevice(), EKeys::SpaceBar, IE_Pressed, FPlatformTime::Cycles64())); bFlag = false; Mark = 0.f; }, [this](float T) {
+	Steps.Add({TEXT("space jumps"), [this]() { Key(EKeys::SpaceBar, true); bFlag = false; Mark = 0.f; }, [this](float T) {
 		if (T > 0.05f && !bFlag)
 		{
 			bFlag = true;
-			PC()->InputKey(FInputKeyEventArgs(GetWorld()->GetGameViewport() ? GetWorld()->GetGameViewport()->Viewport : nullptr, IPlatformInputDeviceMapper::Get().GetDefaultInputDevice(), EKeys::SpaceBar, IE_Released, FPlatformTime::Cycles64()));
+			Key(EKeys::SpaceBar, false);
 		}
 		if (Mara()->GetCharacterMovement()->IsFalling()) Mark = 1.f;
 		if (T < 0.6f) return false;
@@ -221,12 +278,17 @@ void AHouseSelfTest::Build()
 
 	// The gauge, and the theft.
 	Steps.Add({TEXT("to the bench"), []() {}, Walk(TEXT("WP_Bench"), 35.f), 12.f});
-	Steps.Add({TEXT("inspect"), []() {}, [this, Dir, GM](float T) {
+	Steps.Add({TEXT("inspect"), [this]() { bFlag = false; }, [this, Dir, GM](float T) {
 		AimAt(Dir()->Gauge->GetActorLocation());
 		if (T < 0.5f) return false;
-		Check(Dir()->IsGaugeInReach() && GM()->Prompt.Contains(TEXT("Look")), TEXT("at the bench, the gauge offers [E] Look"));
-		Dir()->Interact();
-		Check(Dir()->GetBeat() == EHouseBeat::Inspected, TEXT("E: Ivo's gauge, where he left it (\"He kept it.\")"));
+		if (!bFlag)
+		{
+			bFlag = true;
+			Check(Dir()->IsGaugeInReach() && GM()->Prompt.Contains(TEXT("Look")), TEXT("at the bench, the gauge offers [E] Look"));
+			Tap(EKeys::E);
+		}
+		if (Dir()->GetBeat() != EHouseBeat::Inspected) return false;
+		Check(true, TEXT("the E key: Ivo's gauge, where he left it (\"He kept it.\")"));
 		Shot(TEXT("06_gauge"));
 		return true;
 	}});
@@ -285,47 +347,94 @@ void AHouseSelfTest::Build()
 		Shot(TEXT("10_searchlight"));
 		return true;
 	}, 8.f});
-	Steps.Add({TEXT("the grab"), []() {}, [this, GM, Dir](float T) {
+	Steps.Add({TEXT("the grab"), [this]() { bFlag = false; }, [this, GM, Dir](float T) {
 		UStormCinema* Cin = GM()->Cinema;
 		if (Dir()->GetBeat() == EHouseBeat::Grab && Cin->IsPlaying(EStormShot::HouseGrab))
 		{
 			if (FMath::IsNearlyEqual(Cin->GetTime(), 1.6f, 0.04f)) Shot(TEXT("11_grab"));
+			if (FParse::Param(FCommandLine::Get(), TEXT("HouseSkipGrab")) && Cin->GetTime() > 0.9f && !bFlag)
+			{
+				bFlag = true;
+				Tap(EKeys::SpaceBar);
+			}
 			return false;
 		}
 		if (Dir()->GetBeat() < EHouseBeat::Descent) return false;
-		Check(Cin->LastEnd == EShotEnd::Completed && Cin->Granted[static_cast<int32>(EStormShot::HouseGrab)] == 1, TEXT("the grab plays to its end once (a short cinematic)"));
+		const bool bSkipped = FParse::Param(FCommandLine::Get(), TEXT("HouseSkipGrab"));
+		Check(Cin->LastEnd == (bSkipped ? EShotEnd::Skipped : EShotEnd::Completed) && Cin->Granted[static_cast<int32>(EStormShot::HouseGrab)] == 1, bSkipped ? TEXT("the grab, skipped with Space: granted once") : TEXT("the grab plays to its end once (a short cinematic)"));
+		Check(Dir()->Ride->IsRunning() && Mara()->IsInWater() && GM()->Objective.Contains(TEXT("Steer")), TEXT("after the grab: the tow is running, she is held, and the objective says steer"));
 		Check(Mara()->HasBubble(), TEXT("she has an air bubble over her head"));
 		return true;
 	}, 15.f});
 
 	// The descent: no steering at all, and it still cannot be failed.
-	Steps.Add({TEXT("descent"), [this]() { bFlag = false; }, [this, Dir](float T) {
+	Steps.Add({TEXT("descent"), [this]() { bFlag = false; WorstLead = 1.f; WorstBubble = 0.f; }, [this, Dir](float T) {
 		ADescentRide* R = Dir()->Ride;
+		if (T > 1.5f) SampleBody();
 		if (FMath::IsNearlyEqual(R->GetProgress(), 0.15f, 0.01f) && !bFlag) { bFlag = true; Shot(TEXT("12_hallway")); }
 		if (FMath::IsNearlyEqual(R->GetProgress(), 0.6f, 0.01f) && bFlag) { bFlag = false; Shot(TEXT("13_flooded")); }
+		// The real keys: right in the hall, left down the steep shaft, up in the passage.
+		const float P = R->GetProgress();
+		const FKey Want = P > 0.05f && P < 0.2f ? EKeys::D : P > 0.3f && P < 0.42f ? EKeys::A : P > 0.55f && P < 0.68f ? EKeys::W : EKeys::Invalid;
+		if (Want != Steering)
+		{
+			if (Steering.IsValid()) Key(Steering, false);
+			if (Want.IsValid()) Key(Want, true);
+			Steering = Want;
+		}
+		if (P > 0.05f && P < 0.2f) SteerRight = FMath::Max(SteerRight, static_cast<float>(R->GetOffset().X));
+		if (P > 0.3f && P < 0.42f) SteerLeft = FMath::Min(SteerLeft, static_cast<float>(R->GetOffset().X));
+		if (P > 0.55f && P < 0.68f) SteerUp = FMath::Max(SteerUp, static_cast<float>(R->GetOffset().Y));
 		if (Dir()->GetBeat() != EHouseBeat::Reveal) return false;
 		Check(R->IsFinished(), FString::Printf(TEXT("the tow down through the folding house reaches the bottom (%d knocks, no failure)"), R->Bumps));
 		Check(Dir()->Under > 0.3f, TEXT("under water: the storm is gone, a heartbeat"));
+		Check(SteerRight > 60.f && SteerLeft < -60.f && SteerUp > 60.f, FString::Printf(TEXT("D, A and W steer her: right %.0f in the hall, left %.0f down the shaft, up %.0f (cm)"), SteerRight, SteerLeft, SteerUp));
+		Check(WorstLead > 0.5f, FString::Printf(TEXT("towed head first along the path, never inverted (worst lead %.2f)"), WorstLead));
+		Check(WorstBubble > 0.f && WorstBubble < 45.f, FString::Printf(TEXT("the bubble stays on her head (worst %.0f cm from the Head bone)"), WorstBubble));
 		return true;
 	}, 40.f});
 	Steps.Add({TEXT("reveal"), []() {}, [this, Dir](float T) {
 		// The view is the director's own first framing of the conservatory.
 		if (T < 2.f) return false;
 		Check(Mara()->GetCharacterMovement()->IsSwimming(), TEXT("in the conservatory she swims"));
+		Check(Mara()->GetMesh()->GetSocketLocation(TEXT("Head")).Z > Mara()->GetMesh()->GetSocketLocation(TEXT("pelvis")).Z + 20.f, TEXT("still in the water she floats upright, head up"));
 		Shot(TEXT("14_reveal"));
 		return true;
 	}});
-	Steps.Add({TEXT("swim to the gauge"), []() {}, [this, Dir](float T) {
+	Steps.Add({TEXT("rise and dive"), [this]() { Key(EKeys::SpaceBar, true); Mark = Mara()->GetActorLocation().Z; bFlag = false; }, [this](float T) {
+		if (T > 1.f && !bFlag)
+		{
+			bFlag = true;
+			Key(EKeys::SpaceBar, false);
+			Check(Mara()->GetActorLocation().Z > Mark + 80.f, FString::Printf(TEXT("the Space key swims her up (%.0f cm)"), Mara()->GetActorLocation().Z - Mark));
+			Mark = Mara()->GetActorLocation().Z;
+			Key(EKeys::C, true);
+		}
+		if (T < 2.f) return false;
+		Key(EKeys::C, false);
+		Check(Mara()->GetActorLocation().Z < Mark - 80.f, FString::Printf(TEXT("the C key swims her down (%.0f cm)"), Mark - Mara()->GetActorLocation().Z));
+		return true;
+	}});
+	Steps.Add({TEXT("swim to the gauge"), [this]() { WorstLead = 1.f; WorstBubble = 0.f; }, [this, Dir](float T) {
 		MoveTo(Dir()->Offer->GetTip(), 120.f);
+		SampleBody();
 		// Once its arm has come up out of the dark and stopped.
 		return Dir()->IsOfferInReach() && Dir()->Offer->IsAtTarget(30.f);
 	}, 25.f});
-	Steps.Add({TEXT("take it"), []() {}, [this, Dir, GM](float T) {
+	Steps.Add({TEXT("take it"), [this]() { bFlag = false; }, [this, Dir, GM](float T) {
 		AimAt(Dir()->Offer->GetTip());
 		if (T < 0.5f) return false;
-		Check(GM()->Prompt.Contains(TEXT("Take")), TEXT("Nacre holds the gauge out: [E] Take it"));
-		Dir()->Interact();
-		Check(Dir()->GetBeat() == EHouseBeat::Returned && Dir()->Gauge->GetAttachParentActor() == Mara(), TEXT("she takes it back"));
+		// Worst moment, reversing to follow the arm: she must never trail her head behind her feet.
+		Check(WorstLead > 0.f, FString::Printf(TEXT("she swims head first, never feet first (worst lead %.2f)"), WorstLead));
+		Check(WorstBubble > 0.f && WorstBubble < 45.f, FString::Printf(TEXT("the bubble stays on her head while swimming (worst %.0f cm)"), WorstBubble));
+		if (!bFlag)
+		{
+			bFlag = true;
+			Check(GM()->Prompt.Contains(TEXT("Take")), TEXT("Nacre holds the gauge out: [E] Take it"));
+			Tap(EKeys::E);
+		}
+		if (Dir()->GetBeat() != EHouseBeat::Returned) return false;
+		Check(Dir()->Gauge->GetAttachParentActor() == Mara(), TEXT("the E key: she takes it back"));
 		return true;
 	}});
 	Steps.Add({TEXT("thanks"), []() {}, [this, Dir, GM](float T) {
@@ -345,6 +454,12 @@ void AHouseSelfTest::Tick(float DeltaSeconds)
 	if (QuitIn >= 0.f)
 	{
 		QuitIn -= DeltaSeconds;
+		if (bStopAudio && QuitIn < 2.f)
+		{
+			bStopAudio = false;
+			Log(TEXT("recording ends"));
+			UAudioMixerBlueprintLibrary::StopRecordingOutput(this, EAudioRecordingExportType::WavFile, TEXT("output"), OutDir);
+		}
 		if (QuitIn < 0.f)
 		{
 			FPlatformMisc::RequestExit(false);
@@ -355,10 +470,12 @@ void AHouseSelfTest::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+#if WITH_EDITOR
 	if (GShaderCompilingManager && GShaderCompilingManager->GetNumRemainingJobs() > 0 && Index < 0)
 	{
 		return;
 	}
+#endif
 	if (!Mara())
 	{
 		return;
@@ -374,9 +491,24 @@ void AHouseSelfTest::Tick(float DeltaSeconds)
 	{
 		Index = 0;
 		StepT = 0.f;
+		// What the game itself sends to the speakers, for measuring the mix (no capture software's gain).
+		bRecording = FParse::Param(FCommandLine::Get(), TEXT("HouseRecordAudio"));
+		if (bRecording)
+		{
+			UAudioMixerBlueprintLibrary::StartRecordingOutput(this, 240.f);
+		}
 		Log(FString::Printf(TEXT("-- %s"), *Steps[0].Name));
 		Steps[0].Start();
 	}
+	if (TapFrames > 0 && --TapFrames == 0)
+	{
+		Key(Tapped, false);
+	}
+	++StepFrames;
+	StepSum += DeltaSeconds * 1000.0;
+	StepGame += FPlatformTime::ToMilliseconds(GGameThreadTime);
+	StepRender += FPlatformTime::ToMilliseconds(GRenderThreadTime);
+	StepGpu += FPlatformTime::ToMilliseconds(RHIGetGPUFrameCycles(0));
 	FStep& S = Steps[Index];
 	const bool bFinished = S.Update(StepT);
 	StepT += DeltaSeconds;
@@ -386,6 +518,14 @@ void AHouseSelfTest::Tick(float DeltaSeconds)
 	}
 	if (bFinished || StepT > S.Timeout)
 	{
+		HoldW(false);
+		if (StepT > 1.f)
+		{
+			const double N = FMath::Max(StepFrames, 1);
+			Log(FString::Printf(TEXT("cost %s: %d frames, mean %.1f ms (game %.1f, render %.1f, GPU %.1f)"), *S.Name, StepFrames, StepSum / N, StepGame / N, StepRender / N, StepGpu / N));
+		}
+		StepFrames = 0;
+		StepSum = StepGame = StepRender = StepGpu = 0.0;
 		++Index;
 		StepT = 0.f;
 		if (Index >= Steps.Num())
@@ -393,7 +533,9 @@ void AHouseSelfTest::Tick(float DeltaSeconds)
 			bDone = true;
 			Log(FString::Printf(TEXT("frames: %d, mean %.1f ms, %d over 33 ms"), Frames, Frames ? FrameSum / Frames : 0.0, FramesOver33));
 			Log(FString::Printf(TEXT("SELFTEST RESULT: %d passed, %d failed, %.1f s"), Passed, Failed, Total));
-			QuitIn = 1.5f;
+			// A recording holds the end card for a few seconds, then stops while the window is still open.
+			bStopAudio = bRecording || FParse::Param(FCommandLine::Get(), TEXT("StormRecordAudio"));
+			QuitIn = bStopAudio ? 6.f : 1.5f;
 			return;
 		}
 		Log(FString::Printf(TEXT("-- %s"), *Steps[Index].Name));

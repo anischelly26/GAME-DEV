@@ -46,6 +46,11 @@ private:
 	FVector WP(const TCHAR* Tag) const;
 	bool MoveTo(const FVector& Where, float Radius);
 	void AimAt(const FVector& Where);
+	/** A real key, through the player controller and its input mappings. */
+	void Key(const FKey& Which, bool bDown);
+	void HoldW(bool bDown);
+	/** Down now, up three frames later. */
+	void Tap(const FKey& Which);
 	/** Turns the camera straight away from a point (as seen from Mara), level. */
 	void AimAway(const FVector& From);
 
@@ -63,6 +68,25 @@ private:
 	int32 Frames = 0;
 	double FrameSum = 0.0;
 	int32 FramesOver33 = 0;
+	/** How her body lies, sampled in the water: see SampleBody. */
+	void SampleBody();
+	/** Worst cosine between (pelvis to head) and her travel while moving fast; worst bubble offset. */
+	float WorstLead = 1.f;
+	float WorstBubble = 0.f;
+	bool bHoldingW = false;
+	FKey Tapped;
+	int32 TapFrames = 0;
+	FKey Steering;
+	float SteerRight = 0.f;
+	float SteerLeft = 0.f;
+	float SteerUp = 0.f;
+	int32 StepFrames = 0;
+	double StepSum = 0.0;
+	double StepGame = 0.0;
+	double StepRender = 0.0;
+	double StepGpu = 0.0;
 	bool bFlag = false;
+	bool bRecording = false;
+	bool bStopAudio = false;
 	float Mark = 0.f;
 };

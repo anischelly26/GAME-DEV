@@ -54,6 +54,14 @@ public:
 	bool bComplete = false;
 	float StartTime = 0.f;
 	float CompleteTime = 0.f;
+	/** After the last note is closed: seconds until the game goes on to the house (E goes now). */
+	float ContinueIn = -1.f;
+	/** Seconds left of the fade to black before the next level loads. */
+	float LeaveIn = -1.f;
+
+	/** Holds the level behind a title card until it is ready to be seen. */
+	UPROPERTY(Transient)
+	TObjectPtr<class AReadyGate> Gate;
 
 	/** The three cinematics and their one finishing rule. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stormworks")
@@ -83,6 +91,8 @@ public:
 	void CloseNote();
 
 	void Complete();
+	/** On to the next part of the story: the house under Knoll Rock. */
+	void Continue();
 
 	ACharacter* GetPlayerCharacter() const;
 	UTetherComponent* GetTether() const;

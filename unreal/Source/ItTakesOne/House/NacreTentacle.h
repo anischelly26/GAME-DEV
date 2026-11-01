@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "ProceduralMeshComponent.h"
 #include "NacreTentacle.generated.h"
 
 class UAudioComponent;
@@ -21,11 +22,12 @@ enum class ENacreTint : uint8
 };
 
 /**
- * One of Nacre's tentacles: a chain of spheres along a curve from its base (a drain, a crack, the
- * body) to its tip, thick at the base and fine at the tip, swaying. One instanced mesh, so one draw
- * call. It grows out of its base and slides back in, carries things at its tip, freezes when told
- * to (the house's "it stops when you look at it"), curls its tip, and changes colour and shape for
- * its signals. All movement is eased; it never collides with anything.
+ * One of Nacre's tentacles: a smooth tapered tube along a curve from its base (a drain, a crack, the
+ * body) to its tip, thick at the base and fine at the tip, swaying, paler along its underside with a
+ * row of suckers. The tube is rebuilt each frame as one procedural mesh, so one draw call. It grows
+ * out of its base and slides back in, carries things at its tip, freezes when told to (the house's
+ * "it stops when you look at it"), curls its tip, and changes colour and shape for its signals. All
+ * movement is eased; it never collides with anything.
  */
 UCLASS()
 class ITTAKESONE_API ANacreTentacle : public AActor
@@ -36,10 +38,16 @@ public:
 	ANacreTentacle();
 
 	UPROPERTY(VisibleAnywhere, Category = "Nacre")
-	TObjectPtr<UInstancedStaticMeshComponent> Body;
+	TObjectPtr<UProceduralMeshComponent> Body;
+
+	UPROPERTY(VisibleAnywhere, Category = "Nacre")
+	TObjectPtr<UInstancedStaticMeshComponent> Suckers;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Nacre")
 	int32 Segments = 40;
+
+	/** Sides of the tube. */
+	static constexpr int32 Sides = 10;
 
 	/** Radius at the base and at the tip (cm). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Nacre")
@@ -106,6 +114,14 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> Slither;
+
+	// Kept between frames so the tube is rebuilt without allocating.
+	TArray<FVector> Vertices;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FLinearColor> Colors;
+	TArray<FProcMeshTangent> Tangents;
+	bool bTubeMade = false;
 
 	TWeakObjectPtr<AActor> Held;
 	FVector Tip = FVector::ZeroVector;

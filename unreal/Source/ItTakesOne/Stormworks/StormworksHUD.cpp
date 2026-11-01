@@ -1,5 +1,8 @@
 #include "Stormworks/StormworksHUD.h"
 
+#include "Misc/ScopeExit.h"
+#include "Stormworks/ReadyGate.h"
+
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -94,8 +97,16 @@ void AStormworksHUD::DrawHUD()
 	}
 	const float SX = Canvas->ClipX;
 	const float SY = Canvas->ClipY;
-	const float UI = FMath::Clamp(SY / 1080.f, 0.6f, 2.f);
+	// Readable at 720p as well as 1080p.
+	const float UI = FMath::Clamp(SY / 1080.f, 0.8f, 2.f) * 1.3f;
 	const double Now = GetWorld()->GetTimeSeconds();
+	ON_SCOPE_EXIT
+	{
+		if (GM->Gate)
+		{
+			GM->Gate->DrawOn(this, SX, SY);
+		}
+	};
 
 	// A cinematic: letterbox bars and the way out of it, nothing else.
 	if (GM->Cinema && GM->Cinema->IsPlaying())
@@ -199,6 +210,10 @@ void AStormworksHUD::DrawHUD()
 	{
 		DrawLabel(TEXT("THE STORMWORKS ESCAPE"), Mid.X, SY * 0.28f, FLinearColor(1.f, 0.9f, 0.7f, 1.f), 1.6f * UI, true, true);
 		DrawLabel(FString::Printf(TEXT("%d:%02d     falls: %d"), int32(GM->CompleteTime) / 60, int32(GM->CompleteTime) % 60, GM->Falls), Mid.X, SY * 0.34f, Ink, 1.f * UI, true, false);
+		if (GM->ContinueIn > 0.f)
+		{
+			DrawLabel(TEXT("[E]  Continue: the house under Knoll Rock"), Mid.X, SY * 0.42f, Ink, 0.95f * UI, true, false);
+		}
 	}
 
 	// Fade after a respawn.

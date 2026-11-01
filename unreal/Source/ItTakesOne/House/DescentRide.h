@@ -43,6 +43,8 @@ public:
 	float Radius = 140.f;
 
 	void Begin(AMaraCharacter* Who);
+	/** How far off the path she is steered now (cm; X right, Y up), for the self-test. */
+	FVector2D GetOffset() const { return Offset; }
 	bool IsRunning() const { return bRunning; }
 	bool IsFinished() const { return bFinished; }
 	bool IsFlooded() const { return bRunning && Distance > FloodedFrom; }
@@ -62,6 +64,8 @@ private:
 	bool bRunning = false;
 	bool bFinished = false;
 	float Distance = 0.f;
+	/** Her right, carried along the path; see Tick. */
+	FVector SteerRight = FVector::ZeroVector;
 	FVector2D Offset = FVector2D::ZeroVector;
 	TSet<TWeakObjectPtr<AActor>> Hit;
 };

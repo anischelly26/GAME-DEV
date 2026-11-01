@@ -13,6 +13,7 @@
 #include "ItTakesOne.h"
 #include "Misc/CommandLine.h"
 #include "Stormworks/MaraCharacter.h"
+#include "Stormworks/ReadyGate.h"
 #include "Stormworks/StormCinema.h"
 #include "Stormworks/StormworksAssets.h"
 
@@ -28,6 +29,7 @@ AHouseGameMode::AHouseGameMode()
 void AHouseGameMode::StartPlay()
 {
 	Super::StartPlay();
+	Gate = AReadyGate::Hold(GetWorld(), TEXT("The house under Knoll Rock"));
 	Cinema->OnProgress.AddUObject(this, &AHouseGameMode::OnShotProgress);
 	SetObjective(TEXT("Find Ivo's house under the light"));
 	if (FParse::Param(FCommandLine::Get(), TEXT("HouseSelfTest")))

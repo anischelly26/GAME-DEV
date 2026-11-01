@@ -135,6 +135,7 @@ bool AHouseReflection::Build()
 	Glow->SetAttenuationRadius(220.f);
 	Glow->SetLightColor(FLinearColor(1.f, 0.7f, 0.45f));
 	Glow->SetCastShadows(false);
+	Glow->SetVolumetricScatteringIntensity(0.f);
 	Glow->RegisterComponent();
 	Pose->SetVisibility(bShown, true);
 	UE_LOG(LogStormworks, Log, TEXT("House: Mara's reflection built (%d parts)"), Pose->GetNumChildrenComponents());

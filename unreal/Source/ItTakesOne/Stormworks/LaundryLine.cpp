@@ -3,6 +3,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
 #include "Stormworks/StormworksAssets.h"
 
@@ -25,8 +26,14 @@ void ALaundryLine::OnConstruction(const FTransform& Transform)
 	Rope->SetRelativeRotation(FRotator(90.f, 0.f, 0.f));
 	Rope->SetRelativeScale3D(FVector(0.012f, 0.012f, Length / 100.f));
 
+	BuildWashing();
+}
+
+void ALaundryLine::BuildWashing()
+{
 	// The washing, pegged along the rope: sheets, shirts and towels, from a fixed seed. Built by the
-	// construction script so it shows in the editor too; BeginPlay finds the hinges again.
+	// construction script so it shows in the editor too; BeginPlay finds the hinges again, or builds
+	// them: a packaged game does not run the construction script, and they are not saved in the level.
 	FRandomStream R(Seed);
 	float X = 40.f;
 	int32 i = 0;
@@ -66,6 +73,11 @@ void ALaundryLine::BeginPlay()
 	Pieces.Reset();
 	TArray<USceneComponent*> All;
 	GetComponents<USceneComponent>(All);
+	if (!All.ContainsByPredicate([](const USceneComponent* C) { return C->GetName().StartsWith(TEXT("Hinge_")); }))
+	{
+		BuildWashing();
+		GetComponents<USceneComponent>(All);
+	}
 	FRandomStream R(Seed * 31 + 5);
 	for (USceneComponent* C : All)
 	{
@@ -75,9 +87,11 @@ void ALaundryLine::BeginPlay()
 			P.Hinge = C;
 			P.Phase = R.FRandRange(0.f, 2.f * PI);
 			P.Rate = R.FRandRange(0.8f, 1.3f);
-			if (const USceneComponent* Cloth = C->GetNumChildrenComponents() > 0 ? C->GetChildComponent(0) : nullptr)
+			if (USceneComponent* Cloth = C->GetNumChildrenComponents() > 0 ? C->GetChildComponent(0) : nullptr)
 			{
 				P.Width = Cloth->GetRelativeScale3D().X * 100.f;
+				P.Height = Cloth->GetRelativeScale3D().Z * 100.f;
+				P.Cloth = Cloth;
 			}
 			Pieces.Add(P);
 		}
@@ -109,6 +123,8 @@ void ALaundryLine::Tick(float DeltaSeconds)
 	const float Gust = 0.55f + 0.45f * FMath::Sin(Time * 0.31f) * FMath::Sin(Time * 0.17f + 1.3f);
 	const APawn* Mara = GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr;
 	const float MaraSpeed = Mara ? Mara->GetVelocity().Size2D() : 0.f;
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const FVector Camera = PC && PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
 	for (FPiece& P : Pieces)
 	{
 		const float Target = WindSide * (12.f + 14.f * Gust + 6.f * FMath::Sin(Time * P.Rate * 2.2f + P.Phase));
@@ -123,5 +139,23 @@ void ALaundryLine::Tick(float DeltaSeconds)
 		P.Speed += Acc * Dt;
 		P.Angle += P.Speed * Dt;
 		P.Hinge->SetRelativeRotation(FRotator(0.f, 3.f * Gust * FMath::Sin(Time * 6.5f * P.Rate + P.Phase), P.Angle));
+		// The sheets have no collision, so the camera can pass behind one: near the lens a sheet rides
+		// up to its rope and drops back when the camera has gone, so it never fills the view.
+		if (P.Cloth)
+		{
+			const FVector Middle = P.Cloth->GetComponentLocation();
+			const float Near = FMath::Max(P.Width, P.Height) * 0.5f + 90.f;
+			const float Want = FVector::Dist(Camera, Middle) < Near ? 1.f : 0.f;
+			const float Before = P.Fold;
+			P.Fold = FMath::FInterpConstantTo(P.Fold, Want, Dt, 6.f);
+			if (P.Fold != Before)
+			{
+				const float H = P.Height * (1.f - 0.95f * P.Fold);
+				P.Cloth->SetRelativeLocation(FVector(0.f, 0.f, -H * 0.5f));
+				FVector Scale = P.Cloth->GetRelativeScale3D();
+				Scale.Z = H / 100.f;
+				P.Cloth->SetRelativeScale3D(Scale);
+			}
+		}
 	}
 }

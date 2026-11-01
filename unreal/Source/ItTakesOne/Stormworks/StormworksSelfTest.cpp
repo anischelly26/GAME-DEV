@@ -1,5 +1,7 @@
 #include "Stormworks/StormworksSelfTest.h"
 
+#include "AudioMixerBlueprintLibrary.h"
+
 #include "Camera/PlayerCameraManager.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
@@ -44,7 +46,9 @@
 #include "Stormworks/TetherPoint.h"
 #include "RenderTimer.h"
 #include "RHI.h"
+#if WITH_EDITOR
 #include "ShaderCompiler.h"
+#endif
 #include "UnrealClient.h"
 
 AStormworksSelfTest::AStormworksSelfTest()
@@ -828,6 +832,7 @@ void AStormworksSelfTest::Tick(float DeltaSeconds)
 		return;
 	}
 	// The first run compiles shaders; screenshots before that would show placeholder materials.
+#if WITH_EDITOR
 	if (Index < 0 && GShaderCompilingManager && GShaderCompilingManager->GetNumRemainingJobs() > 0)
 	{
 		ShaderWaitLog -= DeltaSeconds;
@@ -838,6 +843,7 @@ void AStormworksSelfTest::Tick(float DeltaSeconds)
 		}
 		return;
 	}
+#endif
 	if (Index >= 0)
 	{
 		++Frames;
@@ -864,6 +870,11 @@ void AStormworksSelfTest::Tick(float DeltaSeconds)
 	{
 		Total = 0.f;
 		Index = 0;
+		if (FParse::Param(FCommandLine::Get(), TEXT("StormRecordAudio")))
+		{
+			UAudioMixerBlueprintLibrary::StartRecordingOutput(this, 420.f);
+			Log(TEXT("audio recording starts"));
+		}
 		StepT = 0.f;
 		Log(FString::Printf(TEXT("-- %s"), *Steps[0].Name));
 		Steps[0].Start();
@@ -905,6 +916,19 @@ void AStormworksSelfTest::Tick(float DeltaSeconds)
 			Log(BucketLine(TEXT("cinematics"), Cinematics));
 			Log(FString::Printf(TEXT("frames: %d, mean %.1f ms (%.0f fps), worst %.1f ms, %d over 33 ms"), Frames, Frames ? 1000.f * FrameSum / Frames : 0.f, FrameSum > 0.f ? Frames / FrameSum : 0.f, FrameWorst * 1000.f, FramesOver33));
 			Log(FString::Printf(TEXT("SELFTEST RESULT: %d passed, %d failed, %.1f s"), Passed, Failed, Total));
+			// One continuous run for a recording: on to the house, whose bot takes over (and stops the audio).
+			if (FParse::Param(FCommandLine::Get(), TEXT("StormThenHouse")))
+			{
+				if (AStormworksGameMode* GameMode = GetWorld()->GetAuthGameMode<AStormworksGameMode>())
+				{
+					GameMode->Continue();
+				}
+				return;
+			}
+			if (FParse::Param(FCommandLine::Get(), TEXT("StormRecordAudio")))
+			{
+				UAudioMixerBlueprintLibrary::StopRecordingOutput(this, EAudioRecordingExportType::WavFile, TEXT("output"), OutDir);
+			}
 			QuitIn = 1.5f;
 			return;
 		}

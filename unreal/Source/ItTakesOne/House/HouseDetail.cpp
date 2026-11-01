@@ -1,6 +1,7 @@
 #include "House/HouseDetail.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "GameFramework/Pawn.h"
@@ -47,6 +48,16 @@ AHouseDetail::AHouseDetail()
 	PartC = Part(this, Root, TEXT("PartC"));
 	Label = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Label"));
 	Label->SetupAttachment(Root);
+	Glint = CreateDefaultSubobject<UPointLightComponent>(TEXT("Glint"));
+	Glint->SetupAttachment(Root);
+	Glint->SetRelativeLocation(FVector(0.f, 0.f, 20.f));
+	Glint->SetIntensityUnits(ELightUnits::Unitless);
+	Glint->SetIntensity(3500.f);
+	Glint->SetAttenuationRadius(650.f);
+	Glint->SetLightColor(FLinearColor(1.f, 0.72f, 0.36f));
+	Glint->SetCastShadows(false);
+	Glint->SetVolumetricScatteringIntensity(0.f);
+	Glint->SetVisibility(false);
 	for (int32 i = 0; i < NumPuffs; ++i)
 	{
 		UStaticMeshComponent* P = Part(this, Root, *FString::Printf(TEXT("Puff_%d"), i));
@@ -102,6 +113,11 @@ void AHouseDetail::OnConstruction(const FTransform& Transform)
 		}
 		break;
 	}
+}
+
+void AHouseDetail::SetGlint(bool bOn)
+{
+	Glint->SetVisibility(bOn);
 }
 
 bool AHouseDetail::IsLookedAtBy(const APlayerController* PC, float MaxDegrees) const

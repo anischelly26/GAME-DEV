@@ -35,12 +35,22 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Camera")
 	TObjectPtr<UCameraComponent> FollowCamera;
 
+	UPROPERTY(VisibleAnywhere, Category = "Mara")
+	TObjectPtr<class UPointLightComponent> WaterLight;
+
 	/** The air bubble Nacre puts over her head underwater. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Mara")
 	TObjectPtr<UStaticMeshComponent> Bubble;
 
 	void SetBubble(bool bOn) { bBubbleWanted = bOn; }
 	bool HasBubble() const { return bBubbleWanted; }
+
+	/** A soft light that keeps her readable in dark water (0 off, 1 full). */
+	void SetWaterLight(float Amount);
+	/** Held and moved by something else (Nacre's grab and tow): she poses as in the water. */
+	void SetTowed(bool bOn) { bTowed = bOn; }
+	/** Swimming or towed: the swim clips play, and her body points the way she is going. */
+	bool IsInWater() const;
 
 	/** The move stick or keys this frame (X right, Y forward), for things that steer her, like a tow. */
 	FVector2D GetSteerInput() const;
@@ -75,9 +85,16 @@ private:
 	FVector2D LastMove = FVector2D::ZeroVector;
 	double LastMoveTime = -1.0;
 	bool bDiving = false;
+	/** Space held. ACharacter's bPressedJump lasts a single frame when there is no jump hold time. */
+	bool bRising = false;
 	bool bBubbleWanted = false;
 	float BubbleScale = 0.f;
-	float SwimTilt = 0.f;
+	bool bTowed = false;
+	/** The boom's rise as walls push the camera in, and whether she is hidden from the lens. */
+	float CameraLift = 0.f;
+	bool bHiddenFromLens = false;
+	/** How far her body is pitched along her travel (degrees, up is positive). */
+	float BodyPitch = 0.f;
 
 	void BuildInput();
 	bool bDressed = false;

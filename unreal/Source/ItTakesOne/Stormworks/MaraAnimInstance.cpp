@@ -1,5 +1,7 @@
 #include "Stormworks/MaraAnimInstance.h"
 
+#include "Stormworks/MaraCharacter.h"
+
 #include "Animation/AnimInstanceProxy.h"
 #include "Animation/AnimNodeBase.h"
 #include "Animation/AnimSequence.h"
@@ -413,7 +415,8 @@ void UMaraAnimInstance::NativeUpdateAnimation(float Dt)
 
 	// --- the water: treading when slow, the crawl when moving, its stroke following her speed (the
 	// web game's tuning); towed through the flooded passages counts as swimming
-	const bool bInWater = MC->IsSwimming() || MC->IsFlying();
+	const AMaraCharacter* Mara = Cast<AMaraCharacter>(C);
+	const bool bInWater = Mara ? Mara->IsInWater() : MC->IsSwimming();
 	const float WaterSpeed = bInWater ? V.Size() : 0.f;
 	SwimBlend = Damp(SwimBlend, bInWater ? 1.f : 0.f, 10.f, Dt);
 	SwimMove = Damp(SwimMove, bInWater ? FMath::SmoothStep(25.f, 140.f, WaterSpeed) : 0.f, 5.f, Dt);

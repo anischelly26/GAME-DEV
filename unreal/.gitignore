@@ -8,3 +8,8 @@ DerivedDataCache/
 Binaries/**/*.pdb
 Binaries/**/*.exp
 Binaries/**/*.lib
+# Packaged-game output (RunUAT BuildCookRun): the game is released as a zip, not kept here
+Binaries/Win64/ItTakesOne-Win64-*
+Binaries/Win64/D3D12/
+Binaries/Win64/DML/
+Binaries/Win64/tbb*.dll
