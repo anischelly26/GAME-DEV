@@ -1,5 +1,15 @@
 # Status
 
+**Where the game is (2026-11-01).** The public title is **It Only Needs Mara**; "It Takes One" remains the
+internal project name. The latest version is the Unreal 5.8 game (`unreal/ItTakesOne.uproject`): The
+Stormworks Escape, then the house under Knoll Rock, played straight through. A packaged Windows build
+passed 67/67 and 37/37 bot checks from its extracted zip, at about 45 fps at 1600×900 on the RTX 2050
+laptop, playable 11 to 15 s after launch. The owner played the build before these repairs; no outside
+player has played it. Details:
+[HOUSE_REPAIR_PASS.md](HOUSE_REPAIR_PASS.md), [UNREAL_HOUSE.md](UNREAL_HOUSE.md),
+[ITCH_PAGE.md](ITCH_PAGE.md). The three.js web game (Chapters One to Three) is the earlier browser
+version.
+
 | | |
 | --- | --- |
 | **Branch** | `claude/house-slice` (the house under Knoll Rock, the first story slice; local, not pushed), on `claude/stormworks-polish` (the Unreal project moved into the repo; commit cdee5cf, not pushed), on `claude/stormworks-mara-sound` (draft PR #13: Mara, sound, cinematics, music in The Stormworks Escape), stacked on `claude/unreal-stormworks` (PR #12) → `claude/unreal-export` (PR #11) → `claude/game-feel` (draft PR #8) → `claude/low-tide` (PR #7) → `claude/toy-hero` (PR #6) → `claude/chapter-one-v2` (PR #5) → `claude/chapter-one-quality` (PR #4) → `claude/polish-4979589` (PR #3) → `claude/breathing-engine` (PR #2) → `claude/first-playable` (PR #1) |
@@ -44,10 +54,11 @@ steps 1 to 12, in the in-repo Unreal project (`unreal/ItTakesOne.uproject`, map
   - `unreal/Source/ItTakesOne/House` (director, tentacle, details, tow, game mode, HUD, bot);
   - swimming and the air bubble for Mara;
   - `tools/unreal/build_house.py` and `make_house_sounds.py`.
-- **Played by:** the bot only. Nobody has played or heard it.
+- **Played by:** the bots; the owner played the build before the repair pass. No outside player yet, and
+  the sound has not had a listening review.
 - **Results:**
-  - The house bot passed 25/25 in 69.8 s, mean frame 27.6 ms on the RTX 2050 laptop.
-  - The Stormworks runner on the in-repo project passed 67/67.
+  - The packaged game, from its extracted zip: 67/67 Stormworks and 37/37 house checks.
+  - Mean frame 22.5 ms at 1600×900 on the RTX 2050 laptop.
 
 ## The Stormworks Escape, second pass: Mara, sound, cinematics, music (`claude/stormworks-mara-sound`, draft PR #13)
 

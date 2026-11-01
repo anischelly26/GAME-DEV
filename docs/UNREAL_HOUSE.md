@@ -8,8 +8,8 @@ meets Nacre, who gives the gauge back. It ends on "To be continued: the Sunken C
 It runs in the in-repo Unreal project (`unreal/ItTakesOne.uproject`), beside the Stormworks map, and
 reuses its hero, materials, sounds and cinematic rules.
 
-**Played by whom:** only by the scripted self-test bot (below), in the real game window. **No person
-has played it or listened to it yet.** How long it takes, whether the tentacle reads as funny or
+**Played by whom:** the scripted self-test bot (below); the owner played the build before the repair pass.
+**No outside player has tried it, and nobody has reviewed the sound.** How long it takes, whether the tentacle reads as funny or
 scary, and whether the tow is fun to steer are all unknown until someone plays it.
 
 ## Open it
@@ -79,7 +79,7 @@ swims to Nacre and takes the gauge. It writes `unreal/Saved/HouseSelfTest/result
 format as the Stormworks test (last line `SELFTEST RESULT: N passed, M failed, T s`), and 16
 screenshots beside it.
 
-Latest run (2026-10-25): **25/25 in 69.8 s**. Mean frame 27.6 ms at 1280×720 on the RTX 2050 laptop.
+Latest run (2026-11-01, packaged game from its zip): **37/37 in 65.5 s**. Mean frame 22.7 ms at 1600×900 on the RTX 2050 laptop.
 Its screenshots and results are in [evidence/house-slice](evidence/house-slice).
 
 ## Rules worth knowing when changing it
@@ -102,7 +102,7 @@ Its screenshots and results are in [evidence/house-slice](evidence/house-slice).
 
 ## Assets
 
-- **Sounds:** all 16 synthesised by `make_house_sounds.py`. There are no recordings and no licences.
+- **Sounds:** all 17 synthesised by `make_house_sounds.py`. There are no recordings and no licences.
   The tow's knocks reuse the Stormworks recorded landings (Kenney, CC0; see [ASSETS.md](ASSETS.md)).
 - **Lighthouse:** the Seven Foot Knoll scan (Katie Wolfe, **CC BY 4.0**; see ASSETS.md), on Knoll
   Rock about 25 m from the jetty. The credit applies to any build, video or screenshot.

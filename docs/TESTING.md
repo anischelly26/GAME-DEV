@@ -381,11 +381,19 @@ UnrealEditor.exe unreal/ItTakesOne.uproject /Game/ItTakesOne/Maps/House -game -w
 Results: `unreal/Saved/HouseSelfTest/results.txt`, same format as Stormworks, with screenshots 01–16
 beside it. The bot:
 
-- presses the real Space key once, to check the jump survives the house's own Space mapping;
+- plays with real keys through the input mappings: W to walk and swim, E to interact, A, D and W to
+  steer, Space and C to swim up and down (the camera is set directly, standing in for the mouse);
 - walks the route, looks at each detail and inspects the gauge;
 - watches the theft, looks at the tentacle and away, and chases it to the teacup and the lamp;
-- waits out the searchlight, then lets the grab's cinematic play to its end;
-- rides the tow without steering, swims to Nacre and takes the gauge.
+- waits out the searchlight, then lets the grab's cinematic play to its end, or skips it with Space
+  when started with `-HouseSkipGrab`;
+- steers the tow right, left down the steep shaft, and up, then swims to Nacre and takes the gauge;
+- checks how Mara's body lies (head leading her travel, the bubble on her head).
+
+Other switches:
+- `-StormChainTest` on the Stormworks map goes straight on to the house by the real level change;
+- `-HouseRecordAudio` writes what the game outputs to `output.wav`, which
+  `tools/unreal/measure_audio.py` measures (levels only: it cannot say what sounds good).
 
 It is not a playtest.
 
@@ -402,9 +410,10 @@ It is not a playtest.
 
 ## Latest results
 
-**The house under Knoll Rock (Unreal, 2026-10-25):** 25/25 bot checks in 69.8 s, from the in-repo
-project at 1280×720 on the RTX 2050 laptop: mean frame 27.6 ms, 184 of 2,511 frames over 33 ms.
-The 25th check is new: her reflection in the window falls 0.9 s behind when the glass plays.
+**The packaged game (Unreal, 2026-11-01):** from the extracted Windows zip, 67/67 Stormworks and 37/37
+house checks in one continuous run, mean frame 22.5 ms at 1600×900 on the RTX 2050 laptop. The bot now
+uses real keys. A first packaged run failed one check, which found the washing line missing from
+cooked builds; fixed, see [HOUSE_REPAIR_PASS.md](HOUSE_REPAIR_PASS.md).
 
 The first runs found two real problems, both fixed:
 - **A soft-lock:** the tentacle froze whenever it was looked at, including mid-snatch and in front

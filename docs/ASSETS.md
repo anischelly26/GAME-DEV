@@ -165,8 +165,8 @@ paid; it reuses the Stormworks content above (materials, recorded sounds, Mara).
 
 | Content | Source | Licence |
 | --- | --- | --- |
-| 16 synthesised sounds (`H_*`: Nacre's slither, suction, slurp, exhale and sniff, the climbing water, the room tone and clock, the lighthouse hum with Ivo's motif, the motif on bells, the Watch's horn, the shaking house, the searchlight's hum, the grab, the bubble's wobble, a heartbeat, the deep) | Synthesised by `tools/unreal/make_house_sounds.py` with the Stormworks helpers; no recordings | Original (this repository) |
-| The lighthouse on Knoll Rock | The Seven Foot Knoll Lighthouse scan above (Katie Wolfe), placed by `tools/unreal/build_house.py` about 25 m from the jetty | **CC BY 4.0**: the credit above applies to any build, video or screenshot of the slice. The sign on its railing is not covered; it is high above the house in the storm |
+| 17 synthesised sounds (`H_*`: Nacre's slither, suction, slurp, exhale and sniff, the climbing water, the room tone and clock, the lighthouse hum with Ivo's motif, the motif on bells, the Watch's horn, the shaking house, the searchlight's hum, the grab, the bubble's wobble, a swimming stroke, a heartbeat, the deep) | Synthesised by `tools/unreal/make_house_sounds.py` with the Stormworks helpers; no recordings | Original (this repository) |
+| The lighthouse on Knoll Rock | The Seven Foot Knoll Lighthouse scan above (Katie Wolfe), placed by `tools/unreal/build_house.py` about 50 m from the jetty | **CC BY 4.0**: the credit above applies to any build, video or screenshot of the slice. The sign on its railing is not covered; it is high above the house in the storm |
 | The house, the hall, the passage, the conservatory, Nacre, her tentacles, the details, the materials (`/Game/ItTakesOne/House`), the grab's cinematic | Engine basic shapes placed by `build_house.py`, and the C++ in `unreal/Source/ItTakesOne/House` | Original (this repository); engine content under the Unreal Engine EULA |
 
 ## Libraries
